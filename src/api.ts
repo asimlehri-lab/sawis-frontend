@@ -51,6 +51,7 @@ export interface CatalogItem {
   category_name: string | null;
   vat_rate: string | null;
   effective_vat_rate: string | null;
+  default_supplier: string | null;
   archived: boolean;
   holdings: ItemHolding[];
 }
@@ -480,6 +481,7 @@ export interface ItemPatch {
   category?: string | null;
   vat_rate?: string | null;
   base_unit?: string;
+  default_supplier?: string | null;
   archived?: boolean;
 }
 

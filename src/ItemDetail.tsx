@@ -135,6 +135,7 @@ export default function ItemDetail({
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [linkingId, setLinkingId] = useState<string | null>(null);
   const [supplierError, setSupplierError] = useState<string | null>(null);
+  const [settingDefaultId, setSettingDefaultId] = useState<string | null>(null);
 
   const [archiving, setArchiving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -263,6 +264,15 @@ export default function ItemDetail({
       setSupplierError(err instanceof Error ? err.message : "Could not link supplier.");
     } finally {
       setLinkingId(null);
+    }
+  }
+
+  async function handleSetDefaultSupplier(row: ItemSupplierRow) {
+    setSettingDefaultId(row.id);
+    try {
+      await saveField({ default_supplier: row.supplier });
+    } finally {
+      setSettingDefaultId(null);
     }
   }
 
@@ -548,16 +558,22 @@ export default function ItemDetail({
 
       <div className="card">
         <h2>Suppliers &amp; last prices</h2>
-        <p className="hint">From your recorded purchase links — shared across all departments.</p>
+        <p className="hint">
+          From your recorded purchase links — shared across all departments.
+          {itemSuppliers.length > 1 &&
+            " Pick a default to mark which one you'd normally reorder from — it doesn't change costing, which always uses the cheapest linked price."}
+        </p>
         {itemSuppliers.length === 0 && <p className="muted">No suppliers linked yet.</p>}
         {itemSuppliers.map((row) => {
           const cheapest = itemSuppliers.reduce((min, r) =>
             Number(r.unit_price) < Number(min.unit_price) ? r : min
           );
+          const isDefault = itemSuppliers.length > 1 && item.default_supplier === row.supplier;
           return (
             <div className="sup-row" key={row.id}>
               <span>
                 <span className="sn">{row.supplier_name}</span>
+                {isDefault && <span className="deftag">★ default</span>}
                 {row.id === cheapest.id && itemSuppliers.length > 1 && (
                   <span className="best">cheapest</span>
                 )}
@@ -566,6 +582,16 @@ export default function ItemDetail({
               <span className="sp">
                 £{Number(row.unit_price).toFixed(2)}/{item.base_unit}
               </span>
+              {itemSuppliers.length > 1 && !isDefault && (
+                <button
+                  type="button"
+                  className="setdefaultbtn"
+                  disabled={settingDefaultId === row.id}
+                  onClick={() => handleSetDefaultSupplier(row)}
+                >
+                  {settingDefaultId === row.id ? "Setting…" : "Set as default"}
+                </button>
+              )}
             </div>
           );
         })}

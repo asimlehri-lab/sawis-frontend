@@ -801,6 +801,32 @@ select:focus {
   margin-left: 7px;
 }
 
+.deftag {
+  font-size: 9.5px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--brand);
+  background: var(--brand-soft);
+  padding: 2px 7px;
+  border-radius: 20px;
+  margin-left: 7px;
+}
+
+.setdefaultbtn {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--brand);
+  border-radius: 7px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  flex: none;
+  margin-left: 10px;
+}
+.setdefaultbtn:hover { border-color: var(--brand); background: var(--brand-soft); }
+.setdefaultbtn:disabled { opacity: 0.6; cursor: not-allowed; }
+
 .sg-h {
   font-size: 12px;
   font-weight: 700;
