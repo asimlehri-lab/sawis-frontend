@@ -9,6 +9,7 @@ import {
   BASE_UNITS,
   fetchItemSuppliers,
   createItemSupplier,
+  createCategory,
   deleteItem,
   login,
 } from "./api";
@@ -24,6 +25,7 @@ interface Props {
   supplierItems: SupplierItemRow[];
   onBack: () => void;
   onChanged: () => void;
+  onCategoriesChanged: () => void;
 }
 
 const DEPARTMENTS = [
@@ -110,6 +112,7 @@ export default function ItemDetail({
   supplierItems,
   onBack,
   onChanged,
+  onCategoriesChanged,
 }: Props) {
   const [item, setItem] = useState<CatalogItem | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -123,6 +126,12 @@ export default function ItemDetail({
   const [newPar, setNewPar] = useState("0");
   const [savingHolding, setSavingHolding] = useState(false);
   const [holdingError, setHoldingError] = useState<string | null>(null);
+
+  const [showAddCategory, setShowAddCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryVat, setNewCategoryVat] = useState("");
+  const [savingCategory, setSavingCategory] = useState(false);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
 
   const [showUnitModal, setShowUnitModal] = useState(false);
   const [unitNew, setUnitNew] = useState("kg");
@@ -204,6 +213,37 @@ export default function ItemDetail({
   function handleVatBlur() {
     const fraction = vatPct.trim() === "" ? null : (Number(vatPct) / 100).toFixed(4);
     saveField({ vat_rate: fraction });
+  }
+
+  function openAddCategory() {
+    setNewCategoryName("");
+    setNewCategoryVat("");
+    setCategoryError(null);
+    setShowAddCategory(true);
+  }
+
+  async function handleAddCategory() {
+    const name = newCategoryName.trim();
+    if (!name || newCategoryVat.trim() === "") return;
+    setSavingCategory(true);
+    setCategoryError(null);
+    try {
+      const fraction = (Number(newCategoryVat) / 100).toFixed(4);
+      const created = await createCategory(accessToken, { name, default_vat_rate: fraction });
+      onCategoriesChanged();
+      setShowAddCategory(false);
+      // Assign the brand-new category (and its VAT rate) straight to this
+      // item — the freshly-created category isn't in the `categories` prop
+      // yet (onCategoriesChanged's refetch is async), so use what the
+      // create response just gave us rather than routing through
+      // handleCategoryChange, which would look it up and find nothing.
+      setVatPct(newCategoryVat);
+      await saveField({ category: created.id, vat_rate: fraction });
+    } catch (err) {
+      setCategoryError(err instanceof Error ? err.message : "Could not add category.");
+    } finally {
+      setSavingCategory(false);
+    }
   }
 
   async function handleAddHolding(e: React.FormEvent) {
@@ -407,14 +447,23 @@ export default function ItemDetail({
           </div>
           <div className="field">
             <label>Category</label>
-            <select value={item.category ?? ""} onChange={(e) => handleCategoryChange(e.target.value)}>
-              <option value="">No category</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <div className="unit-row">
+              <select
+                value={item.category ?? ""}
+                onChange={(e) => handleCategoryChange(e.target.value)}
+                style={{ flex: 1 }}
+              >
+                <option value="">No category</option>
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <button type="button" className="mini" onClick={openAddCategory}>
+                + New
+              </button>
+            </div>
           </div>
           <div className="field">
             <label>
@@ -815,6 +864,58 @@ export default function ItemDetail({
                 disabled={savingUnit || unitNew === item.base_unit}
               >
                 {savingUnit ? "Saving…" : `Change to ${unitNew}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddCategory && (
+        <div className="modal-backdrop" onClick={() => !savingCategory && setShowAddCategory(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Add a new category</h2>
+            <p className="hint" style={{ marginTop: -8, marginBottom: 16 }}>
+              Sets a default VAT rate that items in this category start from — an item can still override
+              it individually.
+            </p>
+            <div className="field" style={{ marginBottom: 14 }}>
+              <label>Category name</label>
+              <input
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                placeholder="e.g. Fruit"
+                autoFocus
+              />
+            </div>
+            <div className="field">
+              <label>Default VAT rate %</label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={newCategoryVat}
+                onChange={(e) => setNewCategoryVat(e.target.value)}
+                placeholder="e.g. 0"
+              />
+            </div>
+            {categoryError && <p className="error">{categoryError}</p>}
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn-ghost"
+                onClick={() => setShowAddCategory(false)}
+                disabled={savingCategory}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleAddCategory}
+                disabled={savingCategory || !newCategoryName.trim() || newCategoryVat.trim() === ""}
+              >
+                {savingCategory ? "Adding…" : "Add category"}
               </button>
             </div>
           </div>

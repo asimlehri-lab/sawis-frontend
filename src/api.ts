@@ -200,7 +200,7 @@ export interface Recipe {
   plate_food_cost_pct: number | null;
 }
 
-export const YIELD_UNITS = ["plate", "portion", "kg", "litre"];
+export const YIELD_UNITS = ["plate", "portion", "glass", "kg", "litre"];
 
 export interface NewRecipeInput {
   kind: "dish" | "sub";
@@ -366,6 +366,33 @@ export interface Category {
 export async function fetchCategories(accessToken: string): Promise<Category[]> {
   const data: Paginated<Category> = await authedFetch("/api/catalog/categories/", accessToken);
   return data.results;
+}
+
+export interface NewCategoryInput {
+  name: string;
+  default_vat_rate: string;
+}
+
+export async function createCategory(accessToken: string, input: NewCategoryInput): Promise<Category> {
+  const res = await fetch(`${API_URL}/api/catalog/categories/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    if (body && typeof body === "object") {
+      const messages = Object.entries(body).map(
+        ([field, errs]) => `${field}: ${Array.isArray(errs) ? errs.join(", ") : errs}`
+      );
+      throw new Error(messages.join(" · ") || "Could not create category.");
+    }
+    throw new Error("Could not create category.");
+  }
+  return res.json();
 }
 
 export interface Location {

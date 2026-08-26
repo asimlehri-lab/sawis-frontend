@@ -333,7 +333,7 @@ export default function RecipeDetail({
           ) : (
             <>
               <div className="price-row">
-                <label>Menu price / plate</label>
+                <label>Menu price / {recipe.yield_unit}</label>
                 <input
                   className="price-in"
                   type="number"
@@ -367,7 +367,7 @@ export default function RecipeDetail({
                 <div className={`big ${fcOver ? "over" : "good"}`}>
                   {recipe.plate_food_cost_pct !== null ? `${recipe.plate_food_cost_pct.toFixed(1)}%` : "—"}
                 </div>
-                <div className="tgt">food cost / plate · target {TARGET_FC}%</div>
+                <div className="tgt">food cost / {recipe.yield_unit} · target {TARGET_FC}%</div>
                 <div className="meter">
                   <div
                     className="fill"
@@ -387,15 +387,15 @@ export default function RecipeDetail({
                 <span className="mv">£{recipe.batch_cost.toFixed(2)}</span>
               </div>
               <div className="metric big-m">
-                <span className="ml">Cost per plate</span>
+                <span className="ml">Cost per {recipe.yield_unit}</span>
                 <span className="mv">£{recipe.per_portion_cost.toFixed(2)}</span>
               </div>
               <div className="metric">
-                <span className="ml">Gross profit / plate</span>
+                <span className="ml">Gross profit / {recipe.yield_unit}</span>
                 <span className="mv">£{(menuPriceNum - recipe.per_portion_cost).toFixed(2)}</span>
               </div>
               <div className="perplate">
-                One batch makes <b>{recipe.yield_qty} plate{yieldNum > 1 ? "s" : ""}</b> at{" "}
+                One batch makes <b>{recipe.yield_qty} {recipe.yield_unit}{yieldNum > 1 ? "s" : ""}</b> at{" "}
                 <b>£{menuPriceNum.toFixed(2)}</b> each — batch sales value{" "}
                 <b>£{(menuPriceNum * yieldNum).toFixed(2)}</b>, batch profit{" "}
                 <b>£{(menuPriceNum * yieldNum - recipe.batch_cost).toFixed(2)}</b>.

@@ -579,6 +579,7 @@ export default function App() {
             supplierItems={supplierItems}
             onBack={() => setSelectedItemId(null)}
             onChanged={() => loadItems(accessToken)}
+            onCategoriesChanged={() => fetchCategories(accessToken).then(setCategories).catch(() => {})}
           />
         ) : activePage === "Procurement" && selectedPOId && accessToken ? (
           <ProcurementDetail
@@ -688,7 +689,7 @@ export default function App() {
                         <th>Recipe</th>
                         <th className="num">Yield</th>
                         <th className="num">Batch cost</th>
-                        <th className="num">Per plate</th>
+                        <th className="num">Cost / unit</th>
                         <th className="num">Menu price</th>
                         <th className="num">Food cost</th>
                       </tr>
