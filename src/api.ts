@@ -687,6 +687,45 @@ export async function createSupplierItem(
   return res.json();
 }
 
+export interface BulkImportSupplierItemsInput {
+  supplier: string;
+  rows: { name: string; unit: string; price: string }[];
+}
+
+export interface BulkImportSupplierItemsResult {
+  created: SupplierItemRow[];
+  updated: SupplierItemRow[];
+}
+
+// Upserts by (supplier, raw_name) on the backend instead of one create-only
+// POST per row — re-importing a supplier's catalogue with updated prices
+// now refreshes the existing lines rather than piling up duplicates. See
+// SupplierItemViewSet.bulk_import.
+export async function bulkImportSupplierItems(
+  accessToken: string,
+  input: BulkImportSupplierItemsInput
+): Promise<BulkImportSupplierItemsResult> {
+  const res = await fetch(`${API_URL}/api/catalog/supplier-items/bulk_import/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    if (body && typeof body === "object") {
+      const messages = Object.entries(body).map(
+        ([field, errs]) => `${field}: ${Array.isArray(errs) ? errs.join(", ") : errs}`
+      );
+      throw new Error(messages.join(" · ") || "Could not import the catalogue.");
+    }
+    throw new Error("Could not import the catalogue.");
+  }
+  return res.json();
+}
+
 export interface ItemSupplierRow {
   id: string;
   item: string;

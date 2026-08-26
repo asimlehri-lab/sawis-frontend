@@ -12,7 +12,7 @@ import {
   fetchLocations,
   fetchSuppliers,
   fetchSupplierItems,
-  createSupplierItem,
+  bulkImportSupplierItems,
   createSupplier,
   fetchPurchaseOrders,
   createPurchaseOrder,
@@ -124,7 +124,7 @@ export default function App() {
   const [importFileName, setImportFileName] = useState("");
   const [importSaving, setImportSaving] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
-  const [importDone, setImportDone] = useState<number | null>(null);
+  const [importDone, setImportDone] = useState<{ created: number; updated: number } | null>(null);
 
   const [showNewSupplier, setShowNewSupplier] = useState(false);
   const [newSupplierName, setNewSupplierName] = useState("");
@@ -408,17 +408,14 @@ export default function App() {
     setImportSaving(true);
     setImportError(null);
     try {
-      let count = 0;
-      for (const row of importRows) {
-        await createSupplierItem(accessToken, {
-          supplier: importSupplier,
-          raw_name: row.name,
-          unit: row.unit,
-          price: row.price,
-        });
-        count++;
-      }
-      setImportDone(count);
+      // One bulk request instead of one POST per row — the backend upserts
+      // by (supplier, raw_name), so re-running an updated CSV refreshes
+      // existing lines' price/unit in place instead of duplicating them.
+      const result = await bulkImportSupplierItems(accessToken, {
+        supplier: importSupplier,
+        rows: importRows.map((r) => ({ name: r.name, unit: r.unit, price: r.price })),
+      });
+      setImportDone({ created: result.created.length, updated: result.updated.length });
       fetchSupplierItems(accessToken).then(setSupplierItems).catch(() => {});
     } catch (err) {
       setImportError(err instanceof Error ? err.message : "Something went wrong partway through the import.");
@@ -1165,7 +1162,10 @@ export default function App() {
 
             {importDone !== null && (
               <div className="im-note">
-                ✓ <b>{importDone} products stored.</b> Open items to see matching suggestions.
+                ✓ <b>
+                  {importDone.created} new{importDone.updated > 0 ? `, ${importDone.updated} updated` : ""}.
+                </b>{" "}
+                Open items to see matching suggestions.
               </div>
             )}
 
