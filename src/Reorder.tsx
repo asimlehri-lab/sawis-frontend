@@ -23,12 +23,18 @@ const gbp = (n: number) => `£${n.toFixed(2)}`;
 
 // The Reorder step of the End of day workflow: items below par at a
 // location, with supplier prices compared side by side (cheapest flagged
-// against whichever supplier you most recently ordered that item from —
-// there's no separate "default supplier" concept in the data model, so
-// "most recently ordered from" is the closest real proxy, and matches the
-// mockup's own framing: "prices from your last recorded orders"), and a
-// one-click way to raise the resulting purchase order(s) — one PO per
-// supplier, since a PurchaseOrder belongs to a single supplier.
+// against whichever supplier is the item's "usual" one) and a one-click way
+// to raise the resulting purchase order(s) — one PO per supplier, since a
+// PurchaseOrder belongs to a single supplier.
+//
+// "Usual" prefers the item's explicit Item.default_supplier (set on the
+// Items screen) when one is linked here; if the item has no default set, or
+// its default supplier isn't actually linked to it, this falls back to
+// whichever supplier it was most recently ordered from — the same proxy
+// used before default_supplier existed. Either way, the cheapest linked
+// price is always suggested alongside it as a one-click cost-saving swap —
+// picking "usual" never happens silently at the expense of a cheaper option
+// sitting right there.
 export default function Reorder({ accessToken, items, locations, itemSupplierLinks }: Props) {
   const [location, setLocation] = useState(locations[0]?.id ?? "");
   const [onHand, setOnHand] = useState<Record<string, number>>({});
@@ -97,9 +103,23 @@ export default function Reorder({ accessToken, items, locations, itemSupplierLin
   function defaultLink(itemId: string): ItemSupplierRow | null {
     const links = linksFor(itemId);
     if (links.length === 0) return null;
+    const item = items.find((it) => it.id === itemId);
+    if (item?.default_supplier) {
+      const explicit = links.find((l) => l.supplier === item.default_supplier);
+      if (explicit) return explicit;
+    }
     const withDate = links.filter((l) => l.last_ordered_at);
     if (withDate.length === 0) return links[0];
     return withDate.reduce((a, b) => ((a.last_ordered_at as string) > (b.last_ordered_at as string) ? a : b));
+  }
+  // Whether `defaultLink(itemId)` resolved from the item's real
+  // Item.default_supplier, as opposed to the last-ordered-from fallback —
+  // used only to label the pick accurately ("default" vs "usual") rather
+  // than implying every item has one explicitly set.
+  function usualIsExplicitDefault(itemId: string): boolean {
+    const item = items.find((it) => it.id === itemId);
+    const link = defaultLink(itemId);
+    return !!item?.default_supplier && !!link && item.default_supplier === link.supplier;
   }
   function cheapestLink(itemId: string): ItemSupplierRow | null {
     const links = linksFor(itemId);
@@ -232,7 +252,7 @@ export default function Reorder({ accessToken, items, locations, itemSupplierLin
         <div>
           <h2 style={{ margin: 0, fontSize: 15 }}>Reorder — items below par</h2>
           <div className="muted" style={{ fontSize: 11.5, marginTop: 2 }}>
-            Prices from your last recorded supplier orders
+            Starts from each item's default supplier (or its last order, if no default is set) — cheaper options are flagged
           </div>
         </div>
         {locations.length > 1 && (
@@ -271,6 +291,7 @@ export default function Reorder({ accessToken, items, locations, itemSupplierLin
         const q = Number(qtyFor(h)) || 0;
         const lineTotal = q * Number(chosen.unit_price);
         const alreadyOrdered = onOrderItemIds.has(h.itemId);
+        const defLabel = usualIsExplicitDefault(h.itemId) ? "default" : "usual";
 
         if (alreadyOrdered) {
           const onOrderLines = onOrderLinesFor(h.itemId);
@@ -301,7 +322,7 @@ export default function Reorder({ accessToken, items, locations, itemSupplierLin
         } else if (chosen.id === cheapest.id) {
           nudge = (
             <span className="badge b-ok">
-              Saving {gbp(q * (Number(def.unit_price) - Number(cheapest.unit_price)))} vs usual
+              Saving {gbp(q * (Number(def.unit_price) - Number(cheapest.unit_price)))} vs {defLabel}
             </span>
           );
         } else {
@@ -357,7 +378,7 @@ export default function Reorder({ accessToken, items, locations, itemSupplierLin
                 {links.map((l) => (
                   <option key={l.id} value={l.id}>
                     {l.supplier_name} — {gbp(Number(l.unit_price))}/{h.baseUnit}
-                    {l.id === def.id ? " (usual)" : ""}
+                    {l.id === def.id ? ` (${defLabel})` : ""}
                     {l.id === cheapest.id && cheapest.id !== def.id ? " (cheapest)" : ""}
                   </option>
                 ))}
