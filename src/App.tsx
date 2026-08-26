@@ -124,7 +124,9 @@ export default function App() {
   const [importFileName, setImportFileName] = useState("");
   const [importSaving, setImportSaving] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
-  const [importDone, setImportDone] = useState<{ created: number; updated: number } | null>(null);
+  const [importDone, setImportDone] = useState<
+    { created: number; updated: number; linkedSynced: string[] } | null
+  >(null);
 
   const [showNewSupplier, setShowNewSupplier] = useState(false);
   const [newSupplierName, setNewSupplierName] = useState("");
@@ -415,8 +417,18 @@ export default function App() {
         supplier: importSupplier,
         rows: importRows.map((r) => ({ name: r.name, unit: r.unit, price: r.price })),
       });
-      setImportDone({ created: result.created.length, updated: result.updated.length });
+      setImportDone({
+        created: result.created.length,
+        updated: result.updated.length,
+        linkedSynced: result.linked_prices_synced,
+      });
       fetchSupplierItems(accessToken).then(setSupplierItems).catch(() => {});
+      // A refreshed price may have just changed what an already-linked
+      // item costs — refetch so Items/Item Detail don't keep showing the
+      // pre-import price until the next unrelated reload (second gotcha).
+      if (result.linked_prices_synced.length > 0) {
+        fetchItems(accessToken).then(setItems).catch(() => {});
+      }
     } catch (err) {
       setImportError(err instanceof Error ? err.message : "Something went wrong partway through the import.");
     } finally {
@@ -1166,6 +1178,13 @@ export default function App() {
                   {importDone.created} new{importDone.updated > 0 ? `, ${importDone.updated} updated` : ""}.
                 </b>{" "}
                 Open items to see matching suggestions.
+                {importDone.linkedSynced.length > 0 && (
+                  <div style={{ marginTop: 6 }}>
+                    Also refreshed the live price on {importDone.linkedSynced.length} already-linked{" "}
+                    item{importDone.linkedSynced.length > 1 ? "s" : ""}:{" "}
+                    {importDone.linkedSynced.join(", ")}.
+                  </div>
+                )}
               </div>
             )}
 

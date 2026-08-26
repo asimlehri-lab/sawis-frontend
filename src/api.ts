@@ -695,6 +695,12 @@ export interface BulkImportSupplierItemsInput {
 export interface BulkImportSupplierItemsResult {
   created: SupplierItemRow[];
   updated: SupplierItemRow[];
+  // Names of Items whose already-confirmed ItemSupplier link got its
+  // unit_price refreshed to match a row that updated an existing raw
+  // catalogue line — see SupplierItemViewSet.bulk_import. Without this,
+  // a re-import only ever touched the background catalogue table, never
+  // the price an already-linked item actually costs against.
+  linked_prices_synced: string[];
 }
 
 // Upserts by (supplier, raw_name) on the backend instead of one create-only
