@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import * as XLSX from "xlsx";
 import {
   login,
   refreshAccessToken,
@@ -480,29 +481,63 @@ export default function App() {
     }
   }
 
-  function handleCsvFile(e: React.ChangeEvent<HTMLInputElement>) {
+  // Turns a sheet's raw rows (from either CSV or Excel) into the same
+  // {name, unit, price} shape the bulk_import endpoint expects — the two
+  // file formats converge here so nothing downstream needs to know which
+  // one the supplier actually sent.
+  function rowsFromCells(cellRows: unknown[][]) {
+    const rows: { name: string; unit: string; price: string }[] = [];
+    cellRows.forEach((cells) => {
+      const parts = cells.map((c) => (c === null || c === undefined ? "" : String(c).trim()));
+      if (parts.length >= 3 && parts[0] && !isNaN(Number(parts[2]))) {
+        rows.push({ name: parts[0], unit: parts[1], price: parts[2] });
+      }
+    });
+    return rows;
+  }
+
+  function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setImportFileName(file.name);
     setImportError(null);
     setImportDone(null);
+    const isSpreadsheet = /\.xlsx?$/i.test(file.name);
     const reader = new FileReader();
     reader.onload = () => {
-      const text = String(reader.result || "");
-      const rows: { name: string; unit: string; price: string }[] = [];
-      text.split(/\r?\n/).forEach((line) => {
-        if (!line.trim()) return;
-        const parts = line.split(",").map((p) => p.trim());
-        if (parts.length >= 3 && parts[0] && !isNaN(Number(parts[2]))) {
-          rows.push({ name: parts[0], unit: parts[1], price: parts[2] });
+      let rows: { name: string; unit: string; price: string }[] = [];
+      try {
+        if (isSpreadsheet) {
+          // Supplier sent an Excel workbook — read the first sheet as a
+          // grid of cells rather than text, since prices/units in Excel
+          // are often typed as real numbers, not strings.
+          const data = new Uint8Array(reader.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: "array" });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const cellRows = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false }) as unknown[][];
+          rows = rowsFromCells(cellRows);
+        } else {
+          const text = String(reader.result || "");
+          const cellRows = text
+            .split(/\r?\n/)
+            .filter((line) => line.trim())
+            .map((line) => line.split(","));
+          rows = rowsFromCells(cellRows);
         }
-      });
+      } catch {
+        setImportError("Could not read that file — check it's a valid CSV or Excel spreadsheet.");
+        return;
+      }
       setImportRows(rows);
       if (rows.length === 0) {
-        setImportError('No valid rows found — each line should read "name,unit,price", e.g. "Beef mince 5%,kg,7.40".');
+        setImportError('No valid rows found — each row should read name, unit, price, e.g. "Beef mince 5%, kg, 7.40".');
       }
     };
-    reader.readAsText(file);
+    if (isSpreadsheet) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
   }
 
   async function handleImportSubmit() {
@@ -744,7 +779,7 @@ export default function App() {
               {activePage === "Items" && (
                 <div style={{ display: "flex", gap: 8 }}>
                   <button className="btn-ghost small" onClick={() => setShowImport(true)}>
-                    ⇪ Import supplier list (CSV)
+                    ⇪ Import supplier list
                   </button>
                   <button className="btn-primary small" onClick={() => setShowNewItem(true)}>
                     + New item
@@ -1178,8 +1213,9 @@ export default function App() {
           <div className="modal wide" onClick={(e) => e.stopPropagation()}>
             <h2>Import a supplier's catalogue</h2>
             <p className="hint" style={{ marginTop: -8, marginBottom: 16 }}>
-              Suppliers usually send their full product list as a CSV. SAWIS stores it in the
-              background so it can suggest which suppliers stock the items you already track.
+              Suppliers usually send their full product list as a CSV or Excel spreadsheet. SAWIS
+              stores it in the background so it can suggest which suppliers stock the items you
+              already track.
             </p>
 
             <div className="field" style={{ marginBottom: 12 }}>
@@ -1257,10 +1293,15 @@ export default function App() {
             </div>
 
             <div className="field" style={{ marginBottom: 12 }}>
-              <label>CSV file</label>
-              <input type="file" accept=".csv,text/csv" onChange={handleCsvFile} />
+              <label>Supplier list file</label>
+              <input
+                type="file"
+                accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                onChange={handleImportFile}
+              />
               <div className="vhint">
-                One product per line: name,unit,price — e.g. "Beef mince 5%,kg,7.40". No header row.
+                CSV or Excel (.xlsx/.xls). One product per row: name, unit, price — e.g. "Beef mince
+                5%, kg, 7.40". No header row.
               </div>
             </div>
 
