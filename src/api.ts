@@ -82,6 +82,25 @@ export async function getMe(accessToken: string): Promise<Me> {
   return authedFetch("/api/tenancy/me/", accessToken);
 }
 
+// The refresh half of the pair `login()` returns. The backend's SIMPLE_JWT
+// config (config/settings.py) has ROTATE_REFRESH_TOKENS=True, so a
+// successful call also returns a NEW refresh token — always store whichever
+// one comes back, not just the access token, or the next refresh will use a
+// stale one. Access tokens live 8 hours, refresh tokens 14 days; this is
+// what lets a signed-in session survive a page reload (see App.tsx's
+// restore-on-load effect) instead of forcing a fresh sign-in every time.
+export async function refreshAccessToken(refreshToken: string): Promise<TokenPair> {
+  const res = await fetch(`${API_URL}/api/auth/token/refresh/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh: refreshToken }),
+  });
+  if (!res.ok) {
+    throw new Error("Session expired — please sign in again.");
+  }
+  return res.json();
+}
+
 export async function fetchItems(accessToken: string): Promise<CatalogItem[]> {
   const data: Paginated<CatalogItem> = await authedFetch("/api/catalog/items/", accessToken);
   return data.results;
