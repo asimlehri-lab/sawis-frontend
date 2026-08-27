@@ -36,6 +36,8 @@ body {
 .page .card {
   max-width: 380px;
   text-align: center;
+  box-shadow: 0 8px 28px rgba(33, 31, 27, 0.06);
+  padding: 40px 32px;
 }
 
 .card {
@@ -61,16 +63,143 @@ body {
   margin: 0 auto 16px;
 }
 
+/* The sign-in card's logo lockup — bigger and with more presence than the
+   plain .brandmark used elsewhere (sidebar), since this is the one place
+   the brand is meant to actually introduce itself. */
+.brandmark.login {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  font-size: 28px;
+  margin: 0 auto 18px;
+  box-shadow: 0 10px 24px rgba(46, 84, 232, 0.28);
+}
+
 h1 {
   font-size: 20px;
   margin: 0 0 4px;
   letter-spacing: -0.3px;
+  color: var(--ink);
+}
+
+.wordmark {
+  font-size: 30px;
+  font-weight: 700;
+  margin: 0 0 6px;
+  letter-spacing: -0.5px;
+  color: var(--ink);
 }
 
 .muted {
   color: var(--muted);
   font-size: 13px;
   margin: 0 0 20px;
+}
+
+/* A newer deployed build was detected (see App.tsx's update-poll effect) —
+   fixed so it overlays either the login card or the sidebar/content layout
+   without needing to touch either's structure. */
+.update-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: var(--brand);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.update-banner button {
+  background: #fff;
+  color: var(--brand);
+  border: none;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* Loader.tsx — the cloche-reveal loading animation. Clean line art in the
+   app's real brand tokens only (no invented colors) — an earlier illustrated
+   pasta-bowl concept didn't land with the user, this replaced it. */
+.loader-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.loader-row.compact {
+  flex-direction: row;
+  gap: 12px;
+}
+
+.loading-label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.rig { position: relative; width: 96px; height: 96px; }
+.rig.compact { width: 52px; height: 52px; }
+.rig svg { width: 100%; height: 100%; display: block; overflow: visible; }
+
+.surface-line { stroke: var(--border); stroke-width: 2.5; fill: none; }
+.shadow-ellipse { fill: rgba(33, 31, 27, 0.12); }
+
+.cloche-group {
+  animation: cloche-lift 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  transform-origin: 50% 78%;
+}
+.rig.compact .cloche-group { animation-duration: 1.9s; }
+
+.cloche-body { fill: none; stroke: var(--brand); stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+.cloche-knob { fill: var(--brand); }
+
+.cloche-shadow {
+  animation: cloche-shadowpulse 2.4s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  transform-origin: 50% 50%;
+}
+.rig.compact .cloche-shadow { animation-duration: 1.9s; }
+
+.sparkle {
+  stroke: var(--brick);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  opacity: 0;
+  animation: cloche-sparkle 2.4s ease-in-out infinite;
+}
+.rig.compact .sparkle { animation-duration: 1.9s; }
+
+@keyframes cloche-lift {
+  0%   { transform: translateY(0); }
+  35%  { transform: translateY(-13px); }
+  65%  { transform: translateY(-13px); }
+  100% { transform: translateY(0); }
+}
+@keyframes cloche-shadowpulse {
+  0%   { transform: scale(1); opacity: 0.5; }
+  35%  { transform: scale(0.72); opacity: 0.25; }
+  65%  { transform: scale(0.72); opacity: 0.25; }
+  100% { transform: scale(1); opacity: 0.5; }
+}
+@keyframes cloche-sparkle {
+  0%, 30%   { opacity: 0; transform: scale(0.6); }
+  45%       { opacity: 1; transform: scale(1); }
+  60%       { opacity: 1; transform: scale(1); }
+  75%, 100% { opacity: 0; transform: scale(0.6); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cloche-group, .cloche-shadow, .sparkle { animation: none !important; }
+  .sparkle { opacity: 0.7; }
 }
 
 form {

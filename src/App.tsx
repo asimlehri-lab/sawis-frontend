@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   login,
+  refreshAccessToken,
   getMe,
   fetchItems,
   createItem,
@@ -41,6 +42,7 @@ import type {
 } from "./api";
 import RecipeDetail from "./RecipeDetail";
 import ItemDetail from "./ItemDetail";
+import Loader from "./Loader";
 import ProcurementDetail from "./ProcurementDetail";
 import SupplierDeliveries from "./SupplierDeliveries";
 import WasteLog from "./WasteLog";
@@ -61,6 +63,36 @@ const NAV_ITEMS = [
   "Reports",
   "Team",
 ];
+
+// Session persistence — see the restore-on-load effect in App(). Before
+// this, accessToken lived only in React state, so any page reload (or a
+// browser/tab close) silently discarded it and forced a fresh sign-in even
+// though the backend's access token is still valid for 8 hours and the
+// refresh token for 14 days (config/settings.py SIMPLE_JWT). Storing both
+// in localStorage — not just the access token — is what lets a reload
+// survive past the 8-hour access-token window too, via refreshAccessToken.
+const ACCESS_TOKEN_KEY = "sawis_access_token";
+const REFRESH_TOKEN_KEY = "sawis_refresh_token";
+
+function storeTokens(access: string, refresh: string) {
+  localStorage.setItem(ACCESS_TOKEN_KEY, access);
+  localStorage.setItem(REFRESH_TOKEN_KEY, refresh);
+}
+
+function clearStoredTokens() {
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+}
+
+// The <script type="module"> tag Vite injects into index.html has a
+// content-hashed filename that changes on every deploy — comparing it
+// against a fresh fetch of "/" is a cheap way to notice a new version went
+// live without needing a version.json file to remember to bump by hand.
+// See the update-available effect in App().
+function currentBundleSrc(): string | null {
+  const el = document.querySelector('script[type="module"][src]');
+  return el ? el.getAttribute("src") : null;
+}
 
 export const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
@@ -88,6 +120,13 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [me, setMe] = useState<Me | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
+  // True only when there's a stored session worth trying to restore — a
+  // brand-new visitor with nothing in localStorage skips straight to the
+  // login screen with no extra flash. See the restore effect below.
+  const [restoringSession, setRestoringSession] = useState(
+    () => !!localStorage.getItem(ACCESS_TOKEN_KEY) || !!localStorage.getItem(REFRESH_TOKEN_KEY)
+  );
+  const [updateAvailable, setUpdateAvailable] = useState(false);
   const [activePage, setActivePage] = useState("Items");
 
   const [items, setItems] = useState<CatalogItem[] | null>(null);
@@ -269,6 +308,65 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, activePage]);
 
+  // Restore a session from localStorage on load — runs once. Tries the
+  // stored access token first (cheap: one request); if that fails (most
+  // likely it's simply past its 8-hour lifetime) falls back to the refresh
+  // token before giving up and showing the login screen. A failure here
+  // could in theory also be a transient network blip rather than a truly
+  // expired session, but retrying indefinitely isn't worth the complexity —
+  // worst case the user just signs in again, same as before this existed.
+  useEffect(() => {
+    const storedAccess = localStorage.getItem(ACCESS_TOKEN_KEY);
+    const storedRefresh = localStorage.getItem(REFRESH_TOKEN_KEY);
+    if (!storedAccess && !storedRefresh) {
+      setRestoringSession(false);
+      return;
+    }
+    (async () => {
+      try {
+        if (!storedAccess) throw new Error("no access token stored");
+        const profile = await getMe(storedAccess);
+        setMe(profile);
+        setAccessToken(storedAccess);
+        return;
+      } catch {
+        // fall through to the refresh attempt below
+      }
+      try {
+        if (!storedRefresh) throw new Error("no refresh token stored");
+        const refreshed = await refreshAccessToken(storedRefresh);
+        const profile = await getMe(refreshed.access);
+        storeTokens(refreshed.access, refreshed.refresh);
+        setMe(profile);
+        setAccessToken(refreshed.access);
+      } catch {
+        clearStoredTokens();
+      }
+    })().finally(() => setRestoringSession(false));
+  }, []);
+
+  // Polls for a newer deployed frontend build so a long-open tab doesn't
+  // silently run stale code until someone thinks to hard-refresh — this was
+  // previously a manual step called out to the user after every deploy.
+  // 15 minutes is arbitrary but low-cost: a missed release is noticed on
+  // the next poll, not urgent enough to warrant anything shorter.
+  useEffect(() => {
+    const initialSrc = currentBundleSrc();
+    if (!initialSrc) return; // dev server or unexpected markup — nothing to compare against
+    const checkForUpdate = () => {
+      fetch("/", { cache: "no-store" })
+        .then((res) => res.text())
+        .then((html) => {
+          const tagMatch = html.match(/<script[^>]*type="module"[^>]*>/i);
+          const srcMatch = tagMatch ? tagMatch[0].match(/src="([^"]+)"/) : null;
+          if (srcMatch && srcMatch[1] !== initialSrc) setUpdateAvailable(true);
+        })
+        .catch(() => {}); // a failed check just means try again next interval
+    };
+    const id = setInterval(checkForUpdate, 15 * 60 * 1000);
+    return () => clearInterval(id);
+  }, []);
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -276,6 +374,7 @@ export default function App() {
     try {
       const tokens = await login(email, password);
       const profile = await getMe(tokens.access);
+      storeTokens(tokens.access, tokens.refresh);
       setMe(profile);
       setAccessToken(tokens.access);
     } catch (err) {
@@ -286,6 +385,7 @@ export default function App() {
   }
 
   function handleLogout() {
+    clearStoredTokens();
     setMe(null);
     setAccessToken(null);
     setItems(null);
@@ -498,12 +598,30 @@ export default function App() {
     }
   }
 
+  // Shown only when there was a stored session worth checking — see
+  // restoringSession's initializer.
+  if (restoringSession) {
+    return (
+      <div className="page">
+        <div className="card" style={{ textAlign: "center" }}>
+          <Loader />
+        </div>
+      </div>
+    );
+  }
+
   if (!me) {
     return (
       <div className="page">
+        {updateAvailable && (
+          <div className="update-banner">
+            A new version of SAWIS is available.
+            <button onClick={() => window.location.reload()}>Refresh now</button>
+          </div>
+        )}
         <div className="card">
-          <div className="brandmark">S</div>
-          <h1>sawis</h1>
+          <div className="brandmark login">S</div>
+          <h1 className="wordmark">sawis</h1>
           <p className="muted">Sign in to your back office</p>
           <form onSubmit={handleSubmit}>
             <label>
@@ -526,6 +644,12 @@ export default function App() {
 
   return (
     <div className="app">
+      {updateAvailable && (
+        <div className="update-banner">
+          A new version of SAWIS is available.
+          <button onClick={() => window.location.reload()}>Refresh now</button>
+        </div>
+      )}
       <aside className="sidebar">
         <div className="sidebar-brand">
           <div className="brandmark small">S</div>
