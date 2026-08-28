@@ -29,6 +29,22 @@ function roleLabel(v: string): string {
   return ROLES.find((r) => r.value === v)?.label ?? v;
 }
 
+// Days-ago phrasing rather than a raw timestamp, since "was this person
+// active this week" is the question this column exists to answer at a
+// glance. `recent` (used to color the cell) mirrors that same week window.
+function lastActive(iso: string | null): { text: string; recent: boolean } {
+  if (!iso) return { text: "Never signed in", recent: false };
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  if (days <= 0) return { text: "Today", recent: true };
+  if (days === 1) return { text: "Yesterday", recent: true };
+  if (days < 7) return { text: `${days} days ago`, recent: true };
+  if (days < 31) return { text: `${Math.floor(days / 7)}w ago`, recent: false };
+  return {
+    text: new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" }),
+    recent: false,
+  };
+}
+
 export default function Team({ accessToken, me, memberships, membershipsError, locations, onChanged }: Props) {
   const isAdmin = me.memberships.some((m) => m.role === "admin");
 
@@ -44,7 +60,9 @@ export default function Team({ accessToken, me, memberships, membershipsError, l
     <>
       <p className="muted" style={{ fontSize: 13, marginTop: 0, marginBottom: 16 }}>
         Everyone with a SAWIS login, and what they can do. <b>Job title</b> is just a label — access is always
-        controlled by <b>role</b>, and a role change takes effect immediately.
+        controlled by <b>role</b>, and a role change takes effect immediately. <b>Last active</b> tracks real
+        sign-ins going forward — "Never signed in" for someone who hasn't logged in since this was added is
+        expected, not a sign anything's wrong.
       </p>
 
       {membershipsError && <p className="error">{membershipsError}</p>}
@@ -59,6 +77,7 @@ export default function Team({ accessToken, me, memberships, membershipsError, l
               <th>Role</th>
               <th>Location</th>
               <th>Department</th>
+              <th>Last active</th>
               {isAdmin && <th></th>}
             </tr>
           </thead>
@@ -77,6 +96,12 @@ export default function Team({ accessToken, me, memberships, membershipsError, l
                 </td>
                 <td className="muted">{m.location_name ?? "All locations"}</td>
                 <td className="muted">{m.department ? m.department.charAt(0).toUpperCase() + m.department.slice(1) : "All"}</td>
+                <td>
+                  {(() => {
+                    const { text, recent } = lastActive(m.last_login);
+                    return recent ? <span className="badge b-ok">{text}</span> : <span className="muted">{text}</span>;
+                  })()}
+                </td>
                 {isAdmin && (
                   <td className="num">
                     <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>

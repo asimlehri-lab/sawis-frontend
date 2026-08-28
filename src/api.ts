@@ -10,6 +10,9 @@ export interface Membership {
   location_name: string | null;
   department: string | null;
   job_title: string;
+  // Most recent real sign-in — null means never signed in since login
+  // tracking was turned on, not necessarily "never used the account."
+  last_login: string | null;
 }
 
 export interface Me {
