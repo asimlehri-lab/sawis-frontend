@@ -1084,6 +1084,18 @@ export async function importSales(accessToken: string, input: ImportSalesInput):
   return res.json();
 }
 
+// Powers the "Last imported" line on End of day's compact import control —
+// reads back when a CSV was actually uploaded (Sale.created_at), not the
+// business date inside the file (Sale.occurred_at).
+export async function fetchLastImportDate(accessToken: string, location: string): Promise<string | null> {
+  const params = new URLSearchParams({ location });
+  const data: { last_imported_at: string | null } = await authedFetch(
+    `/api/ledger/sales/last_import/?${params.toString()}`,
+    accessToken
+  );
+  return data.last_imported_at;
+}
+
 // ---------------------------------------------------------------------------
 // End of day: the KPI/comparison/Champions report
 // ---------------------------------------------------------------------------

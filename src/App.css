@@ -1481,3 +1481,89 @@ input[type="file"] {
 .split-fc { height: 100%; background: #C2611D; }
 .split-gp { height: 100%; background: #1D6B4F; }
 .role-staff { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+
+/* ---------------------------------------------------------------------- */
+/* End of day — page-level compact sales-import control (sits above the   */
+/* Overview/Reorder tabs, not inside a tab, since it isn't tied to either) */
+/* ---------------------------------------------------------------------- */
+
+.eod-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 16px; flex-wrap: wrap; }
+.eod-intro { flex: 1 1 380px; min-width: 0; }
+.eod-import { flex: 0 0 240px; width: 240px; }
+
+.eod-import-loc {
+  width: 100%;
+  margin-bottom: 8px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.eod-dropzone { position: relative; }
+.eod-dropzone-box {
+  border: 1.5px dashed var(--border);
+  border-radius: 10px;
+  padding: 9px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--muted);
+  text-align: center;
+  transition: border-color 0.15s, background 0.15s, color 0.15s;
+}
+.eod-dropzone-box.dragover { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); }
+.eod-dropzone:hover .eod-dropzone-box { border-color: var(--brand); color: var(--brand); }
+.eod-dropzone input[type="file"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.eod-dropzone input[type="file"]:disabled { cursor: not-allowed; }
+
+.eod-import-meta { margin-top: 8px; font-size: 11px; color: var(--muted); text-align: right; }
+.eod-import-meta .eod-source { display: block; margin-top: 2px; }
+
+/* Small hover-and-hold info tooltip — currently only used for the CSV
+   format hint above, but generic enough to reuse anywhere a control needs
+   an explanation without permanently taking up space on the page. */
+.info-tooltip { position: relative; display: inline-block; }
+.info-tooltip-body {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 260px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--muted);
+  text-align: left;
+  box-shadow: 0 10px 28px rgba(33, 31, 27, 0.12);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition: opacity 0.12s, transform 0.12s;
+  pointer-events: none;
+}
+.info-tooltip:hover .info-tooltip-body,
+.info-tooltip:focus-within .info-tooltip-body {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+@media (max-width: 720px) {
+  .eod-import { flex: 1 1 100%; width: 100%; }
+  .eod-import-meta, .eod-dropzone-box { text-align: left; }
+}
