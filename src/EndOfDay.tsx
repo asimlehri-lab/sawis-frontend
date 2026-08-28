@@ -266,11 +266,6 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
   return (
     <>
       <div className="eod-head">
-        <p className="muted eod-intro" style={{ fontSize: 13, marginTop: 0, marginBottom: 0 }}>
-          End of day covers what happens once the day's sales are in: reviewing the numbers, getting them recorded
-          (so stock depletes automatically), and reordering whatever that depletion has pushed below par.
-        </p>
-
         <div className="eod-import">
           {locations.length > 1 && (
             <select className="eod-import-loc" value={location} onChange={(e) => setLocation(e.target.value)}>

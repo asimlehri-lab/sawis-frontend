@@ -1487,8 +1487,11 @@ input[type="file"] {
 /* Overview/Reorder tabs, not inside a tab, since it isn't tied to either) */
 /* ---------------------------------------------------------------------- */
 
-.eod-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 16px; flex-wrap: wrap; }
-.eod-intro { flex: 1 1 380px; min-width: 0; }
+/* Just the import control now — the old explanatory paragraph that used
+   to sit to its left was removed (too much permanent page text; a proper
+   contextual help panel is a future idea, not this). Right-aligned via
+   justify-content since it's the row's only child now. */
+.eod-head { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 .eod-import { flex: 0 0 240px; width: 240px; }
 
 .eod-import-loc {

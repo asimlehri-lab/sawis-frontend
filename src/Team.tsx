@@ -58,13 +58,6 @@ export default function Team({ accessToken, me, memberships, membershipsError, l
 
   return (
     <>
-      <p className="muted" style={{ fontSize: 13, marginTop: 0, marginBottom: 16 }}>
-        Everyone with a SAWIS login, and what they can do. <b>Job title</b> is just a label — access is always
-        controlled by <b>role</b>, and a role change takes effect immediately. <b>Last active</b> tracks real
-        sign-ins going forward — "Never signed in" for someone who hasn't logged in since this was added is
-        expected, not a sign anything's wrong.
-      </p>
-
       {membershipsError && <p className="error">{membershipsError}</p>}
       {rows.length === 0 && !membershipsError && <p className="muted">No team members yet.</p>}
 
