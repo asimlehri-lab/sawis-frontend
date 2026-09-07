@@ -1823,79 +1823,91 @@ export default function App() {
                   </p>
                 ) : (
                   <>
-                    <table className="tbl" style={{ marginTop: 4 }}>
-                      <thead>
-                        <tr>
-                          <th>On the receipt</th>
-                          <th>Matched item</th>
-                          <th className="num">Qty</th>
-                          <th className="num">Unit price</th>
-                          <th className="num">Confidence</th>
-                          <th></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {scanRows.map((row, i) => (
-                          <tr key={i} style={row.skip ? { opacity: 0.45 } : undefined}>
-                            <td className="muted">{row.description}</td>
-                            <td>
-                              <select
-                                value={row.matchedItemId}
-                                onChange={(e) => updateScanRow(i, { matchedItemId: e.target.value })}
-                                disabled={row.skip}
-                              >
-                                <option value="">Pick an item…</option>
-                                {(items ?? []).map((it) => (
-                                  <option key={it.id} value={it.id}>
-                                    {it.name}
-                                  </option>
-                                ))}
-                              </select>
-                            </td>
-                            <td className="num">
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.001"
-                                value={row.qty}
-                                onChange={(e) => updateScanRow(i, { qty: e.target.value })}
-                                disabled={row.skip}
-                                style={{ width: 70 }}
-                              />
-                            </td>
-                            <td className="num">
-                              <input
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                value={row.unitPrice}
-                                onChange={(e) => updateScanRow(i, { unitPrice: e.target.value })}
-                                disabled={row.skip}
-                                style={{ width: 70 }}
-                              />
-                            </td>
-                            <td className="num">
-                              <span
-                                className={`badge ${
-                                  row.confidence !== null && row.confidence >= 80 ? "b-ok" : "warn"
-                                }`}
-                              >
-                                {row.confidence !== null ? `${row.confidence.toFixed(0)}%` : "—"}
-                              </span>
-                            </td>
-                            <td>
-                              <button
-                                type="button"
-                                className="btn-ghost small"
-                                onClick={() => updateScanRow(i, { skip: !row.skip })}
-                              >
-                                {row.skip ? "Include" : "Skip"}
-                              </button>
-                            </td>
+                    {/* This table has more columns than the modal is wide
+                        (item description + a full item picker + qty +
+                        price + confidence + skip, vs. e.g. the supplier
+                        import modal's 3 columns) -- scope the horizontal
+                        scroll to just the table, not the whole modal, so
+                        the buttons/hint text below it are never at risk
+                        of scrolling out of view along with it. */}
+                    <div style={{ overflowX: "auto" }}>
+                      <table className="tbl" style={{ marginTop: 4, minWidth: 640 }}>
+                        <thead>
+                          <tr>
+                            <th>On the receipt</th>
+                            <th>Matched item</th>
+                            <th className="num">Qty</th>
+                            <th className="num">Unit price</th>
+                            <th className="num">Confidence</th>
+                            <th></th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {scanRows.map((row, i) => (
+                            <tr key={i} style={row.skip ? { opacity: 0.45 } : undefined}>
+                              <td className="muted" style={{ maxWidth: 140 }}>
+                                {row.description}
+                              </td>
+                              <td>
+                                <select
+                                  value={row.matchedItemId}
+                                  onChange={(e) => updateScanRow(i, { matchedItemId: e.target.value })}
+                                  disabled={row.skip}
+                                  style={{ width: 150 }}
+                                >
+                                  <option value="">Pick an item…</option>
+                                  {(items ?? []).map((it) => (
+                                    <option key={it.id} value={it.id}>
+                                      {it.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="num">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.001"
+                                  value={row.qty}
+                                  onChange={(e) => updateScanRow(i, { qty: e.target.value })}
+                                  disabled={row.skip}
+                                  style={{ width: 60 }}
+                                />
+                              </td>
+                              <td className="num">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={row.unitPrice}
+                                  onChange={(e) => updateScanRow(i, { unitPrice: e.target.value })}
+                                  disabled={row.skip}
+                                  style={{ width: 60 }}
+                                />
+                              </td>
+                              <td className="num">
+                                <span
+                                  className={`badge ${
+                                    row.confidence !== null && row.confidence >= 80 ? "b-ok" : "warn"
+                                  }`}
+                                >
+                                  {row.confidence !== null ? `${row.confidence.toFixed(0)}%` : "—"}
+                                </span>
+                              </td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="btn-ghost small"
+                                  onClick={() => updateScanRow(i, { skip: !row.skip })}
+                                >
+                                  {row.skip ? "Include" : "Skip"}
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                     {scanUnmatchedCount > 0 && (
                       <p className="hint" style={{ marginTop: 8 }}>
                         {scanUnmatchedCount} row{scanUnmatchedCount === 1 ? "" : "s"} need
