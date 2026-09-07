@@ -140,12 +140,20 @@ export default function ProcurementDetail({
     if (!po) return;
     const supplier = suppliers.find((s) => s.id === po.supplier);
     if (method === "email" && supplier?.contact_email) {
-      const subject = encodeURIComponent(`Purchase order — ${po.location_name}`);
+      // Lead with our own PO number in both the subject and the body -- so
+      // it's visible in the recipient's inbox list before they even open
+      // the email, and so it's the first thing on the page if they forward
+      // or print it. Also what a supplier can print back onto their own
+      // invoice for the scan-to-PO matching in Procurement's receipt scan.
+      const subject = encodeURIComponent(
+        po.po_number ? `Purchase order ${po.po_number} — ${po.location_name}` : `Purchase order — ${po.location_name}`
+      );
+      const poNumberLine = po.po_number ? `PO number: ${po.po_number}%0D%0A%0D%0A` : "";
       const bodyLines = po.lines
         .map((l) => `${Number(l.qty).toFixed(2)} × ${l.item_name} @ £${Number(l.unit_price).toFixed(2)}`)
         .join("%0D%0A");
       window.open(
-        `mailto:${supplier.contact_email}?subject=${subject}&body=${bodyLines}%0D%0A%0D%0ATotal: £${Number(po.total).toFixed(2)}`,
+        `mailto:${supplier.contact_email}?subject=${subject}&body=${poNumberLine}${bodyLines}%0D%0A%0D%0ATotal: £${Number(po.total).toFixed(2)}`,
         "_blank"
       );
     }
