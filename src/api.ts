@@ -919,6 +919,48 @@ export async function createPOLine(accessToken: string, input: NewPOLineInput): 
   return res.json();
 }
 
+export interface ScannedReceiptLineItem {
+  description: string;
+  quantity: string | null;
+  unit_price: string | null;
+  confidence: number | null;
+}
+
+export interface ScannedReceipt {
+  vendor_name: string | null;
+  vendor_confidence: number | null;
+  date: string | null;
+  date_confidence: number | null;
+  total: string | null;
+  total_confidence: number | null;
+  line_items: ScannedReceiptLineItem[];
+}
+
+// Uploads a receipt/invoice photo to the backend, which runs it through
+// AWS Textract and hands back the parsed fields. No PurchaseOrder or
+// POLine gets created by this call -- matching the vendor to a Supplier
+// and each line item to an Item both happen client-side afterwards (see
+// the Scan receipt modal in App.tsx), the same fuzzy-match-then-confirm
+// pattern already used by the supplier-catalogue import and End of day's
+// sales CSV importer.
+export async function scanReceipt(accessToken: string, file: File): Promise<ScannedReceipt> {
+  const formData = new FormData();
+  formData.append("image", file);
+  // No Content-Type header here on purpose -- the browser sets the
+  // multipart boundary itself when the body is a FormData; setting it
+  // by hand breaks the upload.
+  const res = await fetch(`${API_URL}/api/procurement/scan-receipt/`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: formData,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error((body && typeof body === "object" && body.detail) || "Could not scan that receipt.");
+  }
+  return res.json();
+}
+
 export interface ReceiveLineOverride {
   id: string;
   received_qty: string;

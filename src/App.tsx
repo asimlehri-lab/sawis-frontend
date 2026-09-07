@@ -18,6 +18,8 @@ import {
   createSupplier,
   fetchPurchaseOrders,
   createPurchaseOrder,
+  createPOLine,
+  scanReceipt,
   fetchItemSuppliers,
   fetchWasteEvents,
   fetchStockMovements,
@@ -40,6 +42,7 @@ import type {
   Section,
   StockCountRow,
   Membership,
+  ScannedReceipt,
 } from "./api";
 import RecipeDetail from "./RecipeDetail";
 import ItemDetail from "./ItemDetail";
@@ -112,6 +115,51 @@ export function nextDeliveryDate(deliveryDay: number): Date {
   const result = new Date(today);
   result.setDate(today.getDate() + diff);
   return result;
+}
+
+// Lightweight fuzzy match: token overlap between our own name (an Item,
+// or a Supplier) and a piece of OCR'd receipt text. Same approach as
+// ItemDetail.tsx's matchScore for supplier-catalogue matching — never
+// used to auto-commit anything, only to rank the best guess the "Scan
+// receipt" review modal pre-selects, which the user still confirms or
+// corrects before anything is saved.
+function matchScore(ours: string, raw: string): number {
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[0-9]+(\.[0-9]+)?\s*(kg|g|ml|l|cl|oz|x|case|sack|class)?/g, " ")
+      .replace(/[^a-z ]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 2);
+  const a = new Set(norm(ours));
+  const b = new Set(norm(raw));
+  if (!a.size) return 0;
+  let hit = 0;
+  a.forEach((w) => {
+    if (b.has(w) || [...b].some((x) => x.startsWith(w) || w.startsWith(x))) hit++;
+  });
+  return hit / a.size;
+}
+
+// A row in the Scan receipt review table -- one per Textract-detected
+// line item, pre-filled with a best-guess Item match the user confirms
+// or corrects. Nothing here is saved until "Create purchase order."
+interface ScanRow {
+  description: string;
+  matchedItemId: string; // "" = no confident match, user must pick one
+  qty: string;
+  unitPrice: string;
+  confidence: number | null; // Textract's own confidence for this row, 0-100
+  skip: boolean;
+}
+
+// Textract sometimes returns a price/qty with a currency symbol, thousands
+// separator, or stray whitespace ("£1,234.50") -- strip everything but
+// digits/decimal point so it drops straight into a numeric-style input.
+function cleanNumeric(raw: string | null): string {
+  if (!raw) return "";
+  const cleaned = raw.replace(/[^0-9.]/g, "");
+  return cleaned || "";
 }
 
 export default function App() {
@@ -190,6 +238,24 @@ export default function App() {
   const [newPOError, setNewPOError] = useState<string | null>(null);
   const [poFilter, setPoFilter] = useState<"all" | "draft" | "sent" | "received">("all");
   const [itemSupplierLinks, setItemSupplierLinks] = useState<ItemSupplierRow[]>([]);
+
+  // Scan receipt (OCR) -- upload a photo, review/correct what Textract read
+  // back, then create a real PurchaseOrder + POLines from it. See the
+  // "Scan receipt" section further down for the review modal itself.
+  const [showScanReceipt, setShowScanReceipt] = useState(false);
+  const [scanFileName, setScanFileName] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanResult, setScanResult] = useState<ScannedReceipt | null>(null);
+  const [scanSupplierId, setScanSupplierId] = useState("");
+  const [scanLocationId, setScanLocationId] = useState("");
+  const [scanRows, setScanRows] = useState<ScanRow[]>([]);
+  const [creatingPOFromScan, setCreatingPOFromScan] = useState(false);
+  const [scanCreateError, setScanCreateError] = useState<string | null>(null);
+  const [scanShowNewSupplier, setScanShowNewSupplier] = useState(false);
+  const [scanNewSupplierName, setScanNewSupplierName] = useState("");
+  const [savingScanSupplier, setSavingScanSupplier] = useState(false);
+  const [scanNewSupplierError, setScanNewSupplierError] = useState<string | null>(null);
 
   const [wasteEvents, setWasteEvents] = useState<WasteEventRow[] | null>(null);
   const [wasteError, setWasteError] = useState<string | null>(null);
@@ -633,6 +699,129 @@ export default function App() {
     }
   }
 
+  function resetScan() {
+    setScanFileName(null);
+    setScanError(null);
+    setScanResult(null);
+    setScanSupplierId("");
+    setScanLocationId("");
+    setScanRows([]);
+    setScanCreateError(null);
+    setScanShowNewSupplier(false);
+    setScanNewSupplierName("");
+    setScanNewSupplierError(null);
+  }
+
+  async function handleCreateScanSupplier() {
+    if (!accessToken || !scanNewSupplierName.trim()) return;
+    setSavingScanSupplier(true);
+    setScanNewSupplierError(null);
+    try {
+      const created = await createSupplier(accessToken, {
+        name: scanNewSupplierName.trim(),
+        contact_email: null,
+      });
+      setSuppliers((prev) => [...prev, created]);
+      setScanSupplierId(created.id);
+      setScanShowNewSupplier(false);
+      setScanNewSupplierName("");
+    } catch (err) {
+      setScanNewSupplierError(err instanceof Error ? err.message : "Could not create supplier.");
+    } finally {
+      setSavingScanSupplier(false);
+    }
+  }
+
+  function closeScanModal() {
+    setShowScanReceipt(false);
+    resetScan();
+  }
+
+  async function handleScanFileSelected(file: File) {
+    if (!accessToken) return;
+    setScanFileName(file.name);
+    setScanError(null);
+    setScanResult(null);
+    setScanRows([]);
+    setScanning(true);
+    try {
+      const result = await scanReceipt(accessToken, file);
+      setScanResult(result);
+
+      // Best-guess supplier: fuzzy-match the OCR'd vendor name against
+      // suppliers already on file. Left blank (forcing a manual pick)
+      // if nothing scores well enough to trust — same 0.5 threshold
+      // ItemDetail.tsx uses for supplier-catalogue suggestions.
+      if (result.vendor_name) {
+        const ranked = suppliers
+          .map((s) => ({ s, score: matchScore(s.name, result.vendor_name as string) }))
+          .sort((a, b) => b.score - a.score);
+        if (ranked[0] && ranked[0].score >= 0.5) setScanSupplierId(ranked[0].s.id);
+      }
+
+      const rows: ScanRow[] = result.line_items.map((li) => {
+        const ranked = (items ?? [])
+          .map((it) => ({ it, score: matchScore(it.name, li.description) }))
+          .sort((a, b) => b.score - a.score);
+        const best = ranked[0] && ranked[0].score >= 0.5 ? ranked[0].it.id : "";
+        return {
+          description: li.description,
+          matchedItemId: best,
+          qty: cleanNumeric(li.quantity) || "1",
+          unitPrice: cleanNumeric(li.unit_price) || "0.00",
+          confidence: li.confidence,
+          skip: false,
+        };
+      });
+      setScanRows(rows);
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : "Could not scan that receipt.");
+    } finally {
+      setScanning(false);
+    }
+  }
+
+  function updateScanRow(index: number, patch: Partial<ScanRow>) {
+    setScanRows((rows) => rows.map((r, i) => (i === index ? { ...r, ...patch } : r)));
+  }
+
+  const scanUnmatchedCount = scanRows.filter((r) => !r.skip && !r.matchedItemId).length;
+  const scanIncludedRows = scanRows.filter((r) => !r.skip && r.matchedItemId);
+
+  async function handleCreatePOFromScan() {
+    if (!accessToken || !scanSupplierId || !scanLocationId || !scanIncludedRows.length) return;
+    setScanCreateError(null);
+    setCreatingPOFromScan(true);
+    try {
+      // Reuses the same createPurchaseOrder/createPOLine calls the manual
+      // "+ New purchase order" flow and ProcurementDetail's "add line" use
+      // -- scanning only prefills the form faster, it doesn't bypass any
+      // of the real PO-creation/receiving logic (draft status, stock only
+      // moves once the PO is later marked received).
+      const created = await createPurchaseOrder(accessToken, {
+        supplier: scanSupplierId,
+        location: scanLocationId,
+        expected_date: null,
+      });
+      for (const row of scanIncludedRows) {
+        await createPOLine(accessToken, {
+          po: created.id,
+          item: row.matchedItemId,
+          department: "kitchen",
+          qty: row.qty || "0",
+          unit_price: row.unitPrice || "0.00",
+        });
+      }
+      closeScanModal();
+      loadPOs(accessToken);
+      setSelectedPOId(created.id);
+    } catch (err) {
+      setScanCreateError(err instanceof Error ? err.message : "Could not create the purchase order.");
+    } finally {
+      setCreatingPOFromScan(false);
+    }
+  }
+
   // Shown only when there was a stored session worth checking — see
   // restoringSession's initializer.
   if (restoringSession) {
@@ -792,9 +981,14 @@ export default function App() {
                 </button>
               )}
               {activePage === "Procurement" && (
-                <button className="btn-primary small" onClick={() => setShowNewPO(true)}>
-                  + New purchase order
-                </button>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="btn-ghost small" onClick={() => setShowScanReceipt(true)}>
+                    📷 Scan receipt
+                  </button>
+                  <button className="btn-primary small" onClick={() => setShowNewPO(true)}>
+                    + New purchase order
+                  </button>
+                </div>
               )}
             </div>
 
@@ -1445,6 +1639,237 @@ export default function App() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showScanReceipt && (
+        <div
+          className="modal-backdrop"
+          onClick={() => !scanning && !creatingPOFromScan && closeScanModal()}
+        >
+          <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+            <h2>Scan receipt</h2>
+
+            {!scanResult && (
+              <>
+                <p className="hint" style={{ marginTop: -8, marginBottom: 16 }}>
+                  Upload a photo of a supplier receipt or invoice. SAWIS reads it with AWS Textract
+                  and pre-fills a draft purchase order for you to check and confirm — nothing is
+                  saved until you create the order below.
+                </p>
+                <div className="field" style={{ marginBottom: 12 }}>
+                  <label>Receipt photo</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    disabled={scanning}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleScanFileSelected(file);
+                    }}
+                  />
+                </div>
+                {scanning && (
+                  <div style={{ textAlign: "center", padding: "16px 0" }}>
+                    <Loader size="compact" label="Reading the receipt…" />
+                  </div>
+                )}
+                {scanError && <p className="error">{scanError}</p>}
+              </>
+            )}
+
+            {scanResult && (
+              <>
+                <div className="im-note">
+                  ✓ Scanned {scanFileName}.{" "}
+                  {scanResult.vendor_name
+                    ? `Detected vendor: "${scanResult.vendor_name}"${
+                        scanResult.vendor_confidence !== null
+                          ? ` (${scanResult.vendor_confidence.toFixed(0)}% confidence)`
+                          : ""
+                      }.`
+                    : "No vendor name detected — pick the supplier below."}{" "}
+                  {scanResult.total && `Receipt total: £${scanResult.total}.`}
+                </div>
+
+                <div className="field" style={{ marginBottom: 12 }}>
+                  <label>Supplier</label>
+                  <select value={scanSupplierId} onChange={(e) => setScanSupplierId(e.target.value)} required>
+                    <option value="">Choose a supplier…</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                  {!scanShowNewSupplier ? (
+                    <button
+                      type="button"
+                      className="mini"
+                      style={{ marginTop: 8 }}
+                      onClick={() => setScanShowNewSupplier(true)}
+                    >
+                      + New supplier
+                    </button>
+                  ) : (
+                    <div className="new-sup">
+                      <input
+                        value={scanNewSupplierName}
+                        onChange={(e) => setScanNewSupplierName(e.target.value)}
+                        placeholder="Supplier name"
+                      />
+                      <div className="new-sup-row">
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          onClick={() => {
+                            setScanShowNewSupplier(false);
+                            setScanNewSupplierName("");
+                            setScanNewSupplierError(null);
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="mini"
+                          onClick={handleCreateScanSupplier}
+                          disabled={savingScanSupplier || !scanNewSupplierName.trim()}
+                        >
+                          {savingScanSupplier ? "Adding…" : "Add supplier"}
+                        </button>
+                      </div>
+                      {scanNewSupplierError && <p className="error">{scanNewSupplierError}</p>}
+                    </div>
+                  )}
+                </div>
+
+                <div className="field" style={{ marginBottom: 12 }}>
+                  <label>Deliver to</label>
+                  <select value={scanLocationId} onChange={(e) => setScanLocationId(e.target.value)} required>
+                    <option value="">Choose a location…</option>
+                    {locations.map((l) => (
+                      <option key={l.id} value={l.id}>
+                        {l.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {scanRows.length === 0 ? (
+                  <p className="muted">
+                    No line items were detected on this receipt — try a clearer photo, or add lines
+                    by hand after creating the order.
+                  </p>
+                ) : (
+                  <>
+                    <table className="tbl" style={{ marginTop: 4 }}>
+                      <thead>
+                        <tr>
+                          <th>On the receipt</th>
+                          <th>Matched item</th>
+                          <th className="num">Qty</th>
+                          <th className="num">Unit price</th>
+                          <th className="num">Confidence</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {scanRows.map((row, i) => (
+                          <tr key={i} style={row.skip ? { opacity: 0.45 } : undefined}>
+                            <td className="muted">{row.description}</td>
+                            <td>
+                              <select
+                                value={row.matchedItemId}
+                                onChange={(e) => updateScanRow(i, { matchedItemId: e.target.value })}
+                                disabled={row.skip}
+                              >
+                                <option value="">Pick an item…</option>
+                                {(items ?? []).map((it) => (
+                                  <option key={it.id} value={it.id}>
+                                    {it.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="num">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.001"
+                                value={row.qty}
+                                onChange={(e) => updateScanRow(i, { qty: e.target.value })}
+                                disabled={row.skip}
+                                style={{ width: 70 }}
+                              />
+                            </td>
+                            <td className="num">
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={row.unitPrice}
+                                onChange={(e) => updateScanRow(i, { unitPrice: e.target.value })}
+                                disabled={row.skip}
+                                style={{ width: 70 }}
+                              />
+                            </td>
+                            <td className="num">
+                              <span
+                                className={`badge ${
+                                  row.confidence !== null && row.confidence >= 80 ? "b-ok" : "warn"
+                                }`}
+                              >
+                                {row.confidence !== null ? `${row.confidence.toFixed(0)}%` : "—"}
+                              </span>
+                            </td>
+                            <td>
+                              <button
+                                type="button"
+                                className="btn-ghost small"
+                                onClick={() => updateScanRow(i, { skip: !row.skip })}
+                              >
+                                {row.skip ? "Include" : "Skip"}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {scanUnmatchedCount > 0 && (
+                      <p className="hint" style={{ marginTop: 8 }}>
+                        {scanUnmatchedCount} row{scanUnmatchedCount === 1 ? "" : "s"} need
+                        {scanUnmatchedCount === 1 ? "s" : ""} a matching item picked above before they
+                        can be included — or Skip the row if it isn't a real stock item.
+                      </p>
+                    )}
+                  </>
+                )}
+
+                {scanCreateError && <p className="error">{scanCreateError}</p>}
+              </>
+            )}
+
+            <div className="modal-actions">
+              <button type="button" className="btn-ghost" onClick={closeScanModal} disabled={creatingPOFromScan}>
+                Cancel
+              </button>
+              {scanResult && (
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={handleCreatePOFromScan}
+                  disabled={creatingPOFromScan || !scanSupplierId || !scanLocationId || scanIncludedRows.length === 0}
+                >
+                  {creatingPOFromScan
+                    ? "Creating…"
+                    : `Create purchase order (${scanIncludedRows.length} line${
+                        scanIncludedRows.length === 1 ? "" : "s"
+                      })`}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
