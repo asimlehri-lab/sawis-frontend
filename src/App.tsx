@@ -18,7 +18,9 @@ import {
   createSupplier,
   fetchPurchaseOrders,
   createPurchaseOrder,
+  updatePurchaseOrder,
   createPOLine,
+  receivePurchaseOrder,
   scanReceipt,
   fetchItemSuppliers,
   fetchWasteEvents,
@@ -252,6 +254,12 @@ export default function App() {
   const [scanRows, setScanRows] = useState<ScanRow[]>([]);
   const [creatingPOFromScan, setCreatingPOFromScan] = useState(false);
   const [scanCreateError, setScanCreateError] = useState<string | null>(null);
+  // Set once the PO + lines are actually created, before the "mark as
+  // received" step runs. If that step fails, this stays set so the modal
+  // can offer "Retry" / "Leave as Sent" instead of re-submitting the form
+  // and creating a second, duplicate purchase order.
+  const [scanCreatedPO, setScanCreatedPO] = useState<PurchaseOrder | null>(null);
+  const [retryingReceive, setRetryingReceive] = useState(false);
   const [scanShowNewSupplier, setScanShowNewSupplier] = useState(false);
   const [scanNewSupplierName, setScanNewSupplierName] = useState("");
   const [savingScanSupplier, setSavingScanSupplier] = useState(false);
@@ -710,6 +718,7 @@ export default function App() {
     setScanShowNewSupplier(false);
     setScanNewSupplierName("");
     setScanNewSupplierError(null);
+    setScanCreatedPO(null);
   }
 
   async function handleCreateScanSupplier() {
@@ -788,6 +797,22 @@ export default function App() {
   const scanUnmatchedCount = scanRows.filter((r) => !r.skip && !r.matchedItemId).length;
   const scanIncludedRows = scanRows.filter((r) => !r.skip && r.matchedItemId);
 
+  // A scanned receipt almost always means the goods are already in the
+  // building -- the user confirmed this is the common case, sometimes with
+  // the paperwork arriving after the delivery, never before. So unlike the
+  // manual "+ New purchase order" flow (which starts as an actual draft,
+  // sent ahead of a delivery still to come), a scan goes straight to
+  // Received: bump status to "sent" first (receive() only accepts a
+  // sent/awaiting PO), then call the *existing* receive() action with no
+  // overrides, so it defaults every line's received qty/price to exactly
+  // what was just scanned and confirmed in the review table -- this posts
+  // real StockMovements and updates ItemSupplier prices, same as clicking
+  // "Mark as Received" by hand would.
+  async function markScannedPOReceived(po: PurchaseOrder) {
+    await updatePurchaseOrder(accessToken as string, po.id, { status: "sent" });
+    await receivePurchaseOrder(accessToken as string, po.id, []);
+  }
+
   async function handleCreatePOFromScan() {
     if (!accessToken || !scanSupplierId || !scanLocationId || !scanIncludedRows.length) return;
     setScanCreateError(null);
@@ -795,9 +820,8 @@ export default function App() {
     try {
       // Reuses the same createPurchaseOrder/createPOLine calls the manual
       // "+ New purchase order" flow and ProcurementDetail's "add line" use
-      // -- scanning only prefills the form faster, it doesn't bypass any
-      // of the real PO-creation/receiving logic (draft status, stock only
-      // moves once the PO is later marked received).
+      // -- scanning only prefills the form faster, it doesn't invent any
+      // new PO-creation logic.
       const created = await createPurchaseOrder(accessToken, {
         supplier: scanSupplierId,
         location: scanLocationId,
@@ -812,6 +836,13 @@ export default function App() {
           unit_price: row.unitPrice || "0.00",
         });
       }
+      // From this point on the PO and its lines are real, saved data --
+      // record that immediately so a failure below can never lead to a
+      // second, duplicate PO being created by retrying this function.
+      setScanCreatedPO(created);
+
+      await markScannedPOReceived(created);
+
       closeScanModal();
       loadPOs(accessToken);
       setSelectedPOId(created.id);
@@ -820,6 +851,32 @@ export default function App() {
     } finally {
       setCreatingPOFromScan(false);
     }
+  }
+
+  // Only reachable once scanCreatedPO is set -- i.e. the PO/lines exist
+  // already and only the receive step needs retrying, so this never
+  // creates a second PO.
+  async function handleRetryReceiveScan() {
+    if (!accessToken || !scanCreatedPO) return;
+    setScanCreateError(null);
+    setRetryingReceive(true);
+    try {
+      await markScannedPOReceived(scanCreatedPO);
+      closeScanModal();
+      loadPOs(accessToken);
+      setSelectedPOId(scanCreatedPO.id);
+    } catch (err) {
+      setScanCreateError(err instanceof Error ? err.message : "Still couldn't mark it received.");
+    } finally {
+      setRetryingReceive(false);
+    }
+  }
+
+  function handleLeaveScannedPOAsSent() {
+    if (!scanCreatedPO || !accessToken) return;
+    closeScanModal();
+    loadPOs(accessToken);
+    setSelectedPOId(scanCreatedPO.id);
   }
 
   // Shown only when there was a stored session worth checking — see
@@ -1646,7 +1703,7 @@ export default function App() {
       {showScanReceipt && (
         <div
           className="modal-backdrop"
-          onClick={() => !scanning && !creatingPOFromScan && closeScanModal()}
+          onClick={() => !scanning && !creatingPOFromScan && !retryingReceive && closeScanModal()}
         >
           <div className="modal wide" onClick={(e) => e.stopPropagation()}>
             <h2>Scan receipt</h2>
@@ -1655,8 +1712,10 @@ export default function App() {
               <>
                 <p className="hint" style={{ marginTop: -8, marginBottom: 16 }}>
                   Upload a photo of a supplier receipt or invoice. SAWIS reads it with AWS Textract
-                  and pre-fills a draft purchase order for you to check and confirm — nothing is
-                  saved until you create the order below.
+                  and pre-fills the order for you to check and correct — nothing is saved until you
+                  confirm below. Since a receipt usually means the delivery has already arrived,
+                  confirming marks it Received straight away and updates stock and prices, the same
+                  as manually clicking "Mark as Received."
                 </p>
                 <div className="field" style={{ marginBottom: 12 }}>
                   <label>Receipt photo</label>
@@ -1847,27 +1906,59 @@ export default function App() {
                   </>
                 )}
 
+                {scanCreatedPO && (
+                  <p className="hint">
+                    The purchase order was created (and its lines saved) — only marking it received
+                    failed. Retry below, or leave it as "Sent" and mark it received later from the
+                    order itself.
+                  </p>
+                )}
                 {scanCreateError && <p className="error">{scanCreateError}</p>}
               </>
             )}
 
             <div className="modal-actions">
-              <button type="button" className="btn-ghost" onClick={closeScanModal} disabled={creatingPOFromScan}>
-                Cancel
-              </button>
-              {scanResult && (
-                <button
-                  type="button"
-                  className="btn-primary"
-                  onClick={handleCreatePOFromScan}
-                  disabled={creatingPOFromScan || !scanSupplierId || !scanLocationId || scanIncludedRows.length === 0}
-                >
-                  {creatingPOFromScan
-                    ? "Creating…"
-                    : `Create purchase order (${scanIncludedRows.length} line${
-                        scanIncludedRows.length === 1 ? "" : "s"
-                      })`}
-                </button>
+              {scanCreatedPO ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    onClick={handleLeaveScannedPOAsSent}
+                    disabled={retryingReceive}
+                  >
+                    Leave as Sent, open order
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-primary"
+                    onClick={handleRetryReceiveScan}
+                    disabled={retryingReceive}
+                  >
+                    {retryingReceive ? "Retrying…" : "Retry marking as received"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button type="button" className="btn-ghost" onClick={closeScanModal} disabled={creatingPOFromScan}>
+                    Cancel
+                  </button>
+                  {scanResult && (
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      onClick={handleCreatePOFromScan}
+                      disabled={
+                        creatingPOFromScan || !scanSupplierId || !scanLocationId || scanIncludedRows.length === 0
+                      }
+                    >
+                      {creatingPOFromScan
+                        ? "Creating…"
+                        : `Confirm & mark received (${scanIncludedRows.length} line${
+                            scanIncludedRows.length === 1 ? "" : "s"
+                          })`}
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
