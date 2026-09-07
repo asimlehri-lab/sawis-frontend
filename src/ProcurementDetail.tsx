@@ -64,6 +64,7 @@ export default function ProcurementDetail({
   const [receiveLines, setReceiveLines] = useState<Record<string, { qty: string; price: string }>>({});
   const [receiving, setReceiving] = useState(false);
   const [receiveError, setReceiveError] = useState<string | null>(null);
+  const [invoiceNumberInput, setInvoiceNumberInput] = useState("");
 
   const [showSend, setShowSend] = useState(false);
   const [sending, setSending] = useState(false);
@@ -123,6 +124,7 @@ export default function ProcurementDetail({
       });
       setReceiveLines(initial);
       setReceiveError(null);
+      setInvoiceNumberInput(po.invoice_number ?? "");
       setShowReceive(true);
       return;
     }
@@ -231,7 +233,7 @@ export default function ProcurementDetail({
         received_qty: receiveLines[l.id]?.qty ?? l.qty,
         received_unit_price: receiveLines[l.id]?.price ?? l.unit_price,
       }));
-      const updated = await receivePurchaseOrder(accessToken, po.id, overrides);
+      const updated = await receivePurchaseOrder(accessToken, po.id, overrides, invoiceNumberInput.trim() || null);
       setPo(updated);
       setShowReceive(false);
       onChanged();
@@ -440,7 +442,10 @@ export default function ProcurementDetail({
         <span className={`postatus ps-${po.status}`}>{STATUS_LABEL[po.status]}</span>
       </div>
       <p className="muted detail-sub">
+        {po.po_number && <b>{po.po_number}</b>}
+        {po.po_number && " · "}
         {po.location_name} · created for delivery to this location
+        {po.invoice_number && ` · Supplier's invoice: ${po.invoice_number}`}
       </p>
 
       {error && <p className="error">{error}</p>}
@@ -464,7 +469,7 @@ export default function ProcurementDetail({
       {suggestError && <p className="error">{suggestError}</p>}
 
       <div className="print-only">
-        <h1>Purchase Order</h1>
+        <h1>Purchase Order {po.po_number}</h1>
         <p>
           <b>Supplier:</b> {po.supplier_name}
         </p>
@@ -523,7 +528,23 @@ export default function ProcurementDetail({
           </button>
         )}
         {po.status === "received" && po.received_date && (
-          <p className="hint" style={{ marginTop: 10 }}>Received {po.received_date}.</p>
+          <p className="hint" style={{ marginTop: 10 }}>
+            Received {po.received_date}.{" "}
+            {po.invoice_number ? (
+              <>Supplier's invoice: {po.invoice_number}.</>
+            ) : (
+              <button
+                type="button"
+                className="mini"
+                onClick={() => {
+                  const value = window.prompt("Supplier's invoice number");
+                  if (value && value.trim()) saveField({ invoice_number: value.trim() });
+                }}
+              >
+                + Add invoice number
+              </button>
+            )}
+          </p>
         )}
         {po.status === "amended" && (
           <p className="hint" style={{ marginTop: 10 }}>
@@ -668,6 +689,14 @@ export default function ProcurementDetail({
             Confirm what actually arrived. Any changes here post as real stock movements and update
             this supplier's price for next time — the ordered amounts above stay on record either way.
           </p>
+          <div className="field" style={{ marginBottom: 12, maxWidth: 260 }}>
+            <label>Supplier's invoice number (optional)</label>
+            <input
+              value={invoiceNumberInput}
+              onChange={(e) => setInvoiceNumberInput(e.target.value)}
+              placeholder="e.g. INV-10432"
+            />
+          </div>
           <table className="htbl">
             <thead>
               <tr>

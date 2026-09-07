@@ -824,6 +824,13 @@ export interface PurchaseOrder {
   status: "draft" | "awaiting" | "sent" | "received" | "amended";
   expected_date: string | null;
   received_date: string | null;
+  // Our own reference (e.g. "PO-0007"), generated server-side at creation --
+  // never blank for a new PO, though an older PO created before this field
+  // existed can be "".
+  po_number: string;
+  // The supplier's own invoice/receipt number -- unknown until the delivery
+  // arrives, so null until then (set by hand, or picked up from a scan).
+  invoice_number: string | null;
   created_by: string;
   lines: POLineRow[];
   total: string;
@@ -870,6 +877,7 @@ export interface POPatch {
   status?: PurchaseOrder["status"];
   expected_date?: string | null;
   received_date?: string | null;
+  invoice_number?: string | null;
 }
 
 export async function updatePurchaseOrder(
@@ -933,6 +941,15 @@ export interface ScannedReceipt {
   date_confidence: number | null;
   total: string | null;
   total_confidence: number | null;
+  // A supplier sometimes prints OUR purchase order number back onto their
+  // invoice/delivery note -- used client-side to suggest matching an
+  // existing sent/awaiting PO instead of always creating a new one.
+  po_number: string | null;
+  po_number_confidence: number | null;
+  // The supplier's OWN invoice/receipt number -- separate from po_number
+  // above (that's ours, this is theirs).
+  invoice_number: string | null;
+  invoice_number_confidence: number | null;
   line_items: ScannedReceiptLineItem[];
 }
 
@@ -970,7 +987,8 @@ export interface ReceiveLineOverride {
 export async function receivePurchaseOrder(
   accessToken: string,
   id: string,
-  lines: ReceiveLineOverride[]
+  lines: ReceiveLineOverride[],
+  invoiceNumber?: string | null
 ): Promise<PurchaseOrder> {
   const res = await fetch(`${API_URL}/api/procurement/purchase-orders/${id}/receive/`, {
     method: "POST",
@@ -978,7 +996,7 @@ export async function receivePurchaseOrder(
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({ lines }),
+    body: JSON.stringify(invoiceNumber ? { lines, invoice_number: invoiceNumber } : { lines }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null);

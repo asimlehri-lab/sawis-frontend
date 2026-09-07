@@ -45,6 +45,7 @@ import type {
   StockCountRow,
   Membership,
   ScannedReceipt,
+  ReceiveLineOverride,
 } from "./api";
 import RecipeDetail from "./RecipeDetail";
 import ItemDetail from "./ItemDetail";
@@ -164,6 +165,14 @@ function cleanNumeric(raw: string | null): string {
   return cleaned || "";
 }
 
+// Our own po_number is "PO-0007", but a supplier retyping it onto their
+// invoice might drop the dash, the leading zeros, or the "PO" itself
+// ("po0007", "7", "PO 0007") -- strip everything but letters/digits and
+// compare loosely rather than requiring an exact string match.
+function normalizePONumber(raw: string): string {
+  return raw.toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/^PO0*/, "");
+}
+
 export default function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -264,6 +273,18 @@ export default function App() {
   const [scanNewSupplierName, setScanNewSupplierName] = useState("");
   const [savingScanSupplier, setSavingScanSupplier] = useState(false);
   const [scanNewSupplierError, setScanNewSupplierError] = useState<string | null>(null);
+  // If the supplier printed OUR po_number on their invoice, and it traces
+  // back to an existing sent/awaiting order, this holds that candidate --
+  // purely a suggestion, never acted on until the user explicitly confirms
+  // (see scanUseMatchedPO below).
+  const [scanMatchedPO, setScanMatchedPO] = useState<PurchaseOrder | null>(null);
+  const [scanUseMatchedPO, setScanUseMatchedPO] = useState(false);
+  // Whatever was last passed to receivePurchaseOrder, kept around so a
+  // failed-then-retried receive step (see handleRetryReceiveScan) resends
+  // the same reviewed values instead of silently falling back to the PO's
+  // original ordered qty/price.
+  const [scanPendingOverrides, setScanPendingOverrides] = useState<ReceiveLineOverride[]>([]);
+  const [scanPendingInvoiceNumber, setScanPendingInvoiceNumber] = useState<string | null>(null);
 
   const [wasteEvents, setWasteEvents] = useState<WasteEventRow[] | null>(null);
   const [wasteError, setWasteError] = useState<string | null>(null);
@@ -719,6 +740,10 @@ export default function App() {
     setScanNewSupplierName("");
     setScanNewSupplierError(null);
     setScanCreatedPO(null);
+    setScanMatchedPO(null);
+    setScanUseMatchedPO(false);
+    setScanPendingOverrides([]);
+    setScanPendingInvoiceNumber(null);
   }
 
   async function handleCreateScanSupplier() {
@@ -768,6 +793,25 @@ export default function App() {
         if (ranked[0] && ranked[0].score >= 0.5) setScanSupplierId(ranked[0].s.id);
       }
 
+      // If the supplier printed our own PO number back onto the invoice,
+      // see if it traces to an order we already sent -- offered as a
+      // suggestion only (scanUseMatchedPO), never switched to automatically.
+      if (result.po_number) {
+        const needle = normalizePONumber(result.po_number);
+        const candidate = needle
+          ? (purchaseOrders ?? []).find(
+              (po) =>
+                (po.status === "sent" || po.status === "awaiting") &&
+                po.po_number &&
+                normalizePONumber(po.po_number) === needle
+            )
+          : undefined;
+        setScanMatchedPO(candidate ?? null);
+      } else {
+        setScanMatchedPO(null);
+      }
+      setScanUseMatchedPO(false);
+
       const rows: ScanRow[] = result.line_items.map((li) => {
         const ranked = (items ?? [])
           .map((it) => ({ it, score: matchScore(it.name, li.description) }))
@@ -808,13 +852,58 @@ export default function App() {
   // what was just scanned and confirmed in the review table -- this posts
   // real StockMovements and updates ItemSupplier prices, same as clicking
   // "Mark as Received" by hand would.
-  async function markScannedPOReceived(po: PurchaseOrder) {
+  async function markScannedPOReceived(
+    po: PurchaseOrder,
+    overrides: ReceiveLineOverride[] = [],
+    invoiceNumber?: string | null
+  ) {
     await updatePurchaseOrder(accessToken as string, po.id, { status: "sent" });
-    await receivePurchaseOrder(accessToken as string, po.id, []);
+    await receivePurchaseOrder(accessToken as string, po.id, overrides, invoiceNumber);
   }
 
   async function handleCreatePOFromScan() {
-    if (!accessToken || !scanSupplierId || !scanLocationId || !scanIncludedRows.length) return;
+    if (!accessToken || !scanIncludedRows.length) return;
+
+    // Scanning found a PO number on the invoice that traces back to an
+    // order we already sent, and the user confirmed it's the right one --
+    // receive against that existing PO/lines instead of creating a new,
+    // duplicate one.
+    if (scanUseMatchedPO && scanMatchedPO) {
+      setScanCreateError(null);
+      setCreatingPOFromScan(true);
+      try {
+        const overrides: ReceiveLineOverride[] = [];
+        for (const row of scanIncludedRows) {
+          const line = scanMatchedPO.lines.find((l) => l.item === row.matchedItemId);
+          if (line) {
+            overrides.push({
+              id: line.id,
+              received_qty: row.qty || "0",
+              received_unit_price: row.unitPrice || "0.00",
+            });
+          }
+          // A scanned item that isn't one of the matched PO's own lines
+          // (e.g. the supplier substituted or added something) can't be
+          // received through this order's overrides -- it's silently left
+          // out rather than guessed at; the user can add it by hand
+          // afterwards if it should be on the order.
+        }
+        setScanCreatedPO(scanMatchedPO);
+        setScanPendingOverrides(overrides);
+        setScanPendingInvoiceNumber(scanResult?.invoice_number ?? null);
+        await markScannedPOReceived(scanMatchedPO, overrides, scanResult?.invoice_number);
+        closeScanModal();
+        loadPOs(accessToken);
+        setSelectedPOId(scanMatchedPO.id);
+      } catch (err) {
+        setScanCreateError(err instanceof Error ? err.message : "Could not receive against that order.");
+      } finally {
+        setCreatingPOFromScan(false);
+      }
+      return;
+    }
+
+    if (!scanSupplierId || !scanLocationId) return;
     setScanCreateError(null);
     setCreatingPOFromScan(true);
     try {
@@ -840,8 +929,10 @@ export default function App() {
       // record that immediately so a failure below can never lead to a
       // second, duplicate PO being created by retrying this function.
       setScanCreatedPO(created);
+      setScanPendingOverrides([]);
+      setScanPendingInvoiceNumber(scanResult?.invoice_number ?? null);
 
-      await markScannedPOReceived(created);
+      await markScannedPOReceived(created, [], scanResult?.invoice_number);
 
       closeScanModal();
       loadPOs(accessToken);
@@ -861,7 +952,7 @@ export default function App() {
     setScanCreateError(null);
     setRetryingReceive(true);
     try {
-      await markScannedPOReceived(scanCreatedPO);
+      await markScannedPOReceived(scanCreatedPO, scanPendingOverrides, scanPendingInvoiceNumber);
       closeScanModal();
       loadPOs(accessToken);
       setSelectedPOId(scanCreatedPO.id);
@@ -1197,6 +1288,7 @@ export default function App() {
                   <table className="tbl">
                     <thead>
                       <tr>
+                        <th>PO number</th>
                         <th>Supplier</th>
                         <th>Location</th>
                         <th>Status</th>
@@ -1216,6 +1308,7 @@ export default function App() {
                             Number(po.total) < Number(supplier.min_order_value);
                           return (
                             <tr key={po.id} className="clickable" onClick={() => setSelectedPOId(po.id)}>
+                              <td className="muted">{po.po_number || "—"}</td>
                               <td className="dish">{po.supplier_name}</td>
                               <td className="muted">{po.location_name}</td>
                               <td>
@@ -1750,9 +1843,29 @@ export default function App() {
                       }.`
                     : "No vendor name detected — pick the supplier below."}{" "}
                   {scanResult.total && `Receipt total: £${scanResult.total}.`}
+                  {scanResult.invoice_number && ` Supplier's invoice number: ${scanResult.invoice_number}.`}
                 </div>
 
-                <div className="field" style={{ marginBottom: 12 }}>
+                {scanMatchedPO && (
+                  <div className="im-note" style={{ marginBottom: 12 }}>
+                    <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={scanUseMatchedPO}
+                        onChange={(e) => setScanUseMatchedPO(e.target.checked)}
+                        style={{ marginTop: 3 }}
+                      />
+                      <span>
+                        The receipt shows PO number <b>{scanResult.po_number}</b>, which matches{" "}
+                        <b>{scanMatchedPO.po_number}</b> for {scanMatchedPO.supplier_name} (
+                        {scanMatchedPO.status}). Receive against that order instead of creating a new
+                        one?
+                      </span>
+                    </label>
+                  </div>
+                )}
+
+                <div className="field" style={{ marginBottom: 12, display: scanUseMatchedPO ? "none" : undefined }}>
                   <label>Supplier</label>
                   <select value={scanSupplierId} onChange={(e) => setScanSupplierId(e.target.value)} required>
                     <option value="">Choose a supplier…</option>
@@ -1804,7 +1917,7 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="field" style={{ marginBottom: 12 }}>
+                <div className="field" style={{ marginBottom: 12, display: scanUseMatchedPO ? "none" : undefined }}>
                   <label>Deliver to</label>
                   <select value={scanLocationId} onChange={(e) => setScanLocationId(e.target.value)} required>
                     <option value="">Choose a location…</option>
@@ -1960,11 +2073,17 @@ export default function App() {
                       className="btn-primary"
                       onClick={handleCreatePOFromScan}
                       disabled={
-                        creatingPOFromScan || !scanSupplierId || !scanLocationId || scanIncludedRows.length === 0
+                        creatingPOFromScan ||
+                        scanIncludedRows.length === 0 ||
+                        (scanUseMatchedPO ? !scanMatchedPO : !scanSupplierId || !scanLocationId)
                       }
                     >
                       {creatingPOFromScan
                         ? "Creating…"
+                        : scanUseMatchedPO && scanMatchedPO
+                        ? `Confirm & mark ${scanMatchedPO.po_number} received (${scanIncludedRows.length} line${
+                            scanIncludedRows.length === 1 ? "" : "s"
+                          })`
                         : `Confirm & mark received (${scanIncludedRows.length} line${
                             scanIncludedRows.length === 1 ? "" : "s"
                           })`}
