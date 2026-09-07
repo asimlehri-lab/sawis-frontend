@@ -173,6 +173,82 @@ function normalizePONumber(raw: string): string {
   return raw.toUpperCase().replace(/[^A-Z0-9]/g, "").replace(/^PO0*/, "");
 }
 
+// Textract's date text comes back in whatever format the receipt itself
+// used ("12/08/2026", "2026-08-12", "Aug 12 2026", ...) -- try a handful of
+// common shapes rather than trusting `new Date(raw)` alone, which silently
+// misreads day/month order on plain slash-separated dates. Returns null
+// (never a guessed date) if nothing recognisable matched.
+function parseLooseDate(raw: string | null): Date | null {
+  if (!raw) return null;
+  const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+  const slash = raw.match(/^(\d{1,2})[/.](\d{1,2})[/.](\d{2,4})$/);
+  if (slash) {
+    const day = Number(slash[1]);
+    const month = Number(slash[2]);
+    let year = Number(slash[3]);
+    if (year < 100) year += 2000;
+    // UK receipts are day/month/year; if the "month" slot is >12 it must
+    // actually be the day, so swap rather than silently building an
+    // invalid date.
+    return month > 12 ? new Date(year, day - 1, month) : new Date(year, month - 1, day);
+  }
+  const parsed = Date.parse(raw);
+  return Number.isNaN(parsed) ? null : new Date(parsed);
+}
+
+function daysBetween(a: Date, b: Date): number {
+  return Math.abs(a.getTime() - b.getTime()) / (1000 * 60 * 60 * 24);
+}
+
+// Scores how likely a scanned receipt is to belong to an already-sent PO,
+// from four independent signals -- a PO number match is decisive on its
+// own (worth 2), everything else is corroborating (worth 1 each), so two
+// weaker signals agreeing is treated the same as one strong one. Callers
+// filter to score >= 2 before offering a candidate. Purely descriptive:
+// this never writes anything, it only ranks and explains a suggestion.
+function scorePOMatch(
+  po: PurchaseOrder,
+  supplierId: string,
+  scannedPONumber: string | null,
+  receiptDate: string | null,
+  rows: ScanRow[]
+): { score: number; reasons: string[] } {
+  const reasons: string[] = [];
+  let score = 0;
+
+  if (scannedPONumber) {
+    const needle = normalizePONumber(scannedPONumber);
+    if (needle && po.po_number && normalizePONumber(po.po_number) === needle) {
+      score += 2;
+      reasons.push("PO number");
+    }
+  }
+
+  if (supplierId && supplierId === po.supplier) {
+    score += 1;
+    reasons.push("supplier");
+  }
+
+  const matchedRows = rows.filter((r) => r.matchedItemId);
+  if (matchedRows.length && po.lines.length) {
+    const overlap = matchedRows.filter((r) => po.lines.some((l) => l.item === r.matchedItemId)).length;
+    if (overlap / matchedRows.length >= 0.5) {
+      score += 1;
+      reasons.push(`${overlap} of ${matchedRows.length} item${matchedRows.length === 1 ? "" : "s"}`);
+    }
+  }
+
+  const parsedReceiptDate = parseLooseDate(receiptDate);
+  const parsedExpected = po.expected_date ? parseLooseDate(po.expected_date) : null;
+  if (parsedReceiptDate && parsedExpected && daysBetween(parsedReceiptDate, parsedExpected) <= 10) {
+    score += 1;
+    reasons.push("date");
+  }
+
+  return { score, reasons };
+}
+
 export default function App() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -273,11 +349,13 @@ export default function App() {
   const [scanNewSupplierName, setScanNewSupplierName] = useState("");
   const [savingScanSupplier, setSavingScanSupplier] = useState(false);
   const [scanNewSupplierError, setScanNewSupplierError] = useState<string | null>(null);
-  // If the supplier printed OUR po_number on their invoice, and it traces
-  // back to an existing sent/awaiting order, this holds that candidate --
-  // purely a suggestion, never acted on until the user explicitly confirms
-  // (see scanUseMatchedPO below).
+  // Best-guess existing sent/awaiting order this scan might belong to --
+  // scored from whichever of {PO number, supplier, item overlap, receipt
+  // date vs expected date} actually matched (see scorePOMatch below).
+  // Purely a suggestion, never acted on until the user explicitly ticks
+  // scanUseMatchedPO; scanMatchReasons is only for explaining the guess.
   const [scanMatchedPO, setScanMatchedPO] = useState<PurchaseOrder | null>(null);
+  const [scanMatchReasons, setScanMatchReasons] = useState<string[]>([]);
   const [scanUseMatchedPO, setScanUseMatchedPO] = useState(false);
   // Whatever was last passed to receivePurchaseOrder, kept around so a
   // failed-then-retried receive step (see handleRetryReceiveScan) resends
@@ -741,6 +819,7 @@ export default function App() {
     setScanNewSupplierError(null);
     setScanCreatedPO(null);
     setScanMatchedPO(null);
+    setScanMatchReasons([]);
     setScanUseMatchedPO(false);
     setScanPendingOverrides([]);
     setScanPendingInvoiceNumber(null);
@@ -785,32 +864,20 @@ export default function App() {
       // Best-guess supplier: fuzzy-match the OCR'd vendor name against
       // suppliers already on file. Left blank (forcing a manual pick)
       // if nothing scores well enough to trust — same 0.5 threshold
-      // ItemDetail.tsx uses for supplier-catalogue suggestions.
+      // ItemDetail.tsx uses for supplier-catalogue suggestions. Kept in a
+      // local var (not just the state setter) so the PO-matching pass
+      // below can use it in the same synchronous pass, without waiting on
+      // a state update that hasn't landed yet.
+      let resolvedSupplierId = "";
       if (result.vendor_name) {
         const ranked = suppliers
           .map((s) => ({ s, score: matchScore(s.name, result.vendor_name as string) }))
           .sort((a, b) => b.score - a.score);
-        if (ranked[0] && ranked[0].score >= 0.5) setScanSupplierId(ranked[0].s.id);
+        if (ranked[0] && ranked[0].score >= 0.5) {
+          resolvedSupplierId = ranked[0].s.id;
+          setScanSupplierId(resolvedSupplierId);
+        }
       }
-
-      // If the supplier printed our own PO number back onto the invoice,
-      // see if it traces to an order we already sent -- offered as a
-      // suggestion only (scanUseMatchedPO), never switched to automatically.
-      if (result.po_number) {
-        const needle = normalizePONumber(result.po_number);
-        const candidate = needle
-          ? (purchaseOrders ?? []).find(
-              (po) =>
-                (po.status === "sent" || po.status === "awaiting") &&
-                po.po_number &&
-                normalizePONumber(po.po_number) === needle
-            )
-          : undefined;
-        setScanMatchedPO(candidate ?? null);
-      } else {
-        setScanMatchedPO(null);
-      }
-      setScanUseMatchedPO(false);
 
       const rows: ScanRow[] = result.line_items.map((li) => {
         const ranked = (items ?? [])
@@ -827,6 +894,28 @@ export default function App() {
         };
       });
       setScanRows(rows);
+
+      // Does this receipt trace back to an order we already sent? Score
+      // every sent/awaiting PO on four independent signals -- a supplier
+      // sometimes prints our PO number on their invoice (the strongest
+      // single signal, worth 2 on its own), but even without one, matching
+      // supplier + item overlap + a receipt date close to the PO's expected
+      // date is enough to suggest it. Never auto-applied -- the best-scoring
+      // candidate above the threshold is only ever offered as a checkbox in
+      // the review modal for the user to accept or ignore.
+      const candidates = (purchaseOrders ?? [])
+        .filter((po) => po.status === "sent" || po.status === "awaiting")
+        .map((po) => ({ po, ...scorePOMatch(po, resolvedSupplierId, result.po_number, result.date, rows) }))
+        .filter((c) => c.score >= 2)
+        .sort((a, b) => b.score - a.score);
+      if (candidates[0]) {
+        setScanMatchedPO(candidates[0].po);
+        setScanMatchReasons(candidates[0].reasons);
+      } else {
+        setScanMatchedPO(null);
+        setScanMatchReasons([]);
+      }
+      setScanUseMatchedPO(false);
     } catch (err) {
       setScanError(err instanceof Error ? err.message : "Could not scan that receipt.");
     } finally {
@@ -1856,10 +1945,12 @@ export default function App() {
                         style={{ marginTop: 3 }}
                       />
                       <span>
-                        The receipt shows PO number <b>{scanResult.po_number}</b>, which matches{" "}
-                        <b>{scanMatchedPO.po_number}</b> for {scanMatchedPO.supplier_name} (
-                        {scanMatchedPO.status}). Receive against that order instead of creating a new
-                        one?
+                        This looks like <b>{scanMatchedPO.po_number || "an existing order"}</b> for{" "}
+                        {scanMatchedPO.supplier_name} ({scanMatchedPO.status}) — matched on{" "}
+                        {scanMatchReasons.length > 1
+                          ? `${scanMatchReasons.slice(0, -1).join(", ")} and ${scanMatchReasons[scanMatchReasons.length - 1]}`
+                          : scanMatchReasons[0]}
+                        . Receive against that order instead of creating a new one?
                       </span>
                     </label>
                   </div>
@@ -2081,9 +2172,9 @@ export default function App() {
                       {creatingPOFromScan
                         ? "Creating…"
                         : scanUseMatchedPO && scanMatchedPO
-                        ? `Confirm & mark ${scanMatchedPO.po_number} received (${scanIncludedRows.length} line${
-                            scanIncludedRows.length === 1 ? "" : "s"
-                          })`
+                        ? `Confirm & mark ${scanMatchedPO.po_number || "order"} received (${
+                            scanIncludedRows.length
+                          } line${scanIncludedRows.length === 1 ? "" : "s"})`
                         : `Confirm & mark received (${scanIncludedRows.length} line${
                             scanIncludedRows.length === 1 ? "" : "s"
                           })`}
