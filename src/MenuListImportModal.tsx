@@ -30,6 +30,14 @@ interface RowState extends ParsedMenuRow {
   // drink back to Food; a genuinely new recipe defaults to Food, same
   // as the model's own default.
   menuGroup: "food" | "drink";
+  // A row the user has excluded from the import entirely -- e.g. a
+  // voucher or a non-food line item that a POS menu export can include
+  // alongside real dishes. Same Skip/Include pattern already used by
+  // End of day's sales-CSV review table (see EndOfDay.tsx): skipped
+  // rows stay visible (greyed out) rather than disappearing, so a
+  // mis-click is easy to undo, and are simply left out of the payload
+  // handleImport sends.
+  skip: boolean;
   lines: DraftLine[];
   pendingItemId: string;
   pendingQty: string;
@@ -85,6 +93,7 @@ export default function MenuListImportModal({
         // re-importing the same menu list doesn't reset a drink back to
         // Food — only a genuinely new recipe defaults to Food.
         menuGroup: existing?.menu_group ?? "food",
+        skip: false,
         lines: [],
         pendingItemId: "",
         pendingQty: "",
@@ -164,14 +173,16 @@ export default function MenuListImportModal({
     }
   }
 
-  const totalLines = rowsState.reduce((sum, r) => sum + r.lines.length, 0);
+  const importableRows = rowsState.filter((r) => !r.skip);
+  const totalLines = importableRows.reduce((sum, r) => sum + r.lines.length, 0);
+  const skippedCount = rowsState.length - importableRows.length;
 
   async function handleImport() {
-    if (!location) return;
+    if (!location || importableRows.length === 0) return;
     setImporting(true);
     setImportError(null);
     try {
-      const payload: BulkRecipeInput[] = rowsState.map((r) => {
+      const payload: BulkRecipeInput[] = importableRows.map((r) => {
         // A row that already matches an existing recipe (see matchFor)
         // shouldn't reset its yield_qty/yield_unit to a generic "1
         // plate" default on every re-import — someone may have already
@@ -223,7 +234,9 @@ export default function MenuListImportModal({
               item itself, so there's nothing to type but a name and a quantity. A new dish defaults to
               plate-sized (or glass-sized, for a drink) — change the exact serving unit any time from the
               recipe's own page in Recipes. Leave a recipe's ingredients empty and it still imports (name, POS
-              ID, category, price) — you can always add its ingredients later too.
+              ID, category, price) — you can always add its ingredients later too. Not everything on a POS menu
+              list is a real recipe (vouchers, for instance) — use Skip to leave a row out of the import
+              entirely.
             </p>
             {importError && <p className="error">{importError}</p>}
             {!location && <p className="error">Pick a location above before importing.</p>}
@@ -232,16 +245,18 @@ export default function MenuListImportModal({
               {rowsState.map((row, i) => {
                 const match = matchFor(row);
                 return (
-                  <div className="mli-row" key={i}>
+                  <div className="mli-row" key={i} style={row.skip ? { opacity: 0.45 } : undefined}>
                     <div className="mli-head">
                       <input
                         value={row.recipeName}
                         onChange={(e) => updateRow(i, { recipeName: e.target.value })}
+                        disabled={row.skip}
                         style={{ fontWeight: 600, flex: "1 1 220px", minWidth: 160 }}
                       />
                       <select
                         value={row.kind}
                         onChange={(e) => updateRow(i, { kind: e.target.value as "dish" | "sub" })}
+                        disabled={row.skip}
                         style={{ width: 90 }}
                       >
                         <option value="dish">Dish</option>
@@ -251,6 +266,7 @@ export default function MenuListImportModal({
                         <select
                           value={row.menuGroup}
                           onChange={(e) => updateRow(i, { menuGroup: e.target.value as "food" | "drink" })}
+                          disabled={row.skip}
                           style={{ width: 78 }}
                           title="Food or drink? Drives the Champions Food/Drink split in End of day, and a new recipe's default serving unit (plate vs glass)."
                         >
@@ -262,6 +278,7 @@ export default function MenuListImportModal({
                         <input
                           value={row.menuPrice}
                           onChange={(e) => updateRow(i, { menuPrice: e.target.value })}
+                          disabled={row.skip}
                           placeholder="Price"
                           style={{ width: 80, textAlign: "right" }}
                         />
@@ -269,109 +286,136 @@ export default function MenuListImportModal({
                       <input
                         value={row.menuCategory}
                         onChange={(e) => updateRow(i, { menuCategory: e.target.value })}
+                        disabled={row.skip}
                         placeholder="Category"
                         style={{ width: 110 }}
                       />
                       <input
                         value={row.posId}
                         onChange={(e) => updateRow(i, { posId: e.target.value })}
+                        disabled={row.skip}
                         placeholder="POS ID"
                         style={{ width: 80 }}
                       />
-                      {match ? (
-                        <span className="badge b-low">
-                          Updates existing{match.lines.filter((l) => l.line_type === "item").length > 0 ? ` (replaces ${match.lines.filter((l) => l.line_type === "item").length} ingredient${match.lines.filter((l) => l.line_type === "item").length === 1 ? "" : "s"})` : ""}
-                        </span>
-                      ) : (
-                        <span className="badge b-ok">New recipe</span>
-                      )}
-                    </div>
-
-                    {row.lines.length > 0 && (
-                      <ul className="mli-lines">
-                        {row.lines.map((line, li) => (
-                          <li key={li}>
-                            {line.itemName} — {line.qty} {line.unit}
-                            <button className="rm" onClick={() => handleRemoveLine(i, li)}>
-                              ×
-                            </button>
-                          </li>
+                      {!row.skip &&
+                        (match ? (
+                          <span className="badge b-low">
+                            Updates existing{match.lines.filter((l) => l.line_type === "item").length > 0 ? ` (replaces ${match.lines.filter((l) => l.line_type === "item").length} ingredient${match.lines.filter((l) => l.line_type === "item").length === 1 ? "" : "s"})` : ""}
+                          </span>
+                        ) : (
+                          <span className="badge b-ok">New recipe</span>
                         ))}
-                      </ul>
-                    )}
-
-                    <div className="addrow mli-addrow">
-                      <select
-                        value={row.pendingItemId}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (val === "__new__") {
-                            setNewItemForRow(i);
-                            setNewItemName("");
-                            setNewItemUnit(BASE_UNITS[0]);
-                            setNewItemError(null);
-                          } else {
-                            updateRow(i, { pendingItemId: val });
-                          }
-                        }}
+                      <button
+                        type="button"
+                        className="btn-ghost small"
+                        onClick={() => updateRow(i, { skip: !row.skip })}
+                        title={
+                          row.skip
+                            ? "Include this row in the import again"
+                            : "Skip this row — e.g. a voucher or other line that isn't really a recipe"
+                        }
                       >
-                        <option value="">Add an ingredient…</option>
-                        <option value="__new__">+ Add new item…</option>
-                        {localItems.map((it) => (
-                          <option key={it.id} value={it.id}>
-                            {it.name} ({it.base_unit})
-                          </option>
-                        ))}
-                      </select>
-                      <div className="addrow-bottom">
-                        <input
-                          type="number"
-                          step="any"
-                          min="0"
-                          placeholder="Qty"
-                          value={row.pendingQty}
-                          onChange={(e) => updateRow(i, { pendingQty: e.target.value })}
-                        />
-                        <button
-                          className="add-btn"
-                          type="button"
-                          disabled={!row.pendingItemId || !row.pendingQty}
-                          onClick={() => handleAddLine(i)}
-                        >
-                          + Add
-                        </button>
-                      </div>
+                        {row.skip ? "Include" : "Skip"}
+                      </button>
                     </div>
 
-                    {newItemForRow === i && (
-                      <div className="scan-new-item">
-                        <input
-                          value={newItemName}
-                          onChange={(e) => setNewItemName(e.target.value)}
-                          placeholder="Item name"
-                        />
-                        <select value={newItemUnit} onChange={(e) => setNewItemUnit(e.target.value)}>
-                          {BASE_UNITS.map((u) => (
-                            <option key={u} value={u}>
-                              {u}
-                            </option>
-                          ))}
-                        </select>
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <button type="button" className="btn-ghost small" onClick={() => setNewItemForRow(null)}>
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            className="mini"
-                            onClick={() => handleCreateNewItem(i)}
-                            disabled={newItemSaving || !newItemName.trim()}
+                    {row.skip ? (
+                      <p className="hint" style={{ margin: "0 0 4px" }}>
+                        Won't be imported.
+                      </p>
+                    ) : (
+                      <>
+                        {row.lines.length > 0 && (
+                          <ul className="mli-lines">
+                            {row.lines.map((line, li) => (
+                              <li key={li}>
+                                {line.itemName} — {line.qty} {line.unit}
+                                <button className="rm" onClick={() => handleRemoveLine(i, li)}>
+                                  ×
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+
+                        <div className="addrow mli-addrow">
+                          <select
+                            value={row.pendingItemId}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === "__new__") {
+                                setNewItemForRow(i);
+                                setNewItemName("");
+                                setNewItemUnit(BASE_UNITS[0]);
+                                setNewItemError(null);
+                              } else {
+                                updateRow(i, { pendingItemId: val });
+                              }
+                            }}
                           >
-                            {newItemSaving ? "Adding…" : "Add item"}
-                          </button>
+                            <option value="">Add an ingredient…</option>
+                            <option value="__new__">+ Add new item…</option>
+                            {localItems.map((it) => (
+                              <option key={it.id} value={it.id}>
+                                {it.name} ({it.base_unit})
+                              </option>
+                            ))}
+                          </select>
+                          <div className="addrow-bottom">
+                            <input
+                              type="number"
+                              step="any"
+                              min="0"
+                              placeholder="Qty"
+                              value={row.pendingQty}
+                              onChange={(e) => updateRow(i, { pendingQty: e.target.value })}
+                            />
+                            <button
+                              className="add-btn"
+                              type="button"
+                              disabled={!row.pendingItemId || !row.pendingQty}
+                              onClick={() => handleAddLine(i)}
+                            >
+                              + Add
+                            </button>
+                          </div>
                         </div>
-                        {newItemError && <p className="error">{newItemError}</p>}
-                      </div>
+
+                        {newItemForRow === i && (
+                          <div className="scan-new-item">
+                            <input
+                              value={newItemName}
+                              onChange={(e) => setNewItemName(e.target.value)}
+                              placeholder="Item name"
+                            />
+                            <select value={newItemUnit} onChange={(e) => setNewItemUnit(e.target.value)}>
+                              {BASE_UNITS.map((u) => (
+                                <option key={u} value={u}>
+                                  {u}
+                                </option>
+                              ))}
+                            </select>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <button
+                                type="button"
+                                className="btn-ghost small"
+                                onClick={() => setNewItemForRow(null)}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                className="mini"
+                                onClick={() => handleCreateNewItem(i)}
+                                disabled={newItemSaving || !newItemName.trim()}
+                              >
+                                {newItemSaving ? "Adding…" : "Add item"}
+                              </button>
+                            </div>
+                            {newItemError && <p className="error">{newItemError}</p>}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 );
@@ -382,10 +426,14 @@ export default function MenuListImportModal({
               <button className="btn-ghost" type="button" onClick={onClose} disabled={importing}>
                 Cancel
               </button>
-              <button className="btn-primary" onClick={handleImport} disabled={importing || !location}>
+              <button
+                className="btn-primary"
+                onClick={handleImport}
+                disabled={importing || !location || importableRows.length === 0}
+              >
                 {importing
                   ? "Importing…"
-                  : `Import ${rowsState.length} recipe${rowsState.length === 1 ? "" : "s"}${totalLines ? ` (${totalLines} ingredient line${totalLines === 1 ? "" : "s"})` : ""}`}
+                  : `Import ${importableRows.length} recipe${importableRows.length === 1 ? "" : "s"}${totalLines ? ` (${totalLines} ingredient line${totalLines === 1 ? "" : "s"})` : ""}${skippedCount ? ` — ${skippedCount} skipped` : ""}`}
               </button>
             </div>
           </>
@@ -404,6 +452,8 @@ export default function MenuListImportModal({
                 ` ${result.holdingsBackfilled} matched ingredient${
                   result.holdingsBackfilled === 1 ? "" : "s"
                 } got a stock holding added at this location.`}
+              {skippedCount > 0 &&
+                ` ${skippedCount} row${skippedCount === 1 ? "" : "s"} skipped, not imported.`}
             </div>
             <div className="modal-actions" style={{ marginTop: 16 }}>
               <button className="btn-primary" onClick={onClose}>
