@@ -559,7 +559,20 @@ export default function ProcurementDetail({
             This order was re-sourced — its items now live on new draft purchase orders.
           </p>
         )}
-        <div className="fgrid fgrid-2" style={{ marginTop: 16 }}>
+        <div className="fgrid" style={{ marginTop: 16 }}>
+          <div className="field">
+            <label>PO number</label>
+            {editable ? (
+              <input
+                value={po.po_number ?? ""}
+                onChange={(e) => setPo({ ...po, po_number: e.target.value })}
+                onBlur={(e) => saveField({ po_number: e.target.value })}
+                placeholder="e.g. PO-0007"
+              />
+            ) : (
+              <div className="ro">{po.po_number || "—"}</div>
+            )}
+          </div>
           <div className="field">
             <label>Expected date</label>
             <input

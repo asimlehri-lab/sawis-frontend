@@ -158,11 +158,37 @@ interface ScanRow {
 
 // Textract sometimes returns a price/qty with a currency symbol, thousands
 // separator, or stray whitespace ("£1,234.50") -- strip everything but
-// digits/decimal point so it drops straight into a numeric-style input.
+// digits and separators, then figure out which separator (if any) is the
+// real decimal point so it drops straight into a numeric-style input.
+//
+// A German/Austrian invoice writes decimals with a comma ("61,50" =
+// 61.50), which the old digit-only strip mangled into "6150" -- this is
+// that fix.
 function cleanNumeric(raw: string | null): string {
   if (!raw) return "";
-  const cleaned = raw.replace(/[^0-9.]/g, "");
-  return cleaned || "";
+  let cleaned = raw.replace(/[^0-9.,]/g, "");
+  if (!cleaned) return "";
+
+  const commaCount = (cleaned.match(/,/g) || []).length;
+  const lastComma = cleaned.lastIndexOf(",");
+  const lastDot = cleaned.lastIndexOf(".");
+
+  if (lastComma > -1 && lastDot > -1) {
+    // Both separators present: European "1.234,56" has the comma last;
+    // UK/US "1,234.56" has the dot last. Whichever comes last is the real
+    // decimal point -- the other is thousands-grouping and gets dropped.
+    cleaned = lastComma > lastDot ? cleaned.replace(/\./g, "").replace(",", ".") : cleaned.replace(/,/g, "");
+  } else if (commaCount === 1 && cleaned.length - lastComma - 1 === 2) {
+    // A single comma followed by exactly two digits ("61,50") is a
+    // European decimal separator, not thousands-grouping.
+    cleaned = cleaned.replace(",", ".");
+  } else {
+    // Any other comma use (thousands grouping like "1,234", or several
+    // commas) is just grouping noise.
+    cleaned = cleaned.replace(/,/g, "");
+  }
+
+  return cleaned;
 }
 
 // Our own po_number is "PO-0007", but a supplier retyping it onto their
@@ -312,6 +338,10 @@ export default function App() {
   const [newSupplierError, setNewSupplierError] = useState<string | null>(null);
 
   const [recipeFilter, setRecipeFilter] = useState<"all" | "dish" | "sub">("all");
+  // Client-side only, same pattern as recipeFilter/poFilter -- these lists
+  // are already fully loaded, so there's no need for a backend query param.
+  const [recipeSearch, setRecipeSearch] = useState("");
+  const [itemSearch, setItemSearch] = useState("");
 
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[] | null>(null);
   const [poError, setPoError] = useState<string | null>(null);
@@ -349,6 +379,16 @@ export default function App() {
   const [scanNewSupplierName, setScanNewSupplierName] = useState("");
   const [savingScanSupplier, setSavingScanSupplier] = useState(false);
   const [scanNewSupplierError, setScanNewSupplierError] = useState<string | null>(null);
+  // Inline "+ Add new item" from a scan row that Textract found no
+  // confident Item match for -- scanNewItemRow is the index of the
+  // ScanRow whose picker is showing the mini add-item form (null = none
+  // open). Name is prefilled from the OCR'd description so the user is
+  // correcting, not retyping.
+  const [scanNewItemRow, setScanNewItemRow] = useState<number | null>(null);
+  const [scanNewItemName, setScanNewItemName] = useState("");
+  const [scanNewItemUnit, setScanNewItemUnit] = useState(BASE_UNITS[1]);
+  const [scanCreatingItem, setScanCreatingItem] = useState(false);
+  const [scanNewItemError, setScanNewItemError] = useState<string | null>(null);
   // Best-guess existing sent/awaiting order this scan might belong to --
   // scored from whichever of {PO number, supplier, item overlap, receipt
   // date vs expected date} actually matched (see scorePOMatch below).
@@ -817,6 +857,10 @@ export default function App() {
     setScanShowNewSupplier(false);
     setScanNewSupplierName("");
     setScanNewSupplierError(null);
+    setScanNewItemRow(null);
+    setScanNewItemName("");
+    setScanNewItemUnit(BASE_UNITS[1]);
+    setScanNewItemError(null);
     setScanCreatedPO(null);
     setScanMatchedPO(null);
     setScanMatchReasons([]);
@@ -842,6 +886,31 @@ export default function App() {
       setScanNewSupplierError(err instanceof Error ? err.message : "Could not create supplier.");
     } finally {
       setSavingScanSupplier(false);
+    }
+  }
+
+  async function handleCreateScanItem(rowIndex: number) {
+    if (!accessToken || !scanNewItemName.trim()) return;
+    setScanCreatingItem(true);
+    setScanNewItemError(null);
+    try {
+      // sku/vat_rate left blank -- same as the plain "+ New item" modal,
+      // this is a quick add the user can flesh out properly later from
+      // the Items page.
+      const created = await createItem(accessToken, {
+        name: scanNewItemName.trim(),
+        sku: "",
+        base_unit: scanNewItemUnit,
+        vat_rate: null,
+      });
+      setItems((prev) => (prev ? [...prev, created] : [created]));
+      updateScanRow(rowIndex, { matchedItemId: created.id });
+      setScanNewItemRow(null);
+      setScanNewItemName("");
+    } catch (err) {
+      setScanNewItemError(err instanceof Error ? err.message : "Could not create item.");
+    } finally {
+      setScanCreatingItem(false);
     }
   }
 
@@ -876,6 +945,12 @@ export default function App() {
         if (ranked[0] && ranked[0].score >= 0.5) {
           resolvedSupplierId = ranked[0].s.id;
           setScanSupplierId(resolvedSupplierId);
+        } else {
+          // No confident match -- prefill the "+ New supplier" quick-add
+          // name from the OCR'd vendor name rather than leaving it blank,
+          // so the user isn't retyping something Textract already read.
+          // They still have to open that panel and confirm/edit it.
+          setScanNewSupplierName(result.vendor_name);
         }
       }
 
@@ -1204,6 +1279,12 @@ export default function App() {
               <h1 className="page-title">{activePage}</h1>
               {activePage === "Items" && (
                 <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    className="head-search"
+                    value={itemSearch}
+                    onChange={(e) => setItemSearch(e.target.value)}
+                    placeholder="Search by name, SKU, or supplier code…"
+                  />
                   <button className="btn-ghost small" onClick={() => setShowImport(true)}>
                     ⇪ Import supplier list
                   </button>
@@ -1213,9 +1294,17 @@ export default function App() {
                 </div>
               )}
               {activePage === "Recipes" && (
-                <button className="btn-primary small" onClick={() => setShowNewRecipe(true)}>
-                  + New recipe
-                </button>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    className="head-search"
+                    value={recipeSearch}
+                    onChange={(e) => setRecipeSearch(e.target.value)}
+                    placeholder="Search by name or POS ID…"
+                  />
+                  <button className="btn-primary small" onClick={() => setShowNewRecipe(true)}>
+                    + New recipe
+                  </button>
+                </div>
               )}
               {activePage === "Procurement" && (
                 <div style={{ display: "flex", gap: 8 }}>
@@ -1246,17 +1335,27 @@ export default function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {items.map((it) => (
-                        <tr key={it.id} className="clickable" onClick={() => setSelectedItemId(it.id)}>
-                          <td className="dish">{it.name}</td>
-                          <td className="muted">{it.category_name || "—"}</td>
-                          <td className="muted">{it.base_unit}</td>
-                          <td className="num">
-                            {it.effective_vat_rate ? `${Number(it.effective_vat_rate) * 100}%` : "—"}
-                          </td>
-                          <td className="num">{it.holdings.length}</td>
-                        </tr>
-                      ))}
+                      {items
+                        .filter((it) => {
+                          const q = itemSearch.trim().toLowerCase();
+                          if (!q) return true;
+                          return (
+                            it.name.toLowerCase().includes(q) ||
+                            (it.sku ?? "").toLowerCase().includes(q) ||
+                            it.supplier_links.some((link) => link.supplier_sku.toLowerCase().includes(q))
+                          );
+                        })
+                        .map((it) => (
+                          <tr key={it.id} className="clickable" onClick={() => setSelectedItemId(it.id)}>
+                            <td className="dish">{it.name}</td>
+                            <td className="muted">{it.category_name || "—"}</td>
+                            <td className="muted">{it.base_unit}</td>
+                            <td className="num">
+                              {it.effective_vat_rate ? `${Number(it.effective_vat_rate) * 100}%` : "—"}
+                            </td>
+                            <td className="num">{it.holdings.length}</td>
+                          </tr>
+                        ))}
                     </tbody>
                   </table>
                 )}
@@ -1296,6 +1395,14 @@ export default function App() {
                     <tbody>
                       {recipes
                         .filter((r) => recipeFilter === "all" || r.kind === recipeFilter)
+                        .filter((r) => {
+                          const q = recipeSearch.trim().toLowerCase();
+                          if (!q) return true;
+                          return (
+                            (r.name ?? "").toLowerCase().includes(q) ||
+                            r.pos_id.toLowerCase().includes(q)
+                          );
+                        })
                         .map((r) => {
                           const usedInCount = recipes.filter((other) =>
                             other.lines.some((l) => l.line_type === "recipe" && l.sub_recipe === r.id)
@@ -1311,6 +1418,8 @@ export default function App() {
                                       ? "not used yet"
                                       : `used in ${usedInCount} recipe${usedInCount === 1 ? "" : "s"}`
                                     : `${r.lines.length} line${r.lines.length === 1 ? "" : "s"}`}
+                                  {r.pos_id && ` · POS ${r.pos_id}`}
+                                  {r.menu_category && ` · ${r.menu_category}`}
                                 </div>
                               </td>
                               <td className="num">
@@ -2055,7 +2164,20 @@ export default function App() {
                               <td>
                                 <select
                                   value={row.matchedItemId}
-                                  onChange={(e) => updateScanRow(i, { matchedItemId: e.target.value })}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    if (val === "__new__") {
+                                      // No confident match on the receipt line -- offer to
+                                      // create the Item right here instead of sending the
+                                      // user off to the Items page and back.
+                                      setScanNewItemRow(i);
+                                      setScanNewItemName(row.description);
+                                      setScanNewItemUnit(BASE_UNITS[1]);
+                                      setScanNewItemError(null);
+                                    } else {
+                                      updateScanRow(i, { matchedItemId: val });
+                                    }
+                                  }}
                                   disabled={row.skip}
                                   style={{ width: 150 }}
                                 >
@@ -2065,7 +2187,45 @@ export default function App() {
                                       {it.name}
                                     </option>
                                   ))}
+                                  <option value="__new__">+ Add new item…</option>
                                 </select>
+                                {scanNewItemRow === i && (
+                                  <div className="scan-new-item">
+                                    <input
+                                      value={scanNewItemName}
+                                      onChange={(e) => setScanNewItemName(e.target.value)}
+                                      placeholder="Item name"
+                                    />
+                                    <select
+                                      value={scanNewItemUnit}
+                                      onChange={(e) => setScanNewItemUnit(e.target.value)}
+                                    >
+                                      {BASE_UNITS.map((u) => (
+                                        <option key={u} value={u}>
+                                          {u}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <div style={{ display: "flex", gap: 6 }}>
+                                      <button
+                                        type="button"
+                                        className="btn-ghost small"
+                                        onClick={() => setScanNewItemRow(null)}
+                                      >
+                                        Cancel
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="mini"
+                                        onClick={() => handleCreateScanItem(i)}
+                                        disabled={scanCreatingItem || !scanNewItemName.trim()}
+                                      >
+                                        {scanCreatingItem ? "Adding…" : "Add item"}
+                                      </button>
+                                    </div>
+                                    {scanNewItemError && <p className="error">{scanNewItemError}</p>}
+                                  </div>
+                                )}
                               </td>
                               <td className="num">
                                 <input

@@ -9,6 +9,7 @@ import {
   BASE_UNITS,
   fetchItemSuppliers,
   createItemSupplier,
+  updateItemSupplier,
   createCategory,
   deleteItem,
   login,
@@ -313,6 +314,17 @@ export default function ItemDetail({
       await saveField({ default_supplier: row.supplier });
     } finally {
       setSettingDefaultId(null);
+    }
+  }
+
+  async function handleSaveSupplierSku(row: ItemSupplierRow, supplierSku: string) {
+    if (supplierSku === row.supplier_sku) return;
+    try {
+      const updated = await updateItemSupplier(accessToken, row.id, { supplier_sku: supplierSku });
+      setItemSuppliers((rows) => rows.map((r) => (r.id === updated.id ? updated : r)));
+    } catch {
+      // Not worth a dedicated error banner for a small lookup-code edit --
+      // the input just keeps whatever the user typed, and they can retry.
     }
   }
 
@@ -627,6 +639,15 @@ export default function ItemDetail({
                   <span className="best">cheapest</span>
                 )}
                 {row.last_ordered_at && <div className="sd">last ordered {row.last_ordered_at}</div>}
+              </span>
+              <span className="supcode-field">
+                <label>Supplier's code</label>
+                <input
+                  className="supcode-in"
+                  defaultValue={row.supplier_sku}
+                  onBlur={(e) => handleSaveSupplierSku(row, e.target.value)}
+                  placeholder="optional"
+                />
               </span>
               <span className="sp">
                 £{Number(row.unit_price).toFixed(2)}/{item.base_unit}

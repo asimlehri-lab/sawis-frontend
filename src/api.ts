@@ -57,6 +57,9 @@ export interface CatalogItem {
   default_supplier: string | null;
   archived: boolean;
   holdings: ItemHolding[];
+  // Included so the Items list can be searched by a supplier's own item
+  // code, not just by our SKU/name -- see ItemSupplierRow.supplier_sku.
+  supplier_links: ItemSupplierRow[];
 }
 
 async function authedFetch(path: string, accessToken: string) {
@@ -216,6 +219,15 @@ export interface Recipe {
   // existed shows as Food until someone marks it a drink. Purely a
   // Champions-ranking split, no effect on costing.
   menu_group: "food" | "drink";
+  // The POS system's own ID for this dish -- shown and searchable so a
+  // long menu can be found by the number on a till report, not just by
+  // name. Also what a future POS sales import matches against first.
+  // Purely a lookup aid, never required, never auto-generated.
+  pos_id: string;
+  // A lightweight grouping label for the menu (e.g. "Coffee", "Green
+  // Tea") -- distinct from menu_group. Purely for filtering/browsing a
+  // long menu; no effect on costing or reporting.
+  menu_category: string;
   lines: RecipeLine[];
   batch_cost: number;
   per_portion_cost: number;
@@ -324,6 +336,8 @@ export interface RecipePatch {
   yield_unit?: string;
   menu_price?: string | null;
   menu_group?: "food" | "drink";
+  pos_id?: string;
+  menu_category?: string;
 }
 
 export async function updateRecipe(accessToken: string, id: string, patch: RecipePatch): Promise<Recipe> {
@@ -763,6 +777,9 @@ export interface ItemSupplierRow {
   min_order_qty: string | null;
   last_ordered_at: string | null;
   matched_from: string | null;
+  // The SUPPLIER's own product code for this item -- distinct from
+  // Item.sku (our own internal code). A lookup aid only, never required.
+  supplier_sku: string;
 }
 
 export async function fetchItemSuppliers(accessToken: string): Promise<ItemSupplierRow[]> {
@@ -799,6 +816,23 @@ export async function createItemSupplier(
     }
     throw new Error("Could not link supplier.");
   }
+  return res.json();
+}
+
+export async function updateItemSupplier(
+  accessToken: string,
+  id: string,
+  patch: { supplier_sku?: string; unit_price?: string; min_order_qty?: string | null }
+): Promise<ItemSupplierRow> {
+  const res = await fetch(`${API_URL}/api/catalog/item-suppliers/${id}/`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error("Could not save changes.");
   return res.json();
 }
 
@@ -878,6 +912,9 @@ export interface POPatch {
   expected_date?: string | null;
   received_date?: string | null;
   invoice_number?: string | null;
+  // Only actually accepted by the API while the order is still a draft --
+  // see PurchaseOrderSerializer.validate_po_number on the backend.
+  po_number?: string;
 }
 
 export async function updatePurchaseOrder(

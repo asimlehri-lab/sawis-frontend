@@ -363,6 +363,32 @@ export default function RecipeDetail({
               <p className="hint" style={{ marginTop: -8 }}>
                 Only used to split End of day's Champions ranking into Dishes/Drinks — doesn't affect costing.
               </p>
+              <div className="price-row">
+                <label>POS ID</label>
+                <input
+                  className="price-in"
+                  style={{ textAlign: "left" }}
+                  value={recipe.pos_id ?? ""}
+                  onChange={(e) => setRecipe({ ...recipe, pos_id: e.target.value })}
+                  onBlur={(e) => saveField({ pos_id: e.target.value })}
+                  placeholder="optional"
+                />
+              </div>
+              <div className="price-row">
+                <label>Menu category</label>
+                <input
+                  className="price-in"
+                  style={{ textAlign: "left" }}
+                  value={recipe.menu_category ?? ""}
+                  onChange={(e) => setRecipe({ ...recipe, menu_category: e.target.value })}
+                  onBlur={(e) => saveField({ menu_category: e.target.value })}
+                  placeholder="optional"
+                />
+              </div>
+              <p className="hint" style={{ marginTop: -8 }}>
+                POS ID is the number from your till system — lets a sale import match this dish automatically.
+                Menu category is just for grouping/browsing a long menu — doesn't affect costing.
+              </p>
               <div className="fc-hero">
                 <div className={`big ${fcOver ? "over" : "good"}`}>
                   {recipe.plate_food_cost_pct !== null ? `${recipe.plate_food_cost_pct.toFixed(1)}%` : "—"}
