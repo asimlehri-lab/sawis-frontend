@@ -2023,12 +2023,14 @@ export default function App() {
                   <input
                     type="file"
                     accept="image/*"
-                    // On a phone/tablet, `capture` opens the camera directly
-                    // instead of a Camera/Photo Library chooser -- desktop
-                    // browsers ignore this attribute entirely, so nothing
-                    // changes there. "environment" is the rear camera, the
-                    // one actually pointed at a receipt on the counter.
-                    capture="environment"
+                    // Deliberately no `capture` attribute -- that would skip
+                    // straight to the camera app on phone/tablet, hiding the
+                    // browser's own "Take Photo / Photo Library / Choose
+                    // File" chooser. Leaving capture off keeps that native
+                    // choice available (a receipt already in the camera
+                    // roll, or a scanned PDF/photo from Files, works just as
+                    // well as taking a fresh photo). Desktop is unaffected
+                    // either way -- it always just opens a file picker.
                     disabled={scanning}
                     onChange={(e) => {
                       const file = e.target.files?.[0];

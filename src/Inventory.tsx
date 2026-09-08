@@ -1055,15 +1055,15 @@ function CountSheet({
         <h2 style={{ margin: 0 }}>{section.name}</h2>
         <label className="btn-ghost small" style={{ cursor: scanning ? "default" : "pointer", opacity: scanning ? 0.6 : 1 }}>
           📷 Scan filled sheet
-          {/* On a phone/tablet, `capture` opens the camera directly instead
-              of a Camera/Photo Library chooser -- desktop browsers ignore
-              this attribute entirely, so nothing changes there. "environment"
-              is the rear camera, the one actually pointed at the printed
-              sheet on the counter. Same pattern as Scan receipt in App.tsx. */}
+          {/* Deliberately no `capture` attribute -- that would skip straight
+              to the camera app on phone/tablet, hiding the browser's own
+              "Take Photo / Photo Library / Choose File" chooser. Leaving it
+              off keeps that native choice available (a sheet already
+              photographed, or pulled from Files, works just as well as
+              taking a fresh photo). Same pattern as Scan receipt in App.tsx. */}
           <input
             type="file"
             accept="image/*"
-            capture="environment"
             disabled={scanning}
             style={{ display: "none" }}
             onChange={(e) => {
