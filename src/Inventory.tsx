@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
+import Loader from "./Loader";
 import {
   createCountAssignment,
   createCountLine,
@@ -7,6 +8,7 @@ import {
   createStockMovement,
   deleteSection,
   fetchOnHand,
+  scanCountSheet,
   updateCountAssignment,
   updateItemHolding,
   updateSection,
@@ -18,6 +20,7 @@ import type {
   Location,
   Me,
   Membership,
+  ScannedCountRow,
   Section,
   StockCountRow,
   StockMovementRow,
@@ -79,6 +82,51 @@ function sectionIcon(name: string): { emoji: string; cls: string } {
 function staffLabel(m: Membership): string {
   const name = m.name || m.email;
   return m.job_title ? `${name} — ${m.job_title}` : name;
+}
+
+// Duplicated from App.tsx/ItemDetail.tsx (established convention in this
+// codebase for small local helpers) -- fuzzy-matches an OCR'd item_text
+// from a scanned count sheet against our own item names, same 0.5
+// confidence threshold used everywhere else this pattern appears.
+function matchScore(ours: string, raw: string): number {
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[0-9]+(\.[0-9]+)?\s*(kg|g|ml|l|cl|oz|x|case|sack|class)?/g, " ")
+      .replace(/[^a-z ]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 2);
+  const a = new Set(norm(ours));
+  const b = new Set(norm(raw));
+  if (!a.size) return 0;
+  let hit = 0;
+  a.forEach((w) => {
+    if (b.has(w) || [...b].some((x) => x.startsWith(w) || w.startsWith(x))) hit++;
+  });
+  return hit / a.size;
+}
+
+// Duplicated from App.tsx -- turns a handwritten-then-OCR'd quantity like
+// "3,5" or "12" into a clean numeric string, same European/UK decimal
+// disambiguation logic used for scanned receipts.
+function cleanNumeric(raw: string | null): string {
+  if (!raw) return "";
+  let cleaned = raw.replace(/[^0-9.,]/g, "");
+  if (!cleaned) return "";
+
+  const commaCount = (cleaned.match(/,/g) || []).length;
+  const lastComma = cleaned.lastIndexOf(",");
+  const lastDot = cleaned.lastIndexOf(".");
+
+  if (lastComma > -1 && lastDot > -1) {
+    cleaned = lastComma > lastDot ? cleaned.replace(/\./g, "").replace(",", ".") : cleaned.replace(/,/g, "");
+  } else if (commaCount === 1 && cleaned.length - lastComma - 1 === 2) {
+    cleaned = cleaned.replace(",", ".");
+  } else {
+    cleaned = cleaned.replace(/,/g, "");
+  }
+
+  return cleaned;
 }
 
 interface FlatHolding {
@@ -231,6 +279,7 @@ export default function Inventory({
           me={me}
           staff={staffHere}
           activeLocation={activeLocation}
+          locationName={locations.find((l) => l.id === activeLocation)?.name ?? ""}
           sections={sectionsHere}
           holdings={holdingsAtLocation}
           onHand={onHand}
@@ -612,6 +661,7 @@ function CountSheetsTab({
   me,
   staff,
   activeLocation,
+  locationName,
   sections,
   holdings,
   onHand,
@@ -624,6 +674,7 @@ function CountSheetsTab({
   me: Me;
   staff: Membership[];
   activeLocation: string;
+  locationName: string;
   sections: Section[];
   holdings: FlatHolding[];
   onHand: Record<string, number>;
@@ -716,14 +767,60 @@ function CountSheetsTab({
     );
   }
 
+  const sectionsWithItems = sections.filter((s) => holdings.some((h) => h.section === s.id));
+
   return (
     <>
       <div className="content-head">
         <h2 style={{ margin: 0 }}>Count in progress</h2>
-        <button className="btn-ghost small" onClick={handleCloseCount}>
-          Close count
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn-ghost small" onClick={() => window.print()} disabled={sectionsWithItems.length === 0}>
+            🖨 Print sheets
+          </button>
+          <button className="btn-ghost small" onClick={handleCloseCount}>
+            Close count
+          </button>
+        </div>
       </div>
+
+      {/* One printed page per section (Item / Par / Counted qty, the last
+          column left blank) -- handed to whoever's counting that section,
+          filled in by hand, then read back in via "Scan filled sheet"
+          below. Hidden on screen, shown only by @media print (App.css). */}
+      <div className="print-only">
+        {sectionsWithItems.map((s, i) => {
+          const sectionHoldings = holdings.filter((h) => h.section === s.id);
+          return (
+            <div key={s.id} className={`print-sheet-page ${i === sectionsWithItems.length - 1 ? "last" : ""}`}>
+              <h1>{s.name} — Count sheet</h1>
+              <p>
+                <b>Location:</b> {locationName || "—"} &nbsp;&nbsp; <b>Date:</b> {new Date().toLocaleDateString()}
+              </p>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Unit</th>
+                    <th>Par</th>
+                    <th>Counted qty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sectionHoldings.map((h) => (
+                    <tr key={h.id}>
+                      <td>{h.itemName}</td>
+                      <td>{h.baseUnit}</td>
+                      <td>{h.parLevel.toFixed(2)}</td>
+                      <td></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })}
+      </div>
+
       {err && <p className="error">{err}</p>}
       {sections.length === 0 && <p className="muted">No sections set up yet — add some under "Manage sections" first.</p>}
       <div className="section-grid">
@@ -818,6 +915,55 @@ function CountSheet({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  // OCR confidence per holding, for rows the scan pre-filled -- shown as a
+  // "double-check this one" hint next to the row, same "weakest field"
+  // confidence Scan receipt already surfaces.
+  const [scanConfidence, setScanConfidence] = useState<Record<string, number | null>>({});
+  // Rows Textract read off the photo that didn't fuzzy-match any item in
+  // this section -- surfaced so the counter can add them by hand rather
+  // than silently losing what was written on the sheet.
+  const [unmatchedScanRows, setUnmatchedScanRows] = useState<ScannedCountRow[]>([]);
+
+  async function handleScanFileSelected(file: File) {
+    setScanError(null);
+    setScanning(true);
+    try {
+      const result = await scanCountSheet(accessToken, file);
+      const newChecked: Record<string, boolean> = {};
+      const newQty: Record<string, string> = {};
+      const newConfidence: Record<string, number | null> = {};
+      const unmatched: ScannedCountRow[] = [];
+
+      for (const row of result.rows) {
+        const ranked = holdings
+          .map((h) => ({ h, score: matchScore(h.itemName, row.item_text) }))
+          .sort((a, b) => b.score - a.score);
+        const best = ranked[0];
+        if (!best || best.score < 0.5) {
+          unmatched.push(row);
+          continue;
+        }
+        // Nothing is auto-saved from a scan -- this only pre-fills the same
+        // checked/qty state the manual table already uses, so every row
+        // still passes through the counter's own review before Submit.
+        newChecked[best.h.id] = true;
+        newQty[best.h.id] = cleanNumeric(row.qty_text) || (onHand[best.h.id] ?? 0).toFixed(2);
+        newConfidence[best.h.id] = row.confidence;
+      }
+
+      setChecked((c) => ({ ...c, ...newChecked }));
+      setQty((q) => ({ ...q, ...newQty }));
+      setScanConfidence((sc) => ({ ...sc, ...newConfidence }));
+      setUnmatchedScanRows(unmatched);
+    } catch (e) {
+      setScanError(e instanceof Error ? e.message : "Could not scan that count sheet.");
+    } finally {
+      setScanning(false);
+    }
+  }
+
   function variance(h: FlatHolding): number | null {
     const q = qty[h.id];
     if (!checked[h.id] || q === undefined || q === "") return null;
@@ -840,6 +986,15 @@ function CountSheet({
 
   function handleQtyChange(h: FlatHolding, value: string) {
     setQty((q) => ({ ...q, [h.id]: value }));
+    // The counter has now looked at (and possibly corrected) this row
+    // themselves, so a stale "double-check this" hint from the scan no
+    // longer applies.
+    setScanConfidence((sc) => {
+      if (!(h.id in sc)) return sc;
+      const rest = { ...sc };
+      delete rest[h.id];
+      return rest;
+    });
     const num = Number(value);
     const off = value !== "" && Number.isFinite(num) && Math.abs(num - (onHand[h.id] ?? 0)) > 0.001;
     if (off && !reason[h.id] && !note[h.id]) {
@@ -898,7 +1053,46 @@ function CountSheet({
       </button>
       <div className="content-head" style={{ marginTop: 8 }}>
         <h2 style={{ margin: 0 }}>{section.name}</h2>
+        <label className="btn-ghost small" style={{ cursor: scanning ? "default" : "pointer", opacity: scanning ? 0.6 : 1 }}>
+          📷 Scan filled sheet
+          {/* On a phone/tablet, `capture` opens the camera directly instead
+              of a Camera/Photo Library chooser -- desktop browsers ignore
+              this attribute entirely, so nothing changes there. "environment"
+              is the rear camera, the one actually pointed at the printed
+              sheet on the counter. Same pattern as Scan receipt in App.tsx. */}
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            disabled={scanning}
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) handleScanFileSelected(file);
+            }}
+          />
+        </label>
       </div>
+      {scanning && (
+        <div style={{ textAlign: "center", padding: "12px 0" }}>
+          <Loader size="compact" label="Reading the count sheet…" />
+        </div>
+      )}
+      {scanError && <p className="error">{scanError}</p>}
+      {unmatchedScanRows.length > 0 && (
+        <div className="im-note" style={{ background: "#F6EDD6", color: "#8A6410" }}>
+          The photo also had {unmatchedScanRows.length} row{unmatchedScanRows.length === 1 ? "" : "s"} that didn't
+          match any item in this section — add these by hand if they're real counts:{" "}
+          {unmatchedScanRows.map((r, i) => (
+            <span key={i}>
+              {i > 0 ? ", " : ""}
+              <b>{r.item_text || "(blank)"}</b>
+              {r.qty_text ? ` (${r.qty_text})` : ""}
+            </span>
+          ))}
+        </div>
+      )}
       <div className="prog-wrap">
         <div className="prog-t">
           <span>Counted</span>
@@ -921,6 +1115,8 @@ function CountSheet({
           const isOpen = openNoteId === h.id;
           const btnCls = hasNote ? "note-btn-sm has" : off ? "note-btn-sm need" : "note-btn-sm";
           const btnTxt = hasNote ? "💬 note" : off ? "+ why?" : "+ note";
+          const scanConf = scanConfidence[h.id];
+          const lowConfidence = scanConf !== undefined && scanConf !== null && scanConf < 80;
           return (
             <div key={h.id} className={`count-row ${checked[h.id] ? "done" : ""}`}>
               <div className="count-row-main">
@@ -928,6 +1124,11 @@ function CountSheet({
                   <input type="checkbox" checked={!!checked[h.id]} onChange={(e) => handleTick(h, e.target.checked)} />
                   {h.itemName}
                 </label>
+                {lowConfidence && (
+                  <span className="badge warn" title="The scan wasn't fully confident reading this handwritten number — double-check it.">
+                    ⚠ check scan
+                  </span>
+                )}
                 <span className="muted" style={{ fontSize: 11.5, fontFamily: "monospace" }}>
                   system says {(onHand[h.id] ?? 0).toFixed(2)} {h.baseUnit}
                 </span>

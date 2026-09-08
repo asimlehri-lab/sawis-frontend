@@ -2023,6 +2023,12 @@ export default function App() {
                   <input
                     type="file"
                     accept="image/*"
+                    // On a phone/tablet, `capture` opens the camera directly
+                    // instead of a Camera/Photo Library chooser -- desktop
+                    // browsers ignore this attribute entirely, so nothing
+                    // changes there. "environment" is the rear camera, the
+                    // one actually pointed at a receipt on the counter.
+                    capture="environment"
                     disabled={scanning}
                     onChange={(e) => {
                       const file = e.target.files?.[0];

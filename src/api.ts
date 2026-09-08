@@ -1595,3 +1595,34 @@ export async function createCountLine(accessToken: string, input: NewCountLineIn
   }
   return res.json();
 }
+
+export interface ScannedCountRow {
+  item_text: string;
+  qty_text: string;
+  confidence: number | null;
+}
+
+// Uploads a photo of a filled-in, printed count sheet (see the "Print
+// sheets" button in Inventory.tsx's Count sheets tab) to the backend, which
+// runs it through AWS Textract and hands back the raw rows it found. No
+// CountLine or StockMovement gets created by this call -- matching each
+// row's item text to a real Item, and saving the result, both happen
+// client-side in CountSheet, the same fuzzy-match-then-confirm pattern
+// already used by Scan receipt and the supplier-catalogue import.
+export async function scanCountSheet(accessToken: string, file: File): Promise<{ rows: ScannedCountRow[] }> {
+  const formData = new FormData();
+  formData.append("image", file);
+  // No Content-Type header here on purpose -- the browser sets the
+  // multipart boundary itself when the body is a FormData; setting it
+  // by hand breaks the upload.
+  const res = await fetch(`${API_URL}/api/ledger/scan-count-sheet/`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: formData,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error((body && typeof body === "object" && body.detail) || "Could not scan that count sheet.");
+  }
+  return res.json();
+}

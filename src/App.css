@@ -1343,6 +1343,11 @@ input[type="file"] {
     text-align: left;
     font-size: 12.5px;
   }
+  /* Count sheets: one section per printed page (per-section sheets, not one
+     combined list) -- every .print-sheet-page starts a fresh page except
+     the last, which shouldn't leave a trailing blank page behind it. */
+  .print-sheet-page { page-break-after: always; }
+  .print-sheet-page.last { page-break-after: auto; }
 }
 
 .deliv-strip { margin-bottom: 16px; }
