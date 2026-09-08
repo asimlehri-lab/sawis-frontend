@@ -22,10 +22,11 @@ interface ParsedRow {
   skip: boolean;
 }
 
-// Basic CSV parser (handles quoted fields with embedded commas) — no
-// library needed for the simple date/dish/qty/revenue template this
-// screen expects.
-function parseCsv(text: string): string[][] {
+// Basic CSV parser (handles quoted fields with embedded delimiters) — no
+// library needed for either format this screen accepts. `delim` defaults
+// to comma for the simple date/dish/qty/revenue template; the raw POS
+// export (see parsePosExport below) passes ";" instead.
+function parseCsv(text: string, delim: string = ","): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
@@ -45,7 +46,7 @@ function parseCsv(text: string): string[][] {
       }
     } else if (c === '"') {
       inQuotes = true;
-    } else if (c === ",") {
+    } else if (c === delim) {
       row.push(field);
       field = "";
     } else if (c === "\n" || c === "\r") {
@@ -71,6 +72,61 @@ function parseMoney(raw: string): string {
   return Number.isFinite(num) ? num.toFixed(2) : "0.00";
 }
 
+// German-locale numbers ("1,00", "1.234,56") — thousands dots then a
+// comma decimal — as used throughout the raw POS export (Menge, Gesamt).
+function parseGermanNumber(raw: string): number {
+  const cleaned = raw.trim().replace(/\./g, "").replace(",", ".");
+  const num = Number(cleaned);
+  return Number.isFinite(num) ? num : 0;
+}
+
+// The POS export's date column is "YYYY/MM/DD HH:MM" in the one real file
+// seen so far, but this also accepts DD/MM/YYYY and DD.MM.YYYY defensively
+// in case a different till/export settings produces one of those instead.
+// Always returns YYYY-MM-DD (or "" if unrecognisable) to match the shape
+// the rest of this screen already works in.
+function normalizePosDate(raw: string): string {
+  const s = raw.trim();
+  if (!s) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (s.includes("/")) {
+    const [a, b, c] = s.split("/");
+    if (!a || !b || !c) return "";
+    return a.length === 4
+      ? `${a}-${b.padStart(2, "0")}-${c.padStart(2, "0")}` // YYYY/MM/DD
+      : `${c}-${b.padStart(2, "0")}-${a.padStart(2, "0")}`; // DD/MM/YYYY
+  }
+  if (s.includes(".")) {
+    const [a, b, c] = s.split(".");
+    if (!a || !b || !c) return "";
+    return `${c}-${b.padStart(2, "0")}-${a.padStart(2, "0")}`; // DD.MM.YYYY
+  }
+  return "";
+}
+
+// Reads a file as text, auto-detecting encoding: tries strict UTF-8 first
+// (what the simple date/dish/qty/revenue template is always saved as),
+// and falls back to windows-1252 if that fails — the raw POS export comes
+// straight off a Windows till in that encoding, not UTF-8 (confirmed
+// against the real dep_umsatz*.csv file: umlaut bytes that aren't valid
+// UTF-8 sequences). windows-1252 is a superset of the ISO-8859-1 bytes
+// that file actually uses, so it decodes it correctly too.
+function readFileSmart(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const buf = reader.result as ArrayBuffer;
+      try {
+        resolve(new TextDecoder("utf-8", { fatal: true }).decode(buf));
+      } catch {
+        resolve(new TextDecoder("windows-1252").decode(buf));
+      }
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsArrayBuffer(file);
+  });
+}
+
 // "Today, 14:32" / "15 Aug, 09:10" — a compact at-a-glance answer to "when
 // did someone last actually run an import," not a full timestamp.
 function fmtImportedAt(iso: string): string {
@@ -88,6 +144,13 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [parseError, setParseError] = useState<string | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  // Which format the last-parsed file was, and (for the POS export, which
+  // aggregates many transaction lines into fewer review rows) how many
+  // raw lines that came from — purely so the review modal can say
+  // "aggregated from N lines" instead of leaving the row-count drop
+  // unexplained. null/0 before anything's been parsed yet.
+  const [sourceFormat, setSourceFormat] = useState<"simple" | "pos" | null>(null);
+  const [rawLineCount, setRawLineCount] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
@@ -121,10 +184,112 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
 
   const dishRecipes = recipes.filter((r) => r.kind === "dish");
 
-  function matchRecipe(name: string): string | null {
+  // A POS ID match (when the row has one and it's on file) always wins —
+  // it's the more reliable of the two, since dish names can be renamed or
+  // formatted slightly differently between the till and SAWIS. Falls back
+  // to an exact (trimmed, case-insensitive) name match, same as before.
+  function matchRecipe(name: string, posId?: string): string | null {
+    if (posId) {
+      const byId = dishRecipes.find((r) => r.pos_id && r.pos_id.trim() === posId.trim());
+      if (byId) return byId.id;
+    }
     const norm = name.trim().toLowerCase();
     const found = dishRecipes.find((r) => r.name.trim().toLowerCase() === norm);
     return found ? found.id : null;
+  }
+
+  // Format 1 — the simple template this screen has always accepted:
+  // header "date,dish,qty,revenue" (+ optional "covers"), one row per
+  // dish per day already. Returns null if the header doesn't match (so
+  // processFile can try the other format instead), not if it matches but
+  // has zero data rows.
+  function parseSimpleCsv(text: string): ParsedRow[] | null {
+    const table = parseCsv(text, ",");
+    if (table.length < 1) return null;
+    const header = table[0].map((h) => h.trim().toLowerCase());
+    const dateIdx = header.indexOf("date");
+    const dishIdx = header.indexOf("dish");
+    const qtyIdx = header.indexOf("qty");
+    const revIdx = header.indexOf("revenue");
+    if (dateIdx === -1 || dishIdx === -1 || qtyIdx === -1 || revIdx === -1) return null;
+    const coversIdx = header.indexOf("covers");
+    const parsed: ParsedRow[] = [];
+    for (const r of table.slice(1)) {
+      const date = (r[dateIdx] || "").trim();
+      const dishRaw = (r[dishIdx] || "").trim();
+      const qtyNum = Number((r[qtyIdx] || "").trim());
+      if (!date || !dishRaw || !Number.isFinite(qtyNum) || qtyNum <= 0) continue;
+      const coversRaw = coversIdx > -1 ? (r[coversIdx] || "").trim() : "";
+      const coversNum = coversRaw ? Math.round(Number(coversRaw)) : NaN;
+      parsed.push({
+        date,
+        dishRaw,
+        qty: Math.round(qtyNum),
+        revenue: parseMoney(r[revIdx] || "0"),
+        covers: Number.isFinite(coversNum) && coversNum > 0 ? coversNum : null,
+        matchedRecipeId: matchRecipe(dishRaw),
+        skip: false,
+      });
+    }
+    setRawLineCount(parsed.length);
+    return parsed;
+  }
+
+  // Format 2 — the raw semicolon-delimited POS export (e.g.
+  // dep_umsatz2026.08.csv): one row per transaction line, not per
+  // dish-per-day, so several rows can share the same date + item (a
+  // "Belegreferenz"/receipt groups the lines of one sale, but that's not
+  // what we aggregate by here — the whole day's total per item is what
+  // this screen actually needs). Aggregated by (date, ArtikelID or, if
+  // that's blank, the lowercased name) before matching, so the review
+  // table shows one row per dish per day exactly like format 1 does.
+  // Returns null if the header doesn't look like this format at all.
+  function parsePosExport(text: string): ParsedRow[] | null {
+    const table = parseCsv(text, ";");
+    if (table.length < 1) return null;
+    const header = table[0].map((h) => h.trim());
+    const idx = (name: string) => header.findIndex((h) => h.toLowerCase() === name.toLowerCase());
+    const dateIdx = idx("Datum/Uhrzeit");
+    const artikelIdIdx = idx("ArtikelID");
+    const nameIdx = idx("Artikelbezeichnung");
+    const qtyIdx = idx("Menge");
+    const totalIdx = idx("Gesamt");
+    if (dateIdx === -1 || nameIdx === -1 || qtyIdx === -1 || totalIdx === -1) return null;
+
+    const agg = new Map<string, { date: string; posId: string; name: string; qty: number; revenue: number }>();
+    let rawLines = 0;
+    for (const r of table.slice(1)) {
+      const date = normalizePosDate((r[dateIdx] || "").split(" ")[0]);
+      const name = (r[nameIdx] || "").trim();
+      if (!date || !name) continue;
+      const posId = artikelIdIdx > -1 ? (r[artikelIdIdx] || "").trim() : "";
+      const qty = parseGermanNumber(r[qtyIdx] || "0");
+      const revenue = parseGermanNumber(r[totalIdx] || "0");
+      if (qty <= 0) continue;
+      rawLines++;
+      const key = `${date}|${posId || name.toLowerCase()}`;
+      const existing = agg.get(key);
+      if (existing) {
+        existing.qty += qty;
+        existing.revenue += revenue;
+      } else {
+        agg.set(key, { date, posId, name, qty, revenue });
+      }
+    }
+    setRawLineCount(rawLines);
+    const parsed: ParsedRow[] = [];
+    for (const a of agg.values()) {
+      parsed.push({
+        date: a.date,
+        dishRaw: a.name,
+        qty: Math.round(a.qty),
+        revenue: a.revenue.toFixed(2),
+        covers: null,
+        matchedRecipeId: matchRecipe(a.name, a.posId),
+        skip: false,
+      });
+    }
+    return parsed;
   }
 
   function processFile(file: File) {
@@ -132,52 +297,37 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
     setParseError(null);
     setImportError(null);
     setResult(null);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = String(reader.result || "");
-      const table = parseCsv(text);
-      if (table.length < 2) {
-        setParseError("No rows found after the header.");
+    readFileSmart(file)
+      .then((text) => {
+        const simple = parseSimpleCsv(text);
+        const parsed = simple !== null ? simple : parsePosExport(text);
+        const format: "simple" | "pos" | null = simple !== null ? "simple" : parsed !== null ? "pos" : null;
+        if (parsed === null) {
+          setParseError(
+            'Unrecognised file — expected either "date,dish,qty,revenue" columns, or a POS export with ' +
+              '"Datum/Uhrzeit;ArtikelID;Artikelbezeichnung;Menge;Gesamt" columns.'
+          );
+          setRows([]);
+          setSourceFormat(null);
+          return;
+        }
+        setSourceFormat(format);
+        setRows(parsed);
+        if (parsed.length === 0) {
+          setParseError(
+            format === "pos"
+              ? "No valid sales lines found in this POS export."
+              : "No valid rows found — check the date/dish/qty/revenue columns."
+          );
+        } else {
+          setShowImportModal(true);
+        }
+      })
+      .catch(() => {
+        setParseError("Could not read this file.");
         setRows([]);
-        return;
-      }
-      const header = table[0].map((h) => h.trim().toLowerCase());
-      const dateIdx = header.indexOf("date");
-      const dishIdx = header.indexOf("dish");
-      const qtyIdx = header.indexOf("qty");
-      const revIdx = header.indexOf("revenue");
-      const coversIdx = header.indexOf("covers");
-      if (dateIdx === -1 || dishIdx === -1 || qtyIdx === -1 || revIdx === -1) {
-        setParseError(`Expected columns "date,dish,qty,revenue" in the first row — found: ${table[0].join(", ")}`);
-        setRows([]);
-        return;
-      }
-      const parsed: ParsedRow[] = [];
-      for (const r of table.slice(1)) {
-        const date = (r[dateIdx] || "").trim();
-        const dishRaw = (r[dishIdx] || "").trim();
-        const qtyNum = Number((r[qtyIdx] || "").trim());
-        if (!date || !dishRaw || !Number.isFinite(qtyNum) || qtyNum <= 0) continue;
-        const coversRaw = coversIdx > -1 ? (r[coversIdx] || "").trim() : "";
-        const coversNum = coversRaw ? Math.round(Number(coversRaw)) : NaN;
-        parsed.push({
-          date,
-          dishRaw,
-          qty: Math.round(qtyNum),
-          revenue: parseMoney(r[revIdx] || "0"),
-          covers: Number.isFinite(coversNum) && coversNum > 0 ? coversNum : null,
-          matchedRecipeId: matchRecipe(dishRaw),
-          skip: false,
-        });
-      }
-      setRows(parsed);
-      if (parsed.length === 0) {
-        setParseError("No valid rows found — check the date/dish/qty/revenue columns.");
-      } else {
-        setShowImportModal(true);
-      }
-    };
-    reader.readAsText(file);
+        setSourceFormat(null);
+      });
   }
 
   function handleFileInput(e: React.ChangeEvent<HTMLInputElement>) {
@@ -200,6 +350,8 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
     setParseError(null);
     setImportError(null);
     setResult(null);
+    setSourceFormat(null);
+    setRawLineCount(0);
   }
 
   function updateRow(i: number, patch: Partial<ParsedRow>) {
@@ -290,11 +442,20 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
               <span className="info-tooltip">
                 ⇪ Import sales
                 <span className="info-tooltip-body">
-                  <b>CSV file</b> — header row required: <code>date,dish,qty,revenue</code>, e.g. "2026-08-15,
+                  Two file types accepted — detected automatically from the header row.
+                  <br />
+                  <br />
+                  <b>Simple CSV</b> — header <code>date,dish,qty,revenue</code>, e.g. "2026-08-15,
                   Cheeseburger,12,144.00". Dates as YYYY-MM-DD. "dish" must match a recipe name (not case-sensitive)
                   — anything that doesn't match can be matched by hand after upload. An optional{" "}
                   <code>covers</code> column (diners served that day) feeds the Overview tab's per-cover numbers —
                   same value on every row for that date.
+                  <br />
+                  <br />
+                  <b>Raw POS export</b> — the till's own semicolon-separated report (columns include{" "}
+                  <code>Datum/Uhrzeit</code>, <code>ArtikelID</code>, <code>Artikelbezeichnung</code>,{" "}
+                  <code>Menge</code>, <code>Gesamt</code>). Its many rows per sale are added up automatically into
+                  one line per dish per day. Matches by the recipe's POS ID first, then by name.
                 </span>
               </span>
             </div>
@@ -355,7 +516,13 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
               <>
                 {fileName && (
                   <div className="im-note">
-                    ✓ <b>{rows.length} rows</b> read from {fileName}.
+                    ✓{" "}
+                    <b>
+                      {rows.length} {sourceFormat === "pos" ? "dishes" : "rows"}
+                    </b>{" "}
+                    {sourceFormat === "pos"
+                      ? `added up from ${rawLineCount} transaction line${rawLineCount === 1 ? "" : "s"} in ${fileName}.`
+                      : `read from ${fileName}.`}
                     {unmatchedCount > 0 && ` ${unmatchedCount} need matching below before they can be imported.`}
                   </div>
                 )}
