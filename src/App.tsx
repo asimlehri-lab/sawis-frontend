@@ -2212,12 +2212,16 @@ export default function App() {
                                   style={{ width: 150 }}
                                 >
                                   <option value="">Pick an item…</option>
+                                  {/* Kept right at the top, not the bottom -- with a long
+                                      item list the user would otherwise have to scroll past
+                                      everything just to reach the one option that doesn't
+                                      require scrolling to find a match at all. */}
+                                  <option value="__new__">+ Add new item…</option>
                                   {(items ?? []).map((it) => (
                                     <option key={it.id} value={it.id}>
                                       {it.name}
                                     </option>
                                   ))}
-                                  <option value="__new__">+ Add new item…</option>
                                 </select>
                                 {scanNewItemRow === i && (
                                   <div className="scan-new-item">
