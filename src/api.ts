@@ -295,6 +295,11 @@ export interface BulkRecipeInput {
   // RecipeViewSet.bulk_import's upsert docstring.
   pos_id?: string;
   menu_category?: string;
+  // Optional, same "only applied when provided" treatment as pos_id/
+  // menu_category — omit it and an existing recipe's menu_group is left
+  // alone. Only the "Import menu list" modal sends this (a Food/Drink
+  // picker per row); the Advanced CSV template has no equivalent column.
+  menu_group?: "food" | "drink";
   lines: BulkRecipeLineInput[];
 }
 

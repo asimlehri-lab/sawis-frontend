@@ -22,6 +22,14 @@ interface DraftLine {
 
 interface RowState extends ParsedMenuRow {
   kind: "dish" | "sub";
+  // Only meaningful when kind === "dish" (same as RecipeDetail.tsx's own
+  // "Food or drink?" field) -- drives which yield unit a brand-new
+  // recipe defaults to (see handleImport below) and End of day's
+  // Champions Food/Drink split. Defaults to whatever an already-matched
+  // recipe already has, so re-importing a menu list doesn't flip a
+  // drink back to Food; a genuinely new recipe defaults to Food, same
+  // as the model's own default.
+  menuGroup: "food" | "drink";
   lines: DraftLine[];
   pendingItemId: string;
   pendingQty: string;
@@ -55,8 +63,33 @@ export default function MenuListImportModal({
   onItemsChanged,
   onRecipesChanged,
 }: Props) {
+  // Built once, up front, so both the lazy rowsState initializer below
+  // (which needs to know each row's already-matched recipe before the
+  // first render) and matchFor (used on every render, for the "will
+  // create"/"will update" badge) share the same lookup instead of
+  // duplicating the match logic in two places.
+  const recipesByPosId = new Map(recipes.filter((r) => r.pos_id).map((r) => [r.pos_id, r]));
+  const recipesByName = new Map(recipes.map((r) => [r.name.trim().toLowerCase(), r]));
+  function findMatch(posId: string, name: string): Recipe | undefined {
+    if (posId && recipesByPosId.has(posId)) return recipesByPosId.get(posId);
+    return recipesByName.get(name.trim().toLowerCase());
+  }
+
   const [rowsState, setRowsState] = useState<RowState[]>(() =>
-    rows.map((r) => ({ ...r, kind: "dish", lines: [], pendingItemId: "", pendingQty: "" }))
+    rows.map((r) => {
+      const existing = findMatch(r.posId, r.recipeName);
+      return {
+        ...r,
+        kind: "dish",
+        // Pick up an already-matched recipe's current Food/Drink so
+        // re-importing the same menu list doesn't reset a drink back to
+        // Food — only a genuinely new recipe defaults to Food.
+        menuGroup: existing?.menu_group ?? "food",
+        lines: [],
+        pendingItemId: "",
+        pendingQty: "",
+      };
+    })
   );
   // Items created inline (via "+ Add new item…" below) need to show up
   // in every row's picker immediately, and `items` itself is a prop --
@@ -80,11 +113,8 @@ export default function MenuListImportModal({
     holdingsBackfilled: number;
   } | null>(null);
 
-  const recipesByPosId = new Map(recipes.filter((r) => r.pos_id).map((r) => [r.pos_id, r]));
-  const recipesByName = new Map(recipes.map((r) => [r.name.trim().toLowerCase(), r]));
   function matchFor(row: RowState): Recipe | undefined {
-    if (row.posId && recipesByPosId.has(row.posId)) return recipesByPosId.get(row.posId);
-    return recipesByName.get(row.recipeName.trim().toLowerCase());
+    return findMatch(row.posId, row.recipeName);
   }
 
   function updateRow(i: number, patch: Partial<RowState>) {
@@ -141,16 +171,29 @@ export default function MenuListImportModal({
     setImporting(true);
     setImportError(null);
     try {
-      const payload: BulkRecipeInput[] = rowsState.map((r) => ({
-        name: r.recipeName,
-        kind: r.kind,
-        yield_qty: "1",
-        yield_unit: "plate",
-        menu_price: r.kind === "dish" && r.menuPrice ? r.menuPrice : null,
-        pos_id: r.posId || undefined,
-        menu_category: r.menuCategory || undefined,
-        lines: r.lines.map((l) => ({ item_id: l.itemId, item_name: l.itemName, qty: l.qty, unit: l.unit })),
-      }));
+      const payload: BulkRecipeInput[] = rowsState.map((r) => {
+        // A row that already matches an existing recipe (see matchFor)
+        // shouldn't reset its yield_qty/yield_unit to a generic "1
+        // plate" default on every re-import — someone may have already
+        // corrected either on the recipe's own page. Sending "" makes
+        // the backend leave both alone (see RecipeViewSet.bulk_import's
+        // "only applied when provided" pattern). Only a genuinely new
+        // recipe gets a real default: Food -> plate, Drink -> glass,
+        // per the user's own preferred default.
+        const isNew = !matchFor(r);
+        const yieldUnit = r.kind === "dish" && r.menuGroup === "drink" ? "glass" : "plate";
+        return {
+          name: r.recipeName,
+          kind: r.kind,
+          yield_qty: isNew ? "1" : "",
+          yield_unit: isNew ? yieldUnit : "",
+          menu_price: r.kind === "dish" && r.menuPrice ? r.menuPrice : null,
+          pos_id: r.posId || undefined,
+          menu_category: r.menuCategory || undefined,
+          menu_group: r.kind === "dish" ? r.menuGroup : undefined,
+          lines: r.lines.map((l) => ({ item_id: l.itemId, item_name: l.itemName, qty: l.qty, unit: l.unit })),
+        };
+      });
       const res = await bulkImportRecipes(accessToken, location, payload);
       setResult({
         created: res.created,
@@ -176,10 +219,11 @@ export default function MenuListImportModal({
           <>
             <p className="hint" style={{ marginTop: -8, marginBottom: 12 }}>
               <b>{rowsState.length} recipe{rowsState.length === 1 ? "" : "s"}</b> read from {fileName}. For each
-              one, pick the items that go into it below — qty and unit come from the item itself, so there's
-              nothing to type but a name and a quantity. Leave a recipe's ingredients empty and it still imports
-              (name, POS ID, category, price) — you can always add its ingredients later from the recipe's own
-              page in Recipes.
+              one, mark it Food or Drink, then pick the items that go into it below — qty and unit come from the
+              item itself, so there's nothing to type but a name and a quantity. A new dish defaults to
+              plate-sized (or glass-sized, for a drink) — change the exact serving unit any time from the
+              recipe's own page in Recipes. Leave a recipe's ingredients empty and it still imports (name, POS
+              ID, category, price) — you can always add its ingredients later too.
             </p>
             {importError && <p className="error">{importError}</p>}
             {!location && <p className="error">Pick a location above before importing.</p>}
@@ -203,6 +247,17 @@ export default function MenuListImportModal({
                         <option value="dish">Dish</option>
                         <option value="sub">Sub-recipe</option>
                       </select>
+                      {row.kind === "dish" && (
+                        <select
+                          value={row.menuGroup}
+                          onChange={(e) => updateRow(i, { menuGroup: e.target.value as "food" | "drink" })}
+                          style={{ width: 78 }}
+                          title="Food or drink? Drives the Champions Food/Drink split in End of day, and a new recipe's default serving unit (plate vs glass)."
+                        >
+                          <option value="food">Food</option>
+                          <option value="drink">Drink</option>
+                        </select>
+                      )}
                       {row.kind === "dish" && (
                         <input
                           value={row.menuPrice}
