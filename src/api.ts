@@ -299,7 +299,15 @@ export interface BulkRecipeInput {
 }
 
 export interface BulkRecipeImportResult {
-  recipes: Recipe[];
+  // NOTE: the backend deliberately does NOT return the full created/
+  // updated Recipe objects here (no `recipes` field) — for a large
+  // import (200+ dishes from a real POS menu export), serializing every
+  // recipe with its nested lines and cost fields was slow enough to
+  // blow past the request timeout even though the import itself had
+  // already committed. Neither caller of bulkImportRecipes reads a
+  // `recipes` field, so it was dropped rather than optimized — see
+  // RecipeViewSet.bulk_import's docstring on the backend for the full
+  // story.
   created: number;
   updated: number;
   items_created: string[];
