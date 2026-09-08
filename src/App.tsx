@@ -367,6 +367,13 @@ export default function App() {
   const [scanSupplierId, setScanSupplierId] = useState("");
   const [scanLocationId, setScanLocationId] = useState("");
   const [scanRows, setScanRows] = useState<ScanRow[]>([]);
+  // Editable, pre-filled from Textract's own INVOICE_RECEIPT_ID read (see
+  // scanReceipt's response) -- shown as a real input in the review modal
+  // rather than just a line of static text, since a misread digit or two
+  // is common and the user should be able to fix it before confirming,
+  // same "detect, then let the user confirm" pattern as the item/supplier
+  // matches on this same modal.
+  const [scanInvoiceNumberInput, setScanInvoiceNumberInput] = useState("");
   const [creatingPOFromScan, setCreatingPOFromScan] = useState(false);
   const [scanCreateError, setScanCreateError] = useState<string | null>(null);
   // Set once the PO + lines are actually created, before the "mark as
@@ -853,6 +860,7 @@ export default function App() {
     setScanSupplierId("");
     setScanLocationId("");
     setScanRows([]);
+    setScanInvoiceNumberInput("");
     setScanCreateError(null);
     setScanShowNewSupplier(false);
     setScanNewSupplierName("");
@@ -929,6 +937,7 @@ export default function App() {
     try {
       const result = await scanReceipt(accessToken, file);
       setScanResult(result);
+      setScanInvoiceNumberInput(result.invoice_number ?? "");
 
       // Best-guess supplier: fuzzy-match the OCR'd vendor name against
       // suppliers already on file. Left blank (forcing a manual pick)
@@ -1054,8 +1063,8 @@ export default function App() {
         }
         setScanCreatedPO(scanMatchedPO);
         setScanPendingOverrides(overrides);
-        setScanPendingInvoiceNumber(scanResult?.invoice_number ?? null);
-        await markScannedPOReceived(scanMatchedPO, overrides, scanResult?.invoice_number);
+        setScanPendingInvoiceNumber(scanInvoiceNumberInput.trim() || null);
+        await markScannedPOReceived(scanMatchedPO, overrides, scanInvoiceNumberInput.trim() || null);
         closeScanModal();
         loadPOs(accessToken);
         setSelectedPOId(scanMatchedPO.id);
@@ -1094,9 +1103,9 @@ export default function App() {
       // second, duplicate PO being created by retrying this function.
       setScanCreatedPO(created);
       setScanPendingOverrides([]);
-      setScanPendingInvoiceNumber(scanResult?.invoice_number ?? null);
+      setScanPendingInvoiceNumber(scanInvoiceNumberInput.trim() || null);
 
-      await markScannedPOReceived(created, [], scanResult?.invoice_number);
+      await markScannedPOReceived(created, [], scanInvoiceNumberInput.trim() || null);
 
       closeScanModal();
       loadPOs(accessToken);
@@ -2041,7 +2050,6 @@ export default function App() {
                       }.`
                     : "No vendor name detected — pick the supplier below."}{" "}
                   {scanResult.total && `Receipt total: £${scanResult.total}.`}
-                  {scanResult.invoice_number && ` Supplier's invoice number: ${scanResult.invoice_number}.`}
                 </div>
 
                 {scanMatchedPO && (
@@ -2127,6 +2135,28 @@ export default function App() {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div className="field" style={{ marginBottom: 12 }}>
+                  <label>Supplier's invoice number</label>
+                  <input
+                    value={scanInvoiceNumberInput}
+                    onChange={(e) => setScanInvoiceNumberInput(e.target.value)}
+                    placeholder="optional"
+                  />
+                  {scanResult.invoice_number ? (
+                    <p className="hint" style={{ marginTop: 4 }}>
+                      Detected from the receipt
+                      {scanResult.invoice_number_confidence !== null
+                        ? ` (${scanResult.invoice_number_confidence.toFixed(0)}% confidence)`
+                        : ""}
+                      — check it's right before confirming.
+                    </p>
+                  ) : (
+                    <p className="hint" style={{ marginTop: 4 }}>
+                      Not detected on the receipt — add it by hand if you have it, or leave blank.
+                    </p>
+                  )}
                 </div>
 
                 {scanRows.length === 0 ? (
