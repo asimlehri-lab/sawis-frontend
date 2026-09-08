@@ -72,6 +72,40 @@ async function authedFetch(path: string, accessToken: string) {
   return res.json();
 }
 
+// Every list endpoint is paginated server-side (DRF PageNumberPagination,
+// PAGE_SIZE=50 -- see config/settings.py) -- a plain authedFetch() only
+// ever returns page 1, silently dropping anything past the 50th row. This
+// follows `next` until it runs out and returns every row. Found the hard
+// way: importing 201 recipes left only the first 50 visible anywhere in
+// the frontend (Recipes list, End of day's sales-import matcher, etc.),
+// since every fetchX() below used to read `.results` off a single-page
+// response directly.
+//
+// `next` is a DRF-built absolute URL (scheme+host+path+query) -- on Render,
+// without SECURE_PROXY_SSL_HEADER configured, Django can't tell the
+// original request came in over https and may build it as a plain http://
+// URL, which the browser silently blocks as mixed content from this
+// https:// app. Sidestepping that entirely: only the path+query is ever
+// taken from `next`, always refetched against our own known API_URL, never
+// whatever host/scheme the backend actually returned.
+async function authedFetchAllPages<T>(path: string, accessToken: string): Promise<T[]> {
+  const results: T[] = [];
+  let next: string | null = path;
+  while (next) {
+    const { pathname, search } = new URL(next, API_URL);
+    const res = await fetch(`${API_URL}${pathname}${search}`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) {
+      throw new Error(`Request failed (${res.status}) for ${pathname}`);
+    }
+    const data: Paginated<T> = await res.json();
+    results.push(...data.results);
+    next = data.next;
+  }
+  return results;
+}
+
 export async function login(email: string, password: string): Promise<TokenPair> {
   const res = await fetch(`${API_URL}/api/auth/token/`, {
     method: "POST",
@@ -108,8 +142,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<TokenPai
 }
 
 export async function fetchItems(accessToken: string): Promise<CatalogItem[]> {
-  const data: Paginated<CatalogItem> = await authedFetch("/api/catalog/items/", accessToken);
-  return data.results;
+  return authedFetchAllPages<CatalogItem>("/api/catalog/items/", accessToken);
 }
 
 export const BASE_UNITS = ["g", "kg", "ml", "L", "ea", "portion", "btl", "case", "dozen"];
@@ -245,8 +278,7 @@ export interface NewRecipeInput {
 }
 
 export async function fetchRecipes(accessToken: string): Promise<Recipe[]> {
-  const data: Paginated<Recipe> = await authedFetch("/api/catalog/recipes/", accessToken);
-  return data.results;
+  return authedFetchAllPages<Recipe>("/api/catalog/recipes/", accessToken);
 }
 
 export async function createRecipe(accessToken: string, input: NewRecipeInput): Promise<Recipe> {
@@ -422,8 +454,7 @@ export interface Category {
 }
 
 export async function fetchCategories(accessToken: string): Promise<Category[]> {
-  const data: Paginated<Category> = await authedFetch("/api/catalog/categories/", accessToken);
-  return data.results;
+  return authedFetchAllPages<Category>("/api/catalog/categories/", accessToken);
 }
 
 export interface NewCategoryInput {
@@ -466,8 +497,7 @@ export interface Location {
 }
 
 export async function fetchLocations(accessToken: string): Promise<Location[]> {
-  const data: Paginated<Location> = await authedFetch("/api/tenancy/locations/", accessToken);
-  return data.results;
+  return authedFetchAllPages<Location>("/api/tenancy/locations/", accessToken);
 }
 
 export async function updateLocation(
@@ -488,8 +518,7 @@ export async function updateLocation(
 }
 
 export async function fetchMemberships(accessToken: string): Promise<Membership[]> {
-  const data: Paginated<Membership> = await authedFetch("/api/tenancy/memberships/", accessToken);
-  return data.results;
+  return authedFetchAllPages<Membership>("/api/tenancy/memberships/", accessToken);
 }
 
 export interface NewMemberInput {
@@ -675,8 +704,7 @@ export interface Supplier {
 }
 
 export async function fetchSuppliers(accessToken: string): Promise<Supplier[]> {
-  const data: Paginated<Supplier> = await authedFetch("/api/catalog/suppliers/", accessToken);
-  return data.results;
+  return authedFetchAllPages<Supplier>("/api/catalog/suppliers/", accessToken);
 }
 
 export interface NewSupplierInput {
@@ -718,8 +746,7 @@ export interface SupplierItemRow {
 }
 
 export async function fetchSupplierItems(accessToken: string): Promise<SupplierItemRow[]> {
-  const data: Paginated<SupplierItemRow> = await authedFetch("/api/catalog/supplier-items/", accessToken);
-  return data.results;
+  return authedFetchAllPages<SupplierItemRow>("/api/catalog/supplier-items/", accessToken);
 }
 
 export interface NewSupplierItemInput {
@@ -805,8 +832,7 @@ export interface ItemSupplierRow {
 }
 
 export async function fetchItemSuppliers(accessToken: string): Promise<ItemSupplierRow[]> {
-  const data: Paginated<ItemSupplierRow> = await authedFetch("/api/catalog/item-suppliers/", accessToken);
-  return data.results;
+  return authedFetchAllPages<ItemSupplierRow>("/api/catalog/item-suppliers/", accessToken);
 }
 
 export interface NewItemSupplierInput {
@@ -893,8 +919,7 @@ export interface PurchaseOrder {
 }
 
 export async function fetchPurchaseOrders(accessToken: string): Promise<PurchaseOrder[]> {
-  const data: Paginated<PurchaseOrder> = await authedFetch("/api/procurement/purchase-orders/", accessToken);
-  return data.results;
+  return authedFetchAllPages<PurchaseOrder>("/api/procurement/purchase-orders/", accessToken);
 }
 
 export async function fetchPurchaseOrder(accessToken: string, id: string): Promise<PurchaseOrder> {
@@ -1106,8 +1131,7 @@ export interface WasteEventRow {
 }
 
 export async function fetchWasteEvents(accessToken: string): Promise<WasteEventRow[]> {
-  const data: Paginated<WasteEventRow> = await authedFetch("/api/ledger/waste-events/", accessToken);
-  return data.results;
+  return authedFetchAllPages<WasteEventRow>("/api/ledger/waste-events/", accessToken);
 }
 
 export interface NewWasteEventInput {
@@ -1377,8 +1401,7 @@ export interface StockMovementRow {
 }
 
 export async function fetchStockMovements(accessToken: string): Promise<StockMovementRow[]> {
-  const data: Paginated<StockMovementRow> = await authedFetch("/api/ledger/stock-movements/", accessToken);
-  return data.results;
+  return authedFetchAllPages<StockMovementRow>("/api/ledger/stock-movements/", accessToken);
 }
 
 export interface NewStockMovementInput {
@@ -1419,8 +1442,7 @@ export interface Section {
 }
 
 export async function fetchSections(accessToken: string): Promise<Section[]> {
-  const data: Paginated<Section> = await authedFetch("/api/catalog/sections/", accessToken);
-  return data.results;
+  return authedFetchAllPages<Section>("/api/catalog/sections/", accessToken);
 }
 
 export async function createSection(
@@ -1499,8 +1521,7 @@ export interface StockCountRow {
 }
 
 export async function fetchStockCounts(accessToken: string): Promise<StockCountRow[]> {
-  const data: Paginated<StockCountRow> = await authedFetch("/api/ledger/stock-counts/", accessToken);
-  return data.results;
+  return authedFetchAllPages<StockCountRow>("/api/ledger/stock-counts/", accessToken);
 }
 
 export async function createStockCount(accessToken: string, location: string): Promise<StockCountRow> {
