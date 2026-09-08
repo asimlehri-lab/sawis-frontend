@@ -3,6 +3,7 @@ import { fetchLastImportDate, importSales } from "./api";
 import type { CatalogItem, ItemSupplierRow, Location, Recipe } from "./api";
 import Reorder from "./Reorder";
 import EodReport from "./EodReport";
+import SearchSelect from "./SearchSelect";
 
 interface Props {
   accessToken: string;
@@ -548,18 +549,14 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
                               {dishRecipes.find((d) => d.id === r.matchedRecipeId)?.name}
                             </span>
                           ) : (
-                            <select
+                            <SearchSelect
                               value=""
-                              onChange={(e) => updateRow(i, { matchedRecipeId: e.target.value || null })}
+                              onChange={(val) => updateRow(i, { matchedRecipeId: val || null })}
                               disabled={r.skip}
-                            >
-                              <option value="">Pick a recipe…</option>
-                              {dishRecipes.map((d) => (
-                                <option key={d.id} value={d.id}>
-                                  {d.name}
-                                </option>
-                              ))}
-                            </select>
+                              placeholder="Pick a recipe…"
+                              aria-label="Matched recipe"
+                              options={dishRecipes.map((d) => ({ value: d.id, label: d.name }))}
+                            />
                           )}
                         </td>
                         <td className="num">{r.qty}</td>

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createStockMovement, createWasteEvent } from "./api";
 import type { CatalogItem, ItemSupplierRow, Location, StockMovementRow, WasteEventRow } from "./api";
+import SearchSelect from "./SearchSelect";
 
 interface Props {
   accessToken: string;
@@ -220,14 +221,13 @@ export default function WasteLog({
           <div className="fgrid">
             <div className="field">
               <label>Item</label>
-              <select value={selectedItem} onChange={(e) => handleItemChange(e.target.value)} required>
-                <option value="">Select an item…</option>
-                {activeItems.map((it) => (
-                  <option key={it.id} value={it.id}>
-                    {it.name}
-                  </option>
-                ))}
-              </select>
+              <SearchSelect
+                value={selectedItem}
+                onChange={handleItemChange}
+                placeholder="Select an item…"
+                aria-label="Item"
+                options={activeItems.map((it) => ({ value: it.id, label: it.name }))}
+              />
               {selectedItem && (
                 <div className="waste-cost-hint">
                   {unitCost !== null ? `£${unitCost.toFixed(2)} / ${selectedItemObj?.base_unit}` : "No supplier price recorded"}

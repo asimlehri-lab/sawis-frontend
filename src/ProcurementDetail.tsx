@@ -10,6 +10,7 @@ import {
   fetchOnHand,
 } from "./api";
 import type { PurchaseOrder, CatalogItem, Supplier, ItemSupplierRow } from "./api";
+import SearchSelect from "./SearchSelect";
 
 interface Props {
   poId: string;
@@ -650,13 +651,12 @@ export default function ProcurementDetail({
             <div className="fgrid fgrid-2">
               <div className="field">
                 <label>Item</label>
-                <select value={addItemId} onChange={(e) => setAddItemId(e.target.value)}>
-                  {items.map((it) => (
-                    <option key={it.id} value={it.id}>
-                      {it.name} ({it.base_unit})
-                    </option>
-                  ))}
-                </select>
+                <SearchSelect
+                  value={addItemId}
+                  onChange={setAddItemId}
+                  aria-label="Item"
+                  options={items.map((it) => ({ value: it.id, label: `${it.name} (${it.base_unit})` }))}
+                />
               </div>
               <div className="field">
                 <label>Department</label>

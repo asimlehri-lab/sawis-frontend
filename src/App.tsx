@@ -58,6 +58,7 @@ import Team from "./Team";
 import EndOfDay from "./EndOfDay";
 import Settings from "./Settings";
 import Reports from "./Reports";
+import SearchSelect from "./SearchSelect";
 import "./App.css";
 
 const NAV_ITEMS = [
@@ -2192,10 +2193,19 @@ export default function App() {
                                 {row.description}
                               </td>
                               <td>
-                                <select
+                                <SearchSelect
                                   value={row.matchedItemId}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
+                                  placeholder="Pick an item…"
+                                  aria-label="Matched item"
+                                  disabled={row.skip}
+                                  style={{ width: 150 }}
+                                  // Pinned above the (filtered) list regardless of what's
+                                  // typed -- with a long item list the user would otherwise
+                                  // have to search past everything just to reach the one
+                                  // option that doesn't require finding a match at all.
+                                  pinnedOptions={[{ value: "__new__", label: "+ Add new item…" }]}
+                                  options={(items ?? []).map((it) => ({ value: it.id, label: it.name }))}
+                                  onChange={(val) => {
                                     if (val === "__new__") {
                                       // No confident match on the receipt line -- offer to
                                       // create the Item right here instead of sending the
@@ -2208,21 +2218,7 @@ export default function App() {
                                       updateScanRow(i, { matchedItemId: val });
                                     }
                                   }}
-                                  disabled={row.skip}
-                                  style={{ width: 150 }}
-                                >
-                                  <option value="">Pick an item…</option>
-                                  {/* Kept right at the top, not the bottom -- with a long
-                                      item list the user would otherwise have to scroll past
-                                      everything just to reach the one option that doesn't
-                                      require scrolling to find a match at all. */}
-                                  <option value="__new__">+ Add new item…</option>
-                                  {(items ?? []).map((it) => (
-                                    <option key={it.id} value={it.id}>
-                                      {it.name}
-                                    </option>
-                                  ))}
-                                </select>
+                                />
                                 {scanNewItemRow === i && (
                                   <div className="scan-new-item">
                                     <input

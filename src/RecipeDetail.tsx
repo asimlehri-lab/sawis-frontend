@@ -7,6 +7,7 @@ import {
   YIELD_UNITS,
 } from "./api";
 import type { Recipe, CatalogItem } from "./api";
+import SearchSelect from "./SearchSelect";
 
 const TARGET_FC = 30;
 
@@ -229,13 +230,12 @@ export default function RecipeDetail({
             <div className="add-col">
               <div className="add-lbl">Add an inventory item</div>
               <div className="addrow">
-                <select value={addItemId} onChange={(e) => setAddItemId(e.target.value)}>
-                  {items.map((it) => (
-                    <option key={it.id} value={it.id}>
-                      {it.name} ({it.base_unit})
-                    </option>
-                  ))}
-                </select>
+                <SearchSelect
+                  value={addItemId}
+                  onChange={setAddItemId}
+                  aria-label="Add an inventory item"
+                  options={items.map((it) => ({ value: it.id, label: `${it.name} (${it.base_unit})` }))}
+                />
                 <div className="addrow-bottom">
                   <input
                     type="number"
@@ -257,13 +257,16 @@ export default function RecipeDetail({
               </div>
               {subRecipeChoices.length > 0 ? (
                 <div className="addrow">
-                  <select value={addSubId} onChange={(e) => setAddSubId(e.target.value)}>
-                    {subRecipeChoices.map((r) => (
-                      <option key={r.id} value={r.id}>
-                        {r.name} — £{r.per_portion_cost.toFixed(2)}/{r.yield_unit}
-                      </option>
-                    ))}
-                  </select>
+                  <SearchSelect
+                    value={addSubId}
+                    onChange={setAddSubId}
+                    aria-label="Add a sub-recipe"
+                    options={subRecipeChoices.map((r) => ({
+                      value: r.id,
+                      label: r.name,
+                      sublabel: `£${r.per_portion_cost.toFixed(2)}/${r.yield_unit}`,
+                    }))}
+                  />
                   <div className="addrow-bottom">
                     <input
                       type="number"

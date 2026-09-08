@@ -680,7 +680,7 @@ nav {
 .add-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 8px; }
 .add-lbl.violet { color: #6A2FE0; }
 .add-col .addrow { margin-top: 0; display: flex; flex-direction: column; gap: 8px; }
-.add-col .addrow select { width: 100%; min-width: 0; font-family: inherit; font-size: 13px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--surface); color: var(--ink); }
+.add-col .addrow select, .add-col .addrow .search-select-toggle { width: 100%; min-width: 0; font-family: inherit; font-size: 13px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--surface); color: var(--ink); }
 .addrow-bottom { display: flex; gap: 8px; }
 .addrow-bottom input { flex: 1; min-width: 0; font-family: var(--mono, monospace); font-size: 13px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--surface); text-align: right; }
 .add-btn { flex: none; background: var(--brand-soft); color: var(--brand); border: none; border-radius: 8px; padding: 8px 14px; font-weight: 600; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
@@ -747,6 +747,76 @@ select:focus {
   outline: 2px solid var(--brand);
   outline-offset: 1px;
 }
+
+/* SearchSelect — a searchable dropdown that visually matches a plain
+   <select> when closed, but opens onto a text filter for long lists
+   (200+ items/recipes) instead of a plain scroll. Reused across every
+   item/recipe picker in the app -- see SearchSelect.tsx. */
+.search-select { position: relative; width: 100%; }
+.search-select-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background-color: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+.search-select-toggle:focus {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+.search-select.disabled .search-select-toggle { opacity: 0.55; cursor: not-allowed; }
+.search-select-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-select-placeholder { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-select-caret { color: var(--muted); font-size: 11px; flex-shrink: 0; }
+/* Positioning (position/top/left/width) is set inline per-instance -- see
+   SearchSelect.tsx's updatePanelPos -- since this panel is portaled to
+   document.body and anchored to the toggle button's live screen position,
+   not laid out as a normal child of .search-select. */
+.search-select-panel {
+  z-index: 1000;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(33, 31, 27, 0.14);
+  overflow: hidden;
+}
+.search-select-input {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  font-family: inherit;
+  font-size: 13.5px;
+  padding: 10px 12px;
+  background: var(--bg);
+  color: var(--ink);
+}
+.search-select-input:focus { outline: none; }
+.search-select-list { max-height: 240px; overflow-y: auto; }
+.search-select-option {
+  padding: 8px 12px;
+  font-size: 13.5px;
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.search-select-option.highlighted { background: var(--brand-soft); }
+.search-select-option.selected { font-weight: 600; }
+.search-select-option.pinned { color: var(--brand); font-weight: 600; border-bottom: 1px solid var(--border); }
+.search-select-sub { color: var(--muted); font-size: 11.5px; flex-shrink: 0; }
+.search-select-empty { padding: 10px 12px; font-size: 13px; color: var(--muted); }
 
 .btn-primary {
   box-shadow: 0 1px 3px rgba(46, 84, 232, 0.3);

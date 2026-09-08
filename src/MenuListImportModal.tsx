@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { BASE_UNITS, bulkImportRecipes, createItem } from "./api";
 import type { BulkRecipeInput, CatalogItem, Recipe } from "./api";
+import SearchSelect from "./SearchSelect";
 
 // One recipe as read off the customer's menu-list file (name/POS ID/
 // category/price only -- see parseMenuListFile in Settings.tsx). No
@@ -339,10 +340,16 @@ export default function MenuListImportModal({
                         )}
 
                         <div className="addrow mli-addrow">
-                          <select
+                          <SearchSelect
                             value={row.pendingItemId}
-                            onChange={(e) => {
-                              const val = e.target.value;
+                            placeholder="Add an ingredient…"
+                            aria-label="Add an ingredient"
+                            pinnedOptions={[{ value: "__new__", label: "+ Add new item…" }]}
+                            options={localItems.map((it) => ({
+                              value: it.id,
+                              label: `${it.name} (${it.base_unit})`,
+                            }))}
+                            onChange={(val) => {
                               if (val === "__new__") {
                                 setNewItemForRow(i);
                                 setNewItemName("");
@@ -352,15 +359,7 @@ export default function MenuListImportModal({
                                 updateRow(i, { pendingItemId: val });
                               }
                             }}
-                          >
-                            <option value="">Add an ingredient…</option>
-                            <option value="__new__">+ Add new item…</option>
-                            {localItems.map((it) => (
-                              <option key={it.id} value={it.id}>
-                                {it.name} ({it.base_unit})
-                              </option>
-                            ))}
-                          </select>
+                          />
                           <div className="addrow-bottom">
                             <input
                               type="number"

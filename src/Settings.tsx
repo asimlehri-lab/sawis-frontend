@@ -4,6 +4,7 @@ import { bulkImportItems, bulkImportRecipes, updateLocation, BASE_UNITS } from "
 import type { CatalogItem, Location, Recipe } from "./api";
 import MenuListImportModal from "./MenuListImportModal";
 import type { ParsedMenuRow } from "./MenuListImportModal";
+import SearchSelect from "./SearchSelect";
 
 interface Props {
   accessToken: string;
@@ -924,14 +925,14 @@ function RecipesImportPanel({
                           <span className="badge b-low" style={{ marginRight: 6 }}>
                             Will create new item
                           </span>
-                          <select value="" onChange={(e) => updateRow(i, { matchedItemId: e.target.value || null })}>
-                            <option value="">— or match existing —</option>
-                            {items.map((it) => (
-                              <option key={it.id} value={it.id}>
-                                {it.name}
-                              </option>
-                            ))}
-                          </select>
+                          <SearchSelect
+                            value=""
+                            onChange={(val) => updateRow(i, { matchedItemId: val || null })}
+                            placeholder="— or match existing —"
+                            aria-label="Match existing item"
+                            style={{ width: 200 }}
+                            options={items.map((it) => ({ value: it.id, label: it.name }))}
+                          />
                         </>
                       )}
                     </td>
