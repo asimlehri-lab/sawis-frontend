@@ -288,11 +288,20 @@ export interface BulkRecipeInput {
   yield_qty: string;
   yield_unit: string;
   menu_price?: string | null;
+  // POS ID and menu category, both optional — when `pos_id` matches an
+  // existing recipe (or, failing that, the name does, case-insensitive),
+  // the backend UPDATES that recipe instead of creating a duplicate, and
+  // replaces its ingredient lines with the ones in this row. See
+  // RecipeViewSet.bulk_import's upsert docstring.
+  pos_id?: string;
+  menu_category?: string;
   lines: BulkRecipeLineInput[];
 }
 
 export interface BulkRecipeImportResult {
   recipes: Recipe[];
+  created: number;
+  updated: number;
   items_created: string[];
   // Names of already-existing (matched) ingredient items that had no
   // ItemHolding at `location` yet and had one backfilled — same

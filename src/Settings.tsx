@@ -19,7 +19,10 @@ interface Props {
 // Shared by both import panels — a small hand-rolled CSV parser that
 // handles quoted fields with embedded commas, same approach as
 // EndOfDay.tsx (no library dependency for this simple a format).
-function parseCsv(text: string): string[][] {
+// `delimiter` defaults to "," but the Artikelliste-prefill path below
+// passes ";" — POS exports of that shape are semicolon-delimited
+// (German-locale Excel default), matching the sample the user provided.
+function parseCsv(text: string, delimiter = ","): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
@@ -39,7 +42,7 @@ function parseCsv(text: string): string[][] {
       }
     } else if (c === '"') {
       inQuotes = true;
-    } else if (c === ",") {
+    } else if (c === delimiter) {
       row.push(field);
       field = "";
     } else if (c === "\n" || c === "\r") {
@@ -61,6 +64,57 @@ function parseCsv(text: string): string[][] {
 
 function headerIndex(header: string[], name: string): number {
   return header.map((h) => h.trim().toLowerCase()).indexOf(name);
+}
+
+// Same header cell, several acceptable spellings — used where a column
+// name is more likely to vary (e.g. "pos_id" vs the bare "id" a POS
+// export like Artikelliste already uses).
+function headerIndexAny(header: string[], names: string[]): number {
+  for (const name of names) {
+    const idx = headerIndex(header, name);
+    if (idx > -1) return idx;
+  }
+  return -1;
+}
+
+// Triggers a real client-side file download of a CSV built from a header
+// + rows — same pattern as Reports.tsx's exportMenuCsv (no extra request
+// or library needed for this simple a format).
+function downloadCsv(filename: string, header: string[], rows: string[][]) {
+  const csv = [header, ...rows]
+    .map((row) => row.map((cell) => `"${(cell ?? "").replace(/"/g, '""')}"`).join(","))
+    .join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Same comma/dot decimal-separator heuristic as App.tsx's cleanNumeric —
+// duplicated locally rather than imported since it's not exported there
+// (mirrors this file's existing parseCsv/EndOfDay.tsx precedent of small
+// self-contained parsing helpers per file). Used for the Artikelliste
+// "Preis" column, which is German-locale comma-decimal.
+function cleanNumeric(raw: string | null): string {
+  if (!raw) return "";
+  let cleaned = raw.replace(/[^0-9.,]/g, "");
+  if (!cleaned) return "";
+  const commaCount = (cleaned.match(/,/g) || []).length;
+  const lastComma = cleaned.lastIndexOf(",");
+  const lastDot = cleaned.lastIndexOf(".");
+  if (lastComma > -1 && lastDot > -1) {
+    cleaned = lastComma > lastDot ? cleaned.replace(/\./g, "").replace(",", ".") : cleaned.replace(/,/g, "");
+  } else if (commaCount === 1 && cleaned.length - lastComma - 1 === 2) {
+    cleaned = cleaned.replace(",", ".");
+  } else {
+    cleaned = cleaned.replace(/,/g, "");
+  }
+  return cleaned;
 }
 
 export default function Settings({ accessToken, items, recipes, locations, onItemsChanged, onRecipesChanged }: Props) {
@@ -395,6 +449,8 @@ function ItemsImportPanel({
 
 interface RecipeRow {
   recipeName: string;
+  posId: string;
+  menuCategory: string;
   kind: "dish" | "sub";
   yield_qty: string;
   yield_unit: string;
@@ -427,7 +483,8 @@ function RecipesImportPanel({
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [result, setResult] = useState<{
-    recipes: number;
+    created: number;
+    updated: number;
     itemsCreated: string[];
     holdingsBackfilled: number;
   } | null>(null);
@@ -455,6 +512,8 @@ function RecipesImportPanel({
       }
       const header = table[0];
       const recIdx = headerIndex(header, "recipe");
+      const posIdIdx = headerIndexAny(header, ["pos_id", "id"]);
+      const catIdx = headerIndexAny(header, ["menu_category", "category", "gruppe"]);
       const kindIdx = headerIndex(header, "kind");
       const yqIdx = headerIndex(header, "yield_qty");
       const yuIdx = headerIndex(header, "yield_unit");
@@ -474,10 +533,20 @@ function RecipesImportPanel({
         const recipeName = (r[recIdx] || "").trim();
         const ingredientRaw = (r[ingIdx] || "").trim();
         const qty = (r[qtyIdx] || "").trim();
-        if (!recipeName || !ingredientRaw || !qty) continue;
+        if (!recipeName) continue;
+        // A recipe row is allowed to carry no ingredient at all (e.g. a
+        // row prefilled from an Artikelliste export — see
+        // handleArtikelliste below — that the customer hasn't gotten to
+        // yet, or a recipe whose metadata is just being updated): what's
+        // rejected is a HALF-filled ingredient (a name
+        // with no qty, or a qty with no name), which is more likely a
+        // typo than an intentional blank row.
+        if ((ingredientRaw && !qty) || (!ingredientRaw && qty)) continue;
         const kindRaw = (kindIdx > -1 ? r[kindIdx] : "").trim().toLowerCase();
         parsed.push({
           recipeName,
+          posId: (posIdIdx > -1 ? r[posIdIdx] : "").trim(),
+          menuCategory: (catIdx > -1 ? r[catIdx] : "").trim(),
           kind: kindRaw === "sub" ? "sub" : "dish",
           yield_qty: (yqIdx > -1 ? r[yqIdx] : "").trim() || "1",
           yield_unit: (yuIdx > -1 ? r[yuIdx] : "").trim() || "plate",
@@ -485,11 +554,88 @@ function RecipesImportPanel({
           ingredientRaw,
           qty,
           unit: (unitIdx > -1 ? r[unitIdx] : "").trim(),
-          matchedItemId: matchItem(ingredientRaw),
+          matchedItemId: ingredientRaw ? matchItem(ingredientRaw) : null,
         });
       }
       setRows(parsed);
       if (parsed.length === 0) setParseError("No valid rows found — check the recipe/ingredient/qty columns.");
+    };
+    reader.readAsText(file);
+  }
+
+  // "Start from your Artikelliste export" — reads the customer's existing
+  // POS menu export (semicolon-delimited, header GRUPPE;ID;Artikel;
+  // Zusatz;Allergene;Preis, category names appearing as bare rows with
+  // only GRUPPE populated, applying to every item row until the next
+  // bare row) and turns it straight into a downloadable copy of THIS
+  // panel's own template — recipe/pos_id/menu_category/menu_price
+  // already filled in from what the POS already knows, ingredient/qty/
+  // unit left blank for the customer to fill in per dish before
+  // re-uploading it above. This is the "modify Artikelliste to add what
+  // we need on top" path the user asked for, rather than a second,
+  // separate import mechanism.
+  const [artikelError, setArtikelError] = useState<string | null>(null);
+
+  function handleArtikelliste(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setArtikelError(null);
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result || "");
+      // Sniff the delimiter rather than assuming — a customer may have
+      // re-saved the export in a comma locale.
+      const delimiter = text.split("\n")[0].includes(";") ? ";" : ",";
+      const table = parseCsv(text, delimiter);
+      if (table.length < 2) {
+        setArtikelError("No rows found after the header.");
+        return;
+      }
+      const header = table[0];
+      const grpIdx = headerIndex(header, "gruppe");
+      const idIdx = headerIndex(header, "id");
+      const artIdx = headerIndex(header, "artikel");
+      const preisIdx = headerIndex(header, "preis");
+      if (grpIdx === -1 || artIdx === -1) {
+        setArtikelError(
+          `Doesn't look like an Artikelliste export — expected "GRUPPE" and "Artikel" columns, found: ${header.join(", ")}`
+        );
+        return;
+      }
+      const templateRows: string[][] = [];
+      let currentGroup = "";
+      for (const r of table.slice(1)) {
+        const group = (r[grpIdx] || "").trim();
+        const dish = (artIdx > -1 ? r[artIdx] : "").trim();
+        if (group && !dish) {
+          // A bare category row — no dish on it, just a new heading to
+          // apply to the item rows that follow.
+          currentGroup = group;
+          continue;
+        }
+        if (!dish) continue;
+        templateRows.push([
+          dish,
+          idIdx > -1 ? (r[idIdx] || "").trim() : "",
+          group || currentGroup,
+          "dish",
+          "1",
+          "plate",
+          preisIdx > -1 ? cleanNumeric(r[preisIdx]) : "",
+          "",
+          "",
+          "",
+        ]);
+      }
+      if (templateRows.length === 0) {
+        setArtikelError("No dish rows found in that file.");
+        return;
+      }
+      downloadCsv(
+        "recipe-ingredients-template.csv",
+        ["recipe", "pos_id", "menu_category", "kind", "yield_qty", "yield_unit", "menu_price", "ingredient", "qty", "unit"],
+        templateRows
+      );
     };
     reader.readAsText(file);
   }
@@ -499,8 +645,12 @@ function RecipesImportPanel({
   }
 
   // First occurrence of each recipe name supplies the header fields
-  // (kind/yield/menu price); later rows for the same recipe are ingredient
-  // lines only, matching the "one row per ingredient" CSV shape.
+  // (kind/yield/menu price/pos_id/menu_category); later rows for the
+  // same recipe are ingredient lines only, matching the "one row per
+  // ingredient" CSV shape. Grouped by name (not pos_id) since that's
+  // what repeats down the CSV rows for a given recipe — pos_id is
+  // carried along on the group's first row and used below purely to
+  // decide create-vs-update against what's already in SAWIS.
   const recipeOrder: string[] = [];
   const grouped = new Map<string, RecipeRow[]>();
   for (const r of rows) {
@@ -512,9 +662,20 @@ function RecipesImportPanel({
     grouped.get(key)!.push(r);
   }
   const newItemNames = new Set(
-    rows.filter((r) => !r.matchedItemId).map((r) => r.ingredientRaw.trim().toLowerCase())
+    rows.filter((r) => !r.matchedItemId && r.ingredientRaw).map((r) => r.ingredientRaw.trim().toLowerCase())
   );
-  const existingRecipeNames = new Set(recipes.map((r) => r.name.trim().toLowerCase()));
+  const recipesByPosId = new Map(recipes.filter((r) => r.pos_id).map((r) => [r.pos_id, r]));
+  const recipesByName = new Map(recipes.map((r) => [r.name.trim().toLowerCase(), r]));
+
+  // What a group's first row will match against server-side (see
+  // RecipeViewSet.bulk_import's upsert: pos_id first, else name) — used
+  // to show "will update" vs "will create" before the user confirms,
+  // and how many of that recipe's existing ingredient lines will be
+  // replaced by this import.
+  function matchFor(first: RecipeRow): Recipe | undefined {
+    if (first.posId && recipesByPosId.has(first.posId)) return recipesByPosId.get(first.posId);
+    return recipesByName.get(first.recipeName.trim().toLowerCase());
+  }
 
   async function handleImport() {
     if (rows.length === 0 || !location) return;
@@ -530,17 +691,22 @@ function RecipesImportPanel({
           yield_qty: first.yield_qty,
           yield_unit: first.yield_unit,
           menu_price: first.kind === "dish" && first.menu_price ? first.menu_price : null,
-          lines: group.map((r) => ({
-            item_id: r.matchedItemId || undefined,
-            item_name: r.ingredientRaw,
-            qty: r.qty,
-            unit: r.unit,
-          })),
+          pos_id: first.posId || undefined,
+          menu_category: first.menuCategory || undefined,
+          lines: group
+            .filter((r) => r.ingredientRaw && r.qty)
+            .map((r) => ({
+              item_id: r.matchedItemId || undefined,
+              item_name: r.ingredientRaw,
+              qty: r.qty,
+              unit: r.unit,
+            })),
         };
       });
       const res = await bulkImportRecipes(accessToken, location, payload);
       setResult({
-        recipes: res.recipes.length,
+        created: res.created,
+        updated: res.updated,
         itemsCreated: res.items_created,
         holdingsBackfilled: res.holdings_backfilled.length,
       });
@@ -573,14 +739,54 @@ function RecipesImportPanel({
       )}
 
       <div className="field" style={{ marginBottom: 12 }}>
+        <label>Get a template</label>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <button
+            type="button"
+            className="btn-ghost small"
+            onClick={() =>
+              downloadCsv(
+                "recipe-ingredients-template.csv",
+                ["recipe", "pos_id", "menu_category", "kind", "yield_qty", "yield_unit", "menu_price", "ingredient", "qty", "unit"],
+                [
+                  ["Spaghetti Bolognese", "101", "Mains", "dish", "1", "plate", "14.50", "Spaghetti", "0.15", "kg"],
+                  ["", "", "", "", "", "", "", "Beef mince 5%", "0.12", "kg"],
+                  ["", "", "", "", "", "", "", "Tomato passata", "0.1", "l"],
+                ]
+              )
+            }
+          >
+            ⇩ Download blank template
+          </button>
+          <span className="muted" style={{ fontSize: 12 }}>or</span>
+          <label className="btn-ghost small" style={{ cursor: "pointer" }}>
+            ⇩ Prefill from your Artikelliste export
+            <input type="file" accept=".csv,text/csv" onChange={handleArtikelliste} style={{ display: "none" }} />
+          </label>
+        </div>
+        {artikelError && <p className="error" style={{ marginTop: 6 }}>{artikelError}</p>}
+        <div className="vhint">
+          The blank template has one example dish already filled in. The Artikelliste option reads your POS's{" "}
+          <code>GRUPPE;ID;Artikel;...;Preis</code> export and hands back the same template with{" "}
+          <code>recipe</code>/<code>pos_id</code>/<code>menu_category</code>/<code>menu_price</code> already filled
+          in from it — just add an ingredient row (or several) under each dish, then upload the result below.
+        </div>
+      </div>
+
+      <div className="field" style={{ marginBottom: 12 }}>
         <label>CSV file</label>
         <input type="file" accept=".csv,text/csv" onChange={handleFile} />
         <div className="vhint">
-          One row per ingredient. Header row: <code>recipe,kind,yield_qty,yield_unit,menu_price,ingredient,qty,unit</code>
-          . Repeat the recipe name on every ingredient row that belongs to it — only <code>recipe</code>,{" "}
-          <code>ingredient</code> and <code>qty</code> are required, the rest default sensibly. Any ingredient
-          that doesn't match an existing item will <b>create a new item automatically</b> (with a stock holding at
-          the location below, in the Kitchen department) — reviewed below before you confirm.
+          One row per ingredient. Header row:{" "}
+          <code>recipe,pos_id,menu_category,kind,yield_qty,yield_unit,menu_price,ingredient,qty,unit</code>. Repeat
+          the recipe name (and its <code>pos_id</code>/<code>menu_category</code>, though only the first row of
+          each recipe needs them) on every ingredient row that belongs to it — only <code>recipe</code>,{" "}
+          <code>ingredient</code> and <code>qty</code> are required, the rest default sensibly. A recipe whose{" "}
+          <code>pos_id</code> (or, failing that, name) already matches one in SAWIS gets <b>updated</b> — its
+          ingredient list is replaced by what's in this file — rather than creating a duplicate; anything new is{" "}
+          <b>created</b>. Any ingredient that doesn't match an existing item will <b>create a new item
+          automatically</b> (with a stock holding at the location below, in the Kitchen department) — reviewed below
+          before you confirm.
         </div>
       </div>
 
@@ -608,7 +814,8 @@ function RecipesImportPanel({
             <tbody>
               {rows.map((r, i) => {
                 const isFirstOfGroup = i === 0 || rows[i - 1].recipeName.trim().toLowerCase() !== r.recipeName.trim().toLowerCase();
-                const dup = isFirstOfGroup && existingRecipeNames.has(r.recipeName.trim().toLowerCase());
+                const match = isFirstOfGroup ? matchFor(r) : undefined;
+                const existingLineCount = match ? match.lines.filter((l) => l.line_type === "item").length : 0;
                 return (
                   <tr key={i}>
                     <td>
@@ -618,16 +825,29 @@ function RecipesImportPanel({
                           <div className="muted" style={{ fontSize: 11 }}>
                             {r.kind} · yields {r.yield_qty} {r.yield_unit}
                             {r.kind === "dish" && r.menu_price ? ` · £${r.menu_price}` : ""}
+                            {r.posId ? ` · POS ${r.posId}` : ""}
+                            {r.menuCategory ? ` · ${r.menuCategory}` : ""}
                           </div>
-                          {dup && <div className="error" style={{ fontSize: 11 }}>Recipe name already exists</div>}
+                          {match ? (
+                            <div className="badge b-low" style={{ marginTop: 3 }}>
+                              Will update — matched by {r.posId && match.pos_id === r.posId ? "POS ID" : "name"}
+                              {existingLineCount > 0 ? `, replaces ${existingLineCount} existing ingredient line${existingLineCount === 1 ? "" : "s"}` : ""}
+                            </div>
+                          ) : (
+                            <div className="badge b-ok" style={{ marginTop: 3 }}>
+                              Will create new recipe
+                            </div>
+                          )}
                         </>
                       ) : (
                         <span className="muted">↳</span>
                       )}
                     </td>
-                    <td>{r.ingredientRaw}</td>
+                    <td>{r.ingredientRaw || <span className="muted">— (no ingredients on this row)</span>}</td>
                     <td>
-                      {r.matchedItemId ? (
+                      {!r.ingredientRaw ? (
+                        <span className="muted">—</span>
+                      ) : r.matchedItemId ? (
                         <span className="badge b-ok">{items.find((it) => it.id === r.matchedItemId)?.name}</span>
                       ) : (
                         <>
@@ -645,7 +865,7 @@ function RecipesImportPanel({
                         </>
                       )}
                     </td>
-                    <td className="num">{r.qty}</td>
+                    <td className="num">{r.qty || "—"}</td>
                     <td className="muted">{r.unit || "—"}</td>
                   </tr>
                 );
@@ -664,7 +884,10 @@ function RecipesImportPanel({
 
       {result && (
         <div className="im-note" style={{ marginTop: 12 }}>
-          ✓ <b>{result.recipes} recipe{result.recipes === 1 ? "" : "s"}</b> imported.
+          ✓ {result.created > 0 && <><b>{result.created} recipe{result.created === 1 ? "" : "s"}</b> created</>}
+          {result.created > 0 && result.updated > 0 && " and "}
+          {result.updated > 0 && <><b>{result.updated} recipe{result.updated === 1 ? "" : "s"}</b> updated</>}
+          {result.created === 0 && result.updated === 0 && "Nothing imported"}.
           {result.itemsCreated.length > 0 &&
             ` ${result.itemsCreated.length} new item${result.itemsCreated.length === 1 ? "" : "s"} created: ${result.itemsCreated.join(", ")}.`}
           {result.holdingsBackfilled > 0 &&
