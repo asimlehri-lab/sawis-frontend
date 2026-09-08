@@ -1,6 +1,9 @@
 import { useState } from "react";
+import * as XLSX from "xlsx";
 import { bulkImportItems, bulkImportRecipes, updateLocation, BASE_UNITS } from "./api";
 import type { CatalogItem, Location, Recipe } from "./api";
+import MenuListImportModal from "./MenuListImportModal";
+import type { ParsedMenuRow } from "./MenuListImportModal";
 
 interface Props {
   accessToken: string;
@@ -19,7 +22,7 @@ interface Props {
 // Shared by both import panels — a small hand-rolled CSV parser that
 // handles quoted fields with embedded commas, same approach as
 // EndOfDay.tsx (no library dependency for this simple a format).
-// `delimiter` defaults to "," but the Artikelliste-prefill path below
+// `delimiter` defaults to "," but the menu-list-prefill path below
 // passes ";" — POS exports of that shape are semicolon-delimited
 // (German-locale Excel default), matching the sample the user provided.
 function parseCsv(text: string, delimiter = ","): string[][] {
@@ -68,7 +71,7 @@ function headerIndex(header: string[], name: string): number {
 
 // Same header cell, several acceptable spellings — used where a column
 // name is more likely to vary (e.g. "pos_id" vs the bare "id" a POS
-// export like Artikelliste already uses).
+// menu-list export already uses).
 function headerIndexAny(header: string[], names: string[]): number {
   for (const name of names) {
     const idx = headerIndex(header, name);
@@ -98,8 +101,8 @@ function downloadCsv(filename: string, header: string[], rows: string[][]) {
 // Same comma/dot decimal-separator heuristic as App.tsx's cleanNumeric —
 // duplicated locally rather than imported since it's not exported there
 // (mirrors this file's existing parseCsv/EndOfDay.tsx precedent of small
-// self-contained parsing helpers per file). Used for the Artikelliste
-// "Preis" column, which is German-locale comma-decimal.
+// self-contained parsing helpers per file). Used for menu-list exports'
+// "Preis"/price column, which is often German-locale comma-decimal.
 function cleanNumeric(raw: string | null): string {
   if (!raw) return "";
   let cleaned = raw.replace(/[^0-9.,]/g, "");
@@ -535,10 +538,10 @@ function RecipesImportPanel({
         const qty = (r[qtyIdx] || "").trim();
         if (!recipeName) continue;
         // A recipe row is allowed to carry no ingredient at all (e.g. a
-        // row prefilled from an Artikelliste export — see
-        // handleArtikelliste below — that the customer hasn't gotten to
-        // yet, or a recipe whose metadata is just being updated): what's
-        // rejected is a HALF-filled ingredient (a name
+        // row prefilled from a menu-list export — see
+        // handlePrefillFromMenuList below — that the customer hasn't
+        // gotten to yet, or a recipe whose metadata is just being
+        // updated): what's rejected is a HALF-filled ingredient (a name
         // with no qty, or a qty with no name), which is more likely a
         // typo than an intentional blank row.
         if ((ingredientRaw && !qty) || (!ingredientRaw && qty)) continue;
@@ -563,81 +566,113 @@ function RecipesImportPanel({
     reader.readAsText(file);
   }
 
-  // "Start from your Artikelliste export" — reads the customer's existing
-  // POS menu export (semicolon-delimited, header GRUPPE;ID;Artikel;
-  // Zusatz;Allergene;Preis, category names appearing as bare rows with
-  // only GRUPPE populated, applying to every item row until the next
-  // bare row) and turns it straight into a downloadable copy of THIS
-  // panel's own template — recipe/pos_id/menu_category/menu_price
-  // already filled in from what the POS already knows, ingredient/qty/
-  // unit left blank for the customer to fill in per dish before
-  // re-uploading it above. This is the "modify Artikelliste to add what
-  // we need on top" path the user asked for, rather than a second,
-  // separate import mechanism.
-  const [artikelError, setArtikelError] = useState<string | null>(null);
+  // "Import menu list" — reads the customer's existing POS menu export
+  // (any name/format — a generic recipe/name column, an optional
+  // id/pos_id column, an optional category/gruppe column, an optional
+  // price/preis column, in either CSV, semicolon-CSV, or Excel) and
+  // returns just the recipe metadata rows — never ingredients, since
+  // this kind of file never has ingredient data at all. Shared by the
+  // primary "Import menu list" flow below (which opens
+  // MenuListImportModal for in-app ingredient picking) and the
+  // "Prefill from your menu list" advanced option (which turns the same
+  // rows into a downloadable spreadsheet template instead).
+  //
+  // Handles the one real quirk this format tends to have: a POS export
+  // sometimes prints a category name as its own bare row (only the
+  // category column populated) rather than repeating it on every dish
+  // row -- that bare row's value is carried forward onto every following
+  // dish row until the next one.
+  async function parseMenuListFile(file: File): Promise<ParsedMenuRow[]> {
+    const isExcel = /\.xlsx?$/i.test(file.name);
+    let table: string[][];
+    if (isExcel) {
+      const buf = await file.arrayBuffer();
+      const workbook = XLSX.read(buf, { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const raw = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false });
+      table = raw.map((row) => row.map((c) => (c === undefined || c === null ? "" : String(c))));
+    } else {
+      const text = await file.text();
+      // Sniff the delimiter rather than assuming — a semicolon-delimited
+      // POS export is common (German-locale Excel default), but a
+      // customer may have re-saved it in a comma locale.
+      const delimiter = text.split("\n")[0].includes(";") ? ";" : ",";
+      table = parseCsv(text, delimiter);
+    }
+    if (table.length < 2) throw new Error("No rows found after the header.");
+    const header = table[0];
+    const grpIdx = headerIndexAny(header, ["gruppe", "menu_category", "category"]);
+    const idIdx = headerIndexAny(header, ["id", "pos_id"]);
+    const nameIdx = headerIndexAny(header, ["artikel", "recipe", "name", "dish"]);
+    const priceIdx = headerIndexAny(header, ["preis", "menu_price", "price"]);
+    if (nameIdx === -1) {
+      throw new Error(`Couldn't find a recipe name column — found: ${header.join(", ")}`);
+    }
+    const parsed: ParsedMenuRow[] = [];
+    let currentGroup = "";
+    for (const r of table.slice(1)) {
+      const group = grpIdx > -1 ? (r[grpIdx] || "").trim() : "";
+      const dish = (r[nameIdx] || "").trim();
+      if (group && !dish) {
+        // A bare category row — no dish on it, just a new heading to
+        // apply to the item rows that follow.
+        currentGroup = group;
+        continue;
+      }
+      if (!dish) continue;
+      parsed.push({
+        recipeName: dish,
+        posId: idIdx > -1 ? (r[idIdx] || "").trim() : "",
+        menuCategory: group || currentGroup,
+        menuPrice: priceIdx > -1 ? cleanNumeric(r[priceIdx]) : "",
+      });
+    }
+    if (parsed.length === 0) throw new Error("No recipe rows found in that file.");
+    return parsed;
+  }
 
-  function handleArtikelliste(e: React.ChangeEvent<HTMLInputElement>) {
+  // Primary path: parse the menu list, then open MenuListImportModal so
+  // the user picks ingredients per dish in-app instead of typing them
+  // into a spreadsheet.
+  const [menuListRows, setMenuListRows] = useState<ParsedMenuRow[] | null>(null);
+  const [menuListFileName, setMenuListFileName] = useState("");
+  const [menuListError, setMenuListError] = useState<string | null>(null);
+
+  async function handleMenuListFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setArtikelError(null);
-    const reader = new FileReader();
-    reader.onload = () => {
-      const text = String(reader.result || "");
-      // Sniff the delimiter rather than assuming — a customer may have
-      // re-saved the export in a comma locale.
-      const delimiter = text.split("\n")[0].includes(";") ? ";" : ",";
-      const table = parseCsv(text, delimiter);
-      if (table.length < 2) {
-        setArtikelError("No rows found after the header.");
-        return;
-      }
-      const header = table[0];
-      const grpIdx = headerIndex(header, "gruppe");
-      const idIdx = headerIndex(header, "id");
-      const artIdx = headerIndex(header, "artikel");
-      const preisIdx = headerIndex(header, "preis");
-      if (grpIdx === -1 || artIdx === -1) {
-        setArtikelError(
-          `Doesn't look like an Artikelliste export — expected "GRUPPE" and "Artikel" columns, found: ${header.join(", ")}`
-        );
-        return;
-      }
-      const templateRows: string[][] = [];
-      let currentGroup = "";
-      for (const r of table.slice(1)) {
-        const group = (r[grpIdx] || "").trim();
-        const dish = (artIdx > -1 ? r[artIdx] : "").trim();
-        if (group && !dish) {
-          // A bare category row — no dish on it, just a new heading to
-          // apply to the item rows that follow.
-          currentGroup = group;
-          continue;
-        }
-        if (!dish) continue;
-        templateRows.push([
-          dish,
-          idIdx > -1 ? (r[idIdx] || "").trim() : "",
-          group || currentGroup,
-          "dish",
-          "1",
-          "plate",
-          preisIdx > -1 ? cleanNumeric(r[preisIdx]) : "",
-          "",
-          "",
-          "",
-        ]);
-      }
-      if (templateRows.length === 0) {
-        setArtikelError("No dish rows found in that file.");
-        return;
-      }
+    setMenuListError(null);
+    try {
+      const parsed = await parseMenuListFile(file);
+      setMenuListFileName(file.name);
+      setMenuListRows(parsed);
+    } catch (err) {
+      setMenuListError(err instanceof Error ? err.message : "Could not read that file.");
+    }
+    e.target.value = "";
+  }
+
+  // Advanced path: same parse, but hands the result back as a
+  // downloadable copy of the ingredient-column CSV template below
+  // (recipe/pos_id/menu_category/menu_price pre-filled, ingredient/qty/
+  // unit left blank) for anyone who'd rather bulk-edit a spreadsheet.
+  const [prefillError, setPrefillError] = useState<string | null>(null);
+
+  async function handlePrefillFromMenuList(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPrefillError(null);
+    try {
+      const parsed = await parseMenuListFile(file);
       downloadCsv(
         "recipe-ingredients-template.csv",
         ["recipe", "pos_id", "menu_category", "kind", "yield_qty", "yield_unit", "menu_price", "ingredient", "qty", "unit"],
-        templateRows
+        parsed.map((r) => [r.recipeName, r.posId, r.menuCategory, "dish", "1", "plate", r.menuPrice, "", "", ""])
       );
-    };
-    reader.readAsText(file);
+    } catch (err) {
+      setPrefillError(err instanceof Error ? err.message : "Could not read that file.");
+    }
+    e.target.value = "";
   }
 
   function updateRow(i: number, patch: Partial<RecipeRow>) {
@@ -738,57 +773,92 @@ function RecipesImportPanel({
         </div>
       )}
 
-      <div className="field" style={{ marginBottom: 12 }}>
-        <label>Get a template</label>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <button
-            type="button"
-            className="btn-ghost small"
-            onClick={() =>
-              downloadCsv(
-                "recipe-ingredients-template.csv",
-                ["recipe", "pos_id", "menu_category", "kind", "yield_qty", "yield_unit", "menu_price", "ingredient", "qty", "unit"],
-                [
-                  ["Spaghetti Bolognese", "101", "Mains", "dish", "1", "plate", "14.50", "Spaghetti", "0.15", "kg"],
-                  ["", "", "", "", "", "", "", "Beef mince 5%", "0.12", "kg"],
-                  ["", "", "", "", "", "", "", "Tomato passata", "0.1", "l"],
-                ]
-              )
-            }
-          >
-            ⇩ Download blank template
-          </button>
-          <span className="muted" style={{ fontSize: 12 }}>or</span>
-          <label className="btn-ghost small" style={{ cursor: "pointer" }}>
-            ⇩ Prefill from your Artikelliste export
-            <input type="file" accept=".csv,text/csv" onChange={handleArtikelliste} style={{ display: "none" }} />
-          </label>
-        </div>
-        {artikelError && <p className="error" style={{ marginTop: 6 }}>{artikelError}</p>}
+      <div className="field" style={{ marginBottom: 14 }}>
+        <label>Import menu list</label>
+        <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={handleMenuListFile} />
+        {menuListError && <p className="error" style={{ marginTop: 6 }}>{menuListError}</p>}
         <div className="vhint">
-          The blank template has one example dish already filled in. The Artikelliste option reads your POS's{" "}
-          <code>GRUPPE;ID;Artikel;...;Preis</code> export and hands back the same template with{" "}
-          <code>recipe</code>/<code>pos_id</code>/<code>menu_category</code>/<code>menu_price</code> already filled
-          in from it — just add an ingredient row (or several) under each dish, then upload the result below.
+          Upload your menu export from your POS or till system (CSV or Excel — a recipe/dish name column is all
+          that's required; ID, category, and price columns are picked up automatically if present). You'll then
+          pick each dish's ingredients from your existing items on screen — nothing to type into a spreadsheet.
         </div>
       </div>
 
-      <div className="field" style={{ marginBottom: 12 }}>
-        <label>CSV file</label>
-        <input type="file" accept=".csv,text/csv" onChange={handleFile} />
-        <div className="vhint">
-          One row per ingredient. Header row:{" "}
-          <code>recipe,pos_id,menu_category,kind,yield_qty,yield_unit,menu_price,ingredient,qty,unit</code>. Repeat
-          the recipe name (and its <code>pos_id</code>/<code>menu_category</code>, though only the first row of
-          each recipe needs them) on every ingredient row that belongs to it — only <code>recipe</code>,{" "}
-          <code>ingredient</code> and <code>qty</code> are required, the rest default sensibly. A recipe whose{" "}
-          <code>pos_id</code> (or, failing that, name) already matches one in SAWIS gets <b>updated</b> — its
-          ingredient list is replaced by what's in this file — rather than creating a duplicate; anything new is{" "}
-          <b>created</b>. Any ingredient that doesn't match an existing item will <b>create a new item
-          automatically</b> (with a stock holding at the location below, in the Kitchen department) — reviewed below
-          before you confirm.
+      {menuListRows && (
+        <MenuListImportModal
+          accessToken={accessToken}
+          items={items}
+          recipes={recipes}
+          location={location}
+          fileName={menuListFileName}
+          rows={menuListRows}
+          onClose={() => setMenuListRows(null)}
+          onItemsChanged={onItemsChanged}
+          onRecipesChanged={() => {
+            onRecipesChanged();
+            setMenuListRows(null);
+          }}
+        />
+      )}
+
+      <details className="field" style={{ marginBottom: 12 }}>
+        <summary className="mini-link">Advanced: use a spreadsheet template instead</summary>
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <button
+              type="button"
+              className="btn-ghost small"
+              onClick={() =>
+                downloadCsv(
+                  "recipe-ingredients-template.csv",
+                  ["recipe", "pos_id", "menu_category", "kind", "yield_qty", "yield_unit", "menu_price", "ingredient", "qty", "unit"],
+                  [
+                    ["Spaghetti Bolognese", "101", "Mains", "dish", "1", "plate", "14.50", "Spaghetti", "0.15", "kg"],
+                    ["", "", "", "", "", "", "", "Beef mince 5%", "0.12", "kg"],
+                    ["", "", "", "", "", "", "", "Tomato passata", "0.1", "l"],
+                  ]
+                )
+              }
+            >
+              ⇩ Download blank template
+            </button>
+            <span className="muted" style={{ fontSize: 12 }}>or</span>
+            <label className="btn-ghost small" style={{ cursor: "pointer" }}>
+              ⇩ Prefill from your menu list
+              <input
+                type="file"
+                accept=".csv,text/csv,.xlsx,.xls"
+                onChange={handlePrefillFromMenuList}
+                style={{ display: "none" }}
+              />
+            </label>
+          </div>
+          {prefillError && <p className="error" style={{ marginTop: 6 }}>{prefillError}</p>}
+          <div className="vhint">
+            The blank template has one example dish already filled in. The prefill option reads the same menu-list
+            file as the import above and hands back this template with <code>recipe</code>/<code>pos_id</code>/
+            <code>menu_category</code>/<code>menu_price</code> already filled in from it — add an ingredient row (or
+            several) under each dish by hand, then upload the result below.
+          </div>
+
+          <div className="field" style={{ marginTop: 12, marginBottom: 0 }}>
+            <label>CSV file</label>
+            <input type="file" accept=".csv,text/csv" onChange={handleFile} />
+            <div className="vhint">
+              One row per ingredient. Header row:{" "}
+              <code>recipe,pos_id,menu_category,kind,yield_qty,yield_unit,menu_price,ingredient,qty,unit</code>.
+              Repeat the recipe name (and its <code>pos_id</code>/<code>menu_category</code>, though only the first
+              row of each recipe needs them) on every ingredient row that belongs to it — only <code>recipe</code>,
+              {" "}<code>ingredient</code> and <code>qty</code> are required, the rest default sensibly. A recipe
+              whose <code>pos_id</code> (or, failing that, name) already matches one in SAWIS gets <b>updated</b> —
+              its ingredient list is replaced by what's in this file — rather than creating a duplicate; anything
+              new is <b>created</b>. Any ingredient that doesn't match an existing item will <b>create a new item
+              automatically</b> (with a stock holding at the location below, in the Kitchen department) — reviewed
+              below before you confirm.
+            </div>
+          </div>
         </div>
-      </div>
+      </details>
 
       {!locations.length && <p className="error">No locations yet — add one before importing recipes.</p>}
       {parseError && <p className="error">{parseError}</p>}

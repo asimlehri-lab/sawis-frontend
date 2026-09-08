@@ -911,6 +911,43 @@ select:focus {
 .btn-ghost.small { padding: 8px 14px; font-size: 13px; margin-top: 0; width: auto; }
 
 .modal.wide { max-width: 560px; max-height: 88vh; overflow: auto; }
+.modal.xwide { max-width: 780px; }
+
+/* Menu-list import modal (Settings' "Import menu list") -- one bordered
+   block per recipe, each with its own inline ingredient picker. */
+.mli-row { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+.mli-row:last-child { margin-bottom: 0; }
+.mli-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.mli-head input, .mli-head select {
+  font-family: inherit;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 9px;
+  background: var(--surface);
+  color: var(--ink);
+}
+.mli-lines { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.mli-lines li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 5px 8px;
+}
+.mli-addrow { max-width: 340px; }
+
+.mini-link {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand);
+  list-style: none;
+}
+.mini-link::-webkit-details-marker { display: none; }
+.mini-link:hover { text-decoration: underline; }
 
 .sup-row {
   display: flex;
