@@ -1053,26 +1053,44 @@ function CountSheet({
       </button>
       <div className="content-head" style={{ marginTop: 8 }}>
         <h2 style={{ margin: 0 }}>{section.name}</h2>
-        <label className="btn-ghost small" style={{ cursor: scanning ? "default" : "pointer", opacity: scanning ? 0.6 : 1 }}>
-          📷 Scan filled sheet
-          {/* Deliberately no `capture` attribute -- that would skip straight
-              to the camera app on phone/tablet, hiding the browser's own
-              "Take Photo / Photo Library / Choose File" chooser. Leaving it
-              off keeps that native choice available (a sheet already
-              photographed, or pulled from Files, works just as well as
-              taking a fresh photo). Same pattern as Scan receipt in App.tsx. */}
-          <input
-            type="file"
-            accept="image/*"
-            disabled={scanning}
-            style={{ display: "none" }}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              e.target.value = "";
-              if (file) handleScanFileSelected(file);
-            }}
-          />
-        </label>
+        {/* Two separate controls rather than one bare file input -- relying
+            on a mobile browser's own camera/library chooser turned out to be
+            unreliable in practice (some browsers only offered the library,
+            not the camera, with no `capture` attribute at all). `capture`
+            forces the camera directly; a plain input with no `capture`
+            reliably opens the photo library/file picker instead -- so one
+            button of each guarantees both paths regardless of browser quirks. */}
+        <div style={{ display: "flex", gap: 8 }}>
+          <label className="btn-ghost small" style={{ cursor: scanning ? "default" : "pointer", opacity: scanning ? 0.6 : 1 }}>
+            📷 Take photo
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              disabled={scanning}
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) handleScanFileSelected(file);
+              }}
+            />
+          </label>
+          <label className="btn-ghost small" style={{ cursor: scanning ? "default" : "pointer", opacity: scanning ? 0.6 : 1 }}>
+            🖼 Choose photo
+            <input
+              type="file"
+              accept="image/*"
+              disabled={scanning}
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) handleScanFileSelected(file);
+              }}
+            />
+          </label>
+        </div>
       </div>
       {scanning && (
         <div style={{ textAlign: "center", padding: "12px 0" }}>
