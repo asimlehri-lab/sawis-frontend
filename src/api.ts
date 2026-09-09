@@ -1,4 +1,4 @@
-const API_URL = "https://sawis-backend.onrender.com";
+const API_URL = "https://sawis-backend-1.onrender.com";
 
 export interface Membership {
   id: string;
