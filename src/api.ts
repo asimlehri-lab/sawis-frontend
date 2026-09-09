@@ -1,4 +1,10 @@
-const API_URL = "https://sawis-backend-1.onrender.com";
+// Backend base URL. Overridable per Vercel environment via VITE_API_URL
+// (Production -> the live Frankfurt backend, Preview -> the staging backend),
+// so a `staging` branch never has to diverge from `main` on this line and
+// cause a merge conflict every time staging is promoted. Falls back to the
+// production URL for local dev too, per the "frontend always talks to
+// production" convention documented in the project handoff.
+const API_URL = import.meta.env.VITE_API_URL || "https://sawis-backend-1.onrender.com";
 
 export interface Membership {
   id: string;
