@@ -201,6 +201,17 @@ export interface BulkItemInput {
   // already exists, matching bulk_import's existing "never clobber what's
   // already there" behavior.
   par_level?: string;
+  // Optional supplier name + per-unit cost, provided together. When both
+  // are present the backend finds-or-creates a Supplier by this name,
+  // upserts a SupplierItem (the background catalogue row) for this item's
+  // name at this price, and links it to the item via ItemSupplier -- the
+  // same end state as manually importing a supplier catalogue and then
+  // clicking "Link" on the item, done in one step. Re-importing the same
+  // row later refreshes the price on both the SupplierItem and the
+  // ItemSupplier link. Providing only one of the two does nothing --
+  // there's no such thing as a cost with no supplier or vice versa.
+  supplier?: string;
+  cost?: string;
 }
 
 export interface BulkItemImportResult {
@@ -211,6 +222,15 @@ export interface BulkItemImportResult {
   // the supported way to backfill holdings for items that were
   // imported before ItemHolding creation existed here.
   holdings_backfilled: string[];
+  // Names of NEW suppliers created because no existing supplier at this
+  // org matched the given name (case-insensitive). An empty array doesn't
+  // mean no supplier/cost data was processed -- it just means every named
+  // supplier already existed.
+  suppliers_created: string[];
+  // Names of items whose supplier link (unit_price + the underlying
+  // SupplierItem price) was set or refreshed by this import's supplier/
+  // cost columns.
+  supplier_links_set: string[];
 }
 
 // `location` is required server-side — every imported item also gets an

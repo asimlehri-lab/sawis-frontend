@@ -229,6 +229,8 @@ interface ItemRow {
   vat_rate: string;
   department: string;
   par_level: string;
+  supplier: string;
+  cost: string;
   exists: boolean;
   include: boolean;
 }
@@ -250,9 +252,23 @@ function ItemsImportPanel({
   const [parseError, setParseError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ created: number; holdingsBackfilled: number } | null>(null);
+  const [result, setResult] = useState<{
+    created: number;
+    holdingsBackfilled: number;
+    suppliersCreated: number;
+    supplierLinksSet: number;
+  } | null>(null);
 
   const existingNames = new Set(items.map((i) => i.name.trim().toLowerCase()));
+
+  // Same CSV-or-Excel convergence pattern already used by the supplier
+  // catalogue import (App.tsx's handleImportFile) and this file's own
+  // parseMenuListFile below: Excel cells come back as real numbers/dates,
+  // not strings, so every cell is stringified before the rest of the
+  // parser (identical either way) ever sees it.
+  function rowsToTable(cellRows: unknown[][]): string[][] {
+    return cellRows.map((row) => row.map((c) => (c === null || c === undefined ? "" : String(c).trim())));
+  }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -261,9 +277,24 @@ function ItemsImportPanel({
     setParseError(null);
     setImportError(null);
     setResult(null);
+    const isSpreadsheet = /\.xlsx?$/i.test(file.name);
     const reader = new FileReader();
     reader.onload = () => {
-      const table = parseCsv(String(reader.result || ""));
+      let table: string[][];
+      try {
+        if (isSpreadsheet) {
+          const workbook = XLSX.read(reader.result as ArrayBuffer, { type: "array" });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const raw = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false });
+          table = rowsToTable(raw);
+        } else {
+          table = parseCsv(String(reader.result || ""));
+        }
+      } catch {
+        setParseError("Could not read that file — check it's a valid CSV or Excel spreadsheet.");
+        setRows([]);
+        return;
+      }
       if (table.length < 2) {
         setParseError("No rows found after the header.");
         setRows([]);
@@ -277,6 +308,8 @@ function ItemsImportPanel({
       const vatIdx = headerIndex(header, "vat");
       const deptIdx = headerIndex(header, "department");
       const parIdx = headerIndexAny(header, ["par_level", "par"]);
+      const supplierIdx = headerIndexAny(header, ["supplier", "supplier_name"]);
+      const costIdx = headerIndexAny(header, ["cost", "price", "unit_price", "unit_cost"]);
       if (nameIdx === -1 || unitIdx === -1) {
         setParseError(`Expected at least "name,unit" columns — found: ${header.join(", ")}`);
         setRows([]);
@@ -294,6 +327,14 @@ function ItemsImportPanel({
         // reject back to 0 anyway.
         const parRaw = parIdx > -1 ? (r[parIdx] || "").trim() : "";
         const par_level = parRaw && !isNaN(Number(parRaw)) && Number(parRaw) >= 0 ? parRaw : "";
+        // Same "silently drop instead of sending garbage" treatment as
+        // par_level above. supplier/cost only mean anything as a pair —
+        // handleImport below only sends them through when both are
+        // present on a row, so a cost with no supplier name (or vice
+        // versa) just quietly does nothing rather than erroring.
+        const costRaw = costIdx > -1 ? (r[costIdx] || "").trim() : "";
+        const cost = costRaw && !isNaN(Number(costRaw)) && Number(costRaw) >= 0 ? costRaw : "";
+        const supplier = supplierIdx > -1 ? (r[supplierIdx] || "").trim() : "";
         parsed.push({
           name,
           sku: skuIdx > -1 ? (r[skuIdx] || "").trim() : "",
@@ -302,6 +343,8 @@ function ItemsImportPanel({
           vat_rate: vatIdx > -1 ? (r[vatIdx] || "").trim() : "",
           department: deptIdx > -1 ? (r[deptIdx] || "").trim().toLowerCase() : "",
           par_level,
+          supplier,
+          cost,
           exists: existingNames.has(name.toLowerCase()),
           include: true,
         });
@@ -311,7 +354,11 @@ function ItemsImportPanel({
         setParseError('No valid rows found — check "unit" matches a real base unit (g, kg, ml, L, ea, portion, btl, case, dozen).');
       }
     };
-    reader.readAsText(file);
+    if (isSpreadsheet) {
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.readAsText(file);
+    }
   }
 
   function toggleInclude(i: number) {
@@ -342,9 +389,19 @@ function ItemsImportPanel({
           vat_rate: r.vat_rate ? (Number(r.vat_rate) / 100).toFixed(4) : null,
           department: (r.department || undefined) as "kitchen" | "bar" | "foh" | undefined,
           par_level: r.par_level || undefined,
+          // Only sent through as a pair — a row with just one of the two
+          // filled in sends neither, since the backend treats them as one
+          // unit (see BulkItemInput.supplier/cost in api.ts).
+          supplier: r.supplier && r.cost ? r.supplier : undefined,
+          cost: r.supplier && r.cost ? r.cost : undefined,
         }))
       );
-      setResult({ created: res.created.length, holdingsBackfilled: res.holdings_backfilled.length });
+      setResult({
+        created: res.created.length,
+        holdingsBackfilled: res.holdings_backfilled.length,
+        suppliersCreated: res.suppliers_created.length,
+        supplierLinksSet: res.supplier_links_set.length,
+      });
       setRows([]);
       setFileName("");
       onItemsChanged();
@@ -373,17 +430,21 @@ function ItemsImportPanel({
       )}
 
       <div className="field" style={{ marginBottom: 12 }}>
-        <label>CSV file</label>
-        <input type="file" accept=".csv,text/csv" onChange={handleFile} />
+        <label>CSV or Excel file</label>
+        <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={handleFile} />
         <div className="vhint">
-          Header row required: <code>name,sku,unit,category,vat,department,par_level</code> — only{" "}
+          Header row required: <code>name,sku,unit,category,vat,department,par_level,supplier,cost</code> — only{" "}
           <code>name</code> and <code>unit</code> are required. <code>sku</code>/<code>category</code>/
           <code>vat</code> (as a % number) can be left blank. <code>department</code> is optional too (
           <code>kitchen</code>, <code>bar</code> or <code>foh</code>) and defaults to Kitchen — it decides where
           each item's stock holding is created at the location below. <code>par_level</code> is optional and
           defaults to 0 if blank — it only sets the par on a holding this import actually creates (a brand-new
           item, or backfilling a missing holding for an existing item); it never changes the par on a holding
-          that already exists. e.g. "Beef mince 5%,,kg,Meat,20,kitchen,3".
+          that already exists. <code>supplier</code> and <code>cost</code> are optional and only do anything
+          when both are filled in on the same row — together they create (or reuse) a supplier by that name and
+          link it to the item at that price, the same end result as importing a supplier catalogue and clicking
+          "Link" by hand. Re-importing later refreshes the price. e.g. "Beef mince 5%,,kg,Meat,20,kitchen,3,ACME
+          Foods,4.20".
         </div>
       </div>
 
@@ -406,6 +467,8 @@ function ItemsImportPanel({
                 <th>Unit</th>
                 <th className="num">VAT</th>
                 <th className="num">Par</th>
+                <th>Supplier</th>
+                <th className="num">Cost</th>
                 <th>Status</th>
                 <th></th>
               </tr>
@@ -418,6 +481,8 @@ function ItemsImportPanel({
                   <td className="muted">{r.base_unit}</td>
                   <td className="num">{r.vat_rate ? `${r.vat_rate}%` : "—"}</td>
                   <td className="num">{r.par_level || "0"}</td>
+                  <td className="muted">{r.supplier && r.cost ? r.supplier : "—"}</td>
+                  <td className="num">{r.supplier && r.cost ? r.cost : "—"}</td>
                   <td>
                     {r.exists ? (
                       <span className="badge b-low">Already exists — will add holding</span>
@@ -456,6 +521,12 @@ function ItemsImportPanel({
             ` ${result.holdingsBackfilled} existing item${
               result.holdingsBackfilled === 1 ? "" : "s"
             } got a stock holding added at this location.`}
+          {result.supplierLinksSet > 0 &&
+            ` ${result.supplierLinksSet} item${result.supplierLinksSet === 1 ? "" : "s"} got a supplier + cost linked${
+              result.suppliersCreated > 0
+                ? ` (${result.suppliersCreated} new supplier${result.suppliersCreated === 1 ? "" : "s"} created)`
+                : ""
+            }.`}
         </div>
       )}
     </div>
