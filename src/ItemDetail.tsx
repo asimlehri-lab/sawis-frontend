@@ -15,6 +15,7 @@ import {
   login,
   formatMoney,
   defaultCurrency,
+  convertToBaseUnit,
 } from "./api";
 import type { CatalogItem, Category, Location, ItemSupplierRow, SupplierItemRow, Supplier } from "./api";
 
@@ -152,6 +153,13 @@ export default function ItemDetail({
   const [linkingId, setLinkingId] = useState<string | null>(null);
   const [supplierError, setSupplierError] = useState<string | null>(null);
   const [settingDefaultId, setSettingDefaultId] = useState<string | null>(null);
+  // Per-suggestion "how many {base_unit} in 1 {supplier's unit}?" overrides —
+  // only ever shown/used when the supplier's unit can't be auto-converted
+  // (a pack/case, or a unit family mismatch). Keyed by SupplierItemRow.id;
+  // seeded from that row's own base_qty_per_unit so a value already known
+  // from a previous import or link ("remember for next time") shows up
+  // pre-filled instead of asking the user to type it in again.
+  const [packQtyOverrides, setPackQtyOverrides] = useState<Record<string, string>>({});
 
   const [archiving, setArchiving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -295,16 +303,59 @@ export default function ItemDetail({
     }
   }
 
+  // Works out how many of THIS item's base_unit one unit of the supplier's
+  // catalogue line actually contains, and whether that's something the
+  // user needs to confirm by hand. Three cases, cheapest/most-automatic
+  // first — this is what keeps the suggestion row from asking the user
+  // anything at all in the common case where the supplier already invoices
+  // in the item's own unit, or in a same-family unit (kg vs g, L vs ml)
+  // that converts on its own:
+  //   1. Same unit as the item's base_unit → 1, nothing to ask.
+  //   2. Same measure family, different unit (kg→g, L→ml) → computed
+  //      automatically via autoFactor, nothing to ask.
+  //   3. A pack/case, or a genuine unit-family mismatch → no fixed
+  //      relationship exists, so it falls back to a number the user types
+  //      in (pre-filled from this SupplierItem's own base_qty_per_unit,
+  //      i.e. whatever was set the last time this exact catalogue line was
+  //      imported or linked, if anything).
+  function effectivePackQty(sug: Suggestion): { qty: number | null; needsInput: boolean } {
+    if (!item) return { qty: null, needsInput: false };
+    const unit = sug.supplierItem.unit;
+    if (unit === item.base_unit) return { qty: 1, needsInput: false };
+    const auto = autoFactor(unit, item.base_unit);
+    if (auto !== null) return { qty: auto, needsInput: false };
+    const raw = packQtyOverrides[sug.supplierItem.id] ?? sug.supplierItem.base_qty_per_unit ?? "1";
+    const parsed = Number(raw);
+    return { qty: Number.isFinite(parsed) && parsed > 0 ? parsed : null, needsInput: true };
+  }
+
   async function handleLinkSupplier(sug: Suggestion) {
     if (!item) return;
+    const { qty, needsInput } = effectivePackQty(sug);
+    const converted = convertToBaseUnit(Number(sug.supplierItem.price), qty);
+    if (converted === null) {
+      setSupplierError(
+        needsInput
+          ? `Enter how many ${item.base_unit} are in 1 ${sug.supplierItem.unit} before linking.`
+          : `Could not work out a price per ${item.base_unit} for this line.`
+      );
+      return;
+    }
     setLinkingId(sug.supplierItem.id);
     setSupplierError(null);
     try {
+      const unitDiffers = sug.supplierItem.unit !== item.base_unit;
       await createItemSupplier(accessToken, {
         item: item.id,
         supplier: sug.supplierItem.supplier,
-        unit_price: sug.supplierItem.price,
+        unit_price: converted.toFixed(4),
         matched_from: sug.supplierItem.id,
+        // Only recorded when the supplier's unit actually differs from the
+        // item's own — keeps a same-unit link exactly as simple as before
+        // this feature existed.
+        ...(unitDiffers
+          ? { supplier_unit: sug.supplierItem.unit, supplier_unit_price: sug.supplierItem.price }
+          : {}),
       });
       reload();
     } catch (err) {
@@ -657,6 +708,11 @@ export default function ItemDetail({
               </span>
               <span className="sp">
                 {formatMoney(Number(row.unit_price), currency)}/{item.base_unit}
+                {row.supplier_unit && row.supplier_unit !== item.base_unit && row.supplier_unit_price && (
+                  <div className="sd">
+                    ({formatMoney(Number(row.supplier_unit_price), currency)}/{row.supplier_unit} as invoiced)
+                  </div>
+                )}
               </span>
               {itemSuppliers.length > 1 && !isDefault && (
                 <button
@@ -680,27 +736,55 @@ export default function ItemDetail({
               Other suppliers that may stock this
               <span className="sg-sub">matched by name from imported catalogues — confirm before linking</span>
             </div>
-            {suggestions.map((sug) => (
-              <div className="sug-row" key={sug.supplierItem.id}>
-                <span className={`sg-conf ${sug.score >= 0.8 ? "hi" : "md"}`}>
-                  {Math.round(sug.score * 100)}%
-                </span>
-                <span className="sg-info">
-                  <span className="sn">{sug.supplierName}</span>
-                  <div className="sd">their line: "{sug.supplierItem.raw_name}"</div>
-                </span>
-                <span className="sp">
-                  {formatMoney(Number(sug.supplierItem.price), currency)}/{sug.supplierItem.unit}
-                </span>
-                <button
-                  className="linkbtn"
-                  disabled={linkingId === sug.supplierItem.id}
-                  onClick={() => handleLinkSupplier(sug)}
-                >
-                  {linkingId === sug.supplierItem.id ? "Linking…" : "Link"}
-                </button>
-              </div>
-            ))}
+            {suggestions.map((sug) => {
+              const { qty: packQty, needsInput } = effectivePackQty(sug);
+              const converted = convertToBaseUnit(Number(sug.supplierItem.price), packQty);
+              return (
+                <div className="sug-row" key={sug.supplierItem.id}>
+                  <span className={`sg-conf ${sug.score >= 0.8 ? "hi" : "md"}`}>
+                    {Math.round(sug.score * 100)}%
+                  </span>
+                  <span className="sg-info">
+                    <span className="sn">{sug.supplierName}</span>
+                    <div className="sd">their line: "{sug.supplierItem.raw_name}"</div>
+                    {needsInput && (
+                      <div className="sd" style={{ marginTop: 4 }}>
+                        1 {sug.supplierItem.unit} ={" "}
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          className="packqty-in"
+                          value={packQtyOverrides[sug.supplierItem.id] ?? sug.supplierItem.base_qty_per_unit ?? "1"}
+                          onChange={(e) =>
+                            setPackQtyOverrides((m) => ({ ...m, [sug.supplierItem.id]: e.target.value }))
+                          }
+                          style={{ width: 60 }}
+                        />{" "}
+                        {item.base_unit}
+                      </div>
+                    )}
+                  </span>
+                  <span className="sp">
+                    {formatMoney(Number(sug.supplierItem.price), currency)}/{sug.supplierItem.unit}
+                    {sug.supplierItem.unit !== item.base_unit && (
+                      <div className="sd">
+                        {converted !== null
+                          ? `→ ${formatMoney(converted, currency, 4)}/${item.base_unit}`
+                          : `enter a conversion to link`}
+                      </div>
+                    )}
+                  </span>
+                  <button
+                    className="linkbtn"
+                    disabled={linkingId === sug.supplierItem.id || converted === null}
+                    onClick={() => handleLinkSupplier(sug)}
+                  >
+                    {linkingId === sug.supplierItem.id ? "Linking…" : "Link"}
+                  </button>
+                </div>
+              );
+            })}
           </>
         )}
       </div>

@@ -42,6 +42,53 @@ export function defaultCurrency(locations: { currency?: string }[]): CurrencyCod
   return (locations[0]?.currency as CurrencyCode) ?? "GBP";
 }
 
+// Supplier unit/pack conversion — shared by ItemDetail's "Link" flow, the
+// Scan receipt review table, and the supplier catalogue importer. A
+// supplier very often prices things in a different unit than the item is
+// actually costed/used in (a syrup invoiced per kg but used in grams on a
+// recipe; a case of 24 bottles invoiced as one line). Getting this
+// conversion wrong silently corrupts recipe costing, so every one of those
+// three screens funnels through convertToBaseUnit() below rather than
+// sending a supplier's raw price straight into ItemSupplier.unit_price /
+// POLine.unit_price.
+//
+// This is a deliberate parallel copy of the UNIT_FAMILY/UNIT_BASE/
+// autoFactor helper already living in ItemDetail.tsx (built earlier for an
+// unrelated "change item's base unit" modal) rather than a shared import —
+// that existing feature works today and isn't worth the risk of a refactor
+// just to dedupe a ~15-line lookup table.
+type UnitFamily = "weight" | "volume" | "count";
+export const UNIT_FAMILY: Record<string, UnitFamily> = {
+  g: "weight", kg: "weight", ml: "volume", L: "volume",
+  ea: "count", portion: "count", btl: "count", case: "count", dozen: "count",
+};
+const UNIT_BASE: Record<string, number> = { g: 1, kg: 1000, ml: 1, L: 1000 };
+
+// How many of `to` one `from` actually contains (e.g. autoFactor("kg","g")
+// = 1000). Only computable when both units are the same family and that
+// family isn't "count" — a supplier "case" or "dozen" carries no fixed
+// numeric relationship to the item's base unit on its own; that has to be
+// a human-entered pack size instead (see base_qty_per_unit below).
+export function autoFactor(from: string, to: string): number | null {
+  const famFrom = UNIT_FAMILY[from];
+  const famTo = UNIT_FAMILY[to];
+  if (!famFrom || famFrom !== famTo || famFrom === "count") return null;
+  return UNIT_BASE[from] / UNIT_BASE[to];
+}
+
+// Converts a supplier's raw per-unit price into a true price per the
+// item's base_unit, given how many base_units one supplier unit contains
+// (base_qty_per_unit — from autoFactor() when known automatically, or a
+// number the user typed in for a pack/case). Returns null (rather than
+// throwing or silently dividing by a bad number) when qtyPerUnit isn't a
+// usable positive number, so callers can block submission instead of
+// storing a corrupted cost.
+export function convertToBaseUnit(supplierPrice: number, qtyPerUnit: number | null | undefined): number | null {
+  if (!Number.isFinite(supplierPrice)) return null;
+  if (!qtyPerUnit || !Number.isFinite(qtyPerUnit) || qtyPerUnit <= 0) return null;
+  return supplierPrice / qtyPerUnit;
+}
+
 export interface Membership {
   id: string;
   user: string;
@@ -815,6 +862,12 @@ export interface SupplierItemRow {
   raw_name: string;
   unit: string;
   price: string;
+  // How many of the eventually-linked Item's base_unit one `unit` above
+  // actually contains (e.g. "1000" when unit="kg" and the item is costed
+  // in grams). Defaults to "1" server-side ("no conversion") for rows that
+  // never set it, so this is always present even from an import that
+  // predates the field.
+  base_qty_per_unit: string;
   imported_at: string;
 }
 
@@ -827,6 +880,7 @@ export interface NewSupplierItemInput {
   raw_name: string;
   unit: string;
   price: string;
+  base_qty_per_unit?: string;
 }
 
 export async function createSupplierItem(
@@ -847,7 +901,7 @@ export async function createSupplierItem(
 
 export interface BulkImportSupplierItemsInput {
   supplier: string;
-  rows: { name: string; unit: string; price: string }[];
+  rows: { name: string; unit: string; price: string; base_qty_per_unit?: string }[];
 }
 
 export interface BulkImportSupplierItemsResult {
@@ -895,7 +949,18 @@ export interface ItemSupplierRow {
   item: string;
   supplier: string;
   supplier_name: string;
+  // ALWAYS a true price per the item's own base_unit -- see
+  // apps/catalog/models.py ItemSupplier.unit_price. Never the supplier's
+  // raw per-pack/per-kg price; that's supplier_unit_price below.
   unit_price: string;
+  // The unit/pack as the supplier actually sells it (e.g. "kg", "case") --
+  // blank means "same as the item's base_unit, no conversion on file".
+  // Display-only; unit_price above is always the source of truth for cost.
+  supplier_unit: string;
+  // The raw price as actually invoiced, per supplier_unit -- null when
+  // supplier_unit is blank/unknown. Shown alongside unit_price so the user
+  // sees their own supplier's price, not just our converted figure.
+  supplier_unit_price: string | null;
   min_order_qty: string | null;
   last_ordered_at: string | null;
   matched_from: string | null;
@@ -912,6 +977,8 @@ export interface NewItemSupplierInput {
   item: string;
   supplier: string;
   unit_price: string;
+  supplier_unit?: string;
+  supplier_unit_price?: string;
   matched_from?: string;
 }
 
@@ -943,7 +1010,13 @@ export async function createItemSupplier(
 export async function updateItemSupplier(
   accessToken: string,
   id: string,
-  patch: { supplier_sku?: string; unit_price?: string; min_order_qty?: string | null }
+  patch: {
+    supplier_sku?: string;
+    unit_price?: string;
+    supplier_unit?: string;
+    supplier_unit_price?: string | null;
+    min_order_qty?: string | null;
+  }
 ): Promise<ItemSupplierRow> {
   const res = await fetch(`${API_URL}/api/catalog/item-suppliers/${id}/`, {
     method: "PATCH",
@@ -1137,8 +1210,17 @@ export async function scanReceipt(accessToken: string, file: File): Promise<Scan
 
 export interface ReceiveLineOverride {
   id: string;
+  // Always true per-item.base_unit values -- any supplier-side unit/pack
+  // conversion must already have happened client-side before this is sent.
   received_qty: string;
   received_unit_price: string;
+  // Optional, display-only: the raw unit/price as the supplier actually
+  // invoiced it (e.g. "kg" / "12.00"), so the receiving ItemSupplier link
+  // remembers the supplier's own pricing alongside the converted figure.
+  // Omit entirely (don't send empty strings) to leave whatever's already
+  // on file untouched -- see PurchaseOrderViewSet.receive.
+  supplier_unit?: string;
+  supplier_unit_price?: string;
 }
 
 export async function receivePurchaseOrder(

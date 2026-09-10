@@ -31,6 +31,8 @@ import {
   formatMoney,
   defaultCurrency,
   currencySymbol,
+  autoFactor,
+  convertToBaseUnit,
 } from "./api";
 import type {
   Me,
@@ -158,6 +160,65 @@ interface ScanRow {
   unitPrice: string;
   confidence: number | null; // Textract's own confidence for this row, 0-100
   skip: boolean;
+  // Pack/unit conversion -- Textract never returns a unit for a scanned
+  // line at all (only description/quantity/unit_price), so this is always
+  // either left blank (the common case -- qty/unitPrice above are already
+  // in the matched item's own base_unit) or filled in by the user, unless
+  // a previous link/import already taught the software this supplier's
+  // unit for this exact item (see findKnownSupplierUnit -- "remember for
+  // next time"). "" means "same as the matched item's base_unit, no
+  // conversion needed".
+  supplierUnit: string;
+  // How many of the matched item's base_unit one supplierUnit contains
+  // (e.g. "1000" for kg when the item is costed in grams). Only consulted
+  // when supplierUnit is set and isn't auto-convertible via autoFactor
+  // (i.e. a pack/case, or a genuine unit-family mismatch). Defaults to "1".
+  packQty: string;
+}
+
+// Resolves a ScanRow's qty/unitPrice into the matched item's own
+// base_unit, applying whatever pack/unit conversion the row carries.
+// Returns null when a conversion is needed but not (yet) usable -- e.g. the
+// user has set a supplierUnit that doesn't auto-convert and hasn't entered
+// a valid pack qty -- so callers can block creating anything rather than
+// silently writing a wrong cost into POLine/ItemSupplier.
+function scanRowBaseUnits(
+  row: ScanRow,
+  item: CatalogItem | undefined
+): { qty: number; unitPrice: number } | null {
+  const rawQty = Number(row.qty || "0");
+  const rawPrice = Number(row.unitPrice || "0");
+  if (!Number.isFinite(rawQty) || !Number.isFinite(rawPrice)) return null;
+  if (!item || !row.supplierUnit || row.supplierUnit === item.base_unit) {
+    return { qty: rawQty, unitPrice: rawPrice };
+  }
+  const auto = autoFactor(row.supplierUnit, item.base_unit);
+  const factor = auto ?? Number(row.packQty || "1");
+  if (!Number.isFinite(factor) || factor <= 0) return null;
+  return { qty: rawQty * factor, unitPrice: convertToBaseUnit(rawPrice, factor) ?? 0 };
+}
+
+// "If unit is already present then software should match and auto fill for
+// the user" -- when this exact (item, supplier) pair was already linked
+// with a recorded supplier_unit (via ItemDetail's Link flow, a PO receive,
+// or a catalogue import), back out the pack factor from the two prices
+// already on file (supplier_unit_price ÷ unit_price = how many base_units
+// one supplier_unit is) rather than asking the user to re-teach it.
+function findKnownSupplierUnit(
+  itemSupplierLinks: ItemSupplierRow[],
+  itemId: string,
+  supplierId: string
+): { supplierUnit: string; packQty: string } | null {
+  if (!itemId || !supplierId) return null;
+  const link = itemSupplierLinks.find((l) => l.item === itemId && l.supplier === supplierId);
+  if (!link || !link.supplier_unit || link.supplier_unit_price == null) return null;
+  const unitPriceNum = Number(link.unit_price);
+  const supplierUnitPriceNum = Number(link.supplier_unit_price);
+  if (!Number.isFinite(unitPriceNum) || unitPriceNum <= 0) return null;
+  if (!Number.isFinite(supplierUnitPriceNum)) return null;
+  const factor = supplierUnitPriceNum / unitPriceNum;
+  if (!Number.isFinite(factor) || factor <= 0) return null;
+  return { supplierUnit: link.supplier_unit, packQty: String(factor) };
 }
 
 // Textract sometimes returns a price/qty with a currency symbol, thousands
@@ -331,7 +392,9 @@ export default function App() {
 
   const [showImport, setShowImport] = useState(false);
   const [importSupplier, setImportSupplier] = useState("");
-  const [importRows, setImportRows] = useState<{ name: string; unit: string; price: string }[]>([]);
+  const [importRows, setImportRows] = useState<
+    { name: string; unit: string; price: string; base_qty_per_unit?: string }[]
+  >([]);
   const [importFileName, setImportFileName] = useState("");
   const [importSaving, setImportSaving] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
@@ -406,6 +469,13 @@ export default function App() {
   const [scanNewItemUnit, setScanNewItemUnit] = useState(BASE_UNITS[1]);
   const [scanCreatingItem, setScanCreatingItem] = useState(false);
   const [scanNewItemError, setScanNewItemError] = useState<string | null>(null);
+  // Which scan rows have their "different pack or unit?" control expanded
+  // -- collapsed by default so the review table doesn't overwhelm the user
+  // with fields most receipts never need. A row auto-expands (see the
+  // isExpanded calc in the table below) once it actually carries a
+  // supplierUnit, whether the user set it or it was auto-filled from a
+  // remembered link, so the conversion being applied is never hidden.
+  const [scanExpandedPackRows, setScanExpandedPackRows] = useState<Set<number>>(new Set());
   // Best-guess existing sent/awaiting order this scan might belong to --
   // scored from whichever of {PO number, supplier, item overlap, receipt
   // date vs expected date} actually matched (see scorePOMatch below).
@@ -712,15 +782,23 @@ export default function App() {
   }
 
   // Turns a sheet's raw rows (from either CSV or Excel) into the same
-  // {name, unit, price} shape the bulk_import endpoint expects — the two
-  // file formats converge here so nothing downstream needs to know which
-  // one the supplier actually sent.
+  // {name, unit, price, base_qty_per_unit?} shape the bulk_import endpoint
+  // expects — the two file formats converge here so nothing downstream
+  // needs to know which one the supplier actually sent.
+  //
+  // The optional 4th column is how many of the eventually-linked item's
+  // base_unit one of this row's `unit` actually contains (e.g. "1000" on a
+  // row priced per kg when the item ends up costed in grams) — entirely
+  // backward compatible: a file with only 3 columns (the format this
+  // importer has always accepted) leaves it undefined, which the backend
+  // treats as "1", i.e. no conversion, exactly as before this existed.
   function rowsFromCells(cellRows: unknown[][]) {
-    const rows: { name: string; unit: string; price: string }[] = [];
+    const rows: { name: string; unit: string; price: string; base_qty_per_unit?: string }[] = [];
     cellRows.forEach((cells) => {
       const parts = cells.map((c) => (c === null || c === undefined ? "" : String(c).trim()));
       if (parts.length >= 3 && parts[0] && !isNaN(Number(parts[2]))) {
-        rows.push({ name: parts[0], unit: parts[1], price: parts[2] });
+        const packQty = parts[3] && !isNaN(Number(parts[3])) ? parts[3] : undefined;
+        rows.push({ name: parts[0], unit: parts[1], price: parts[2], base_qty_per_unit: packQty });
       }
     });
     return rows;
@@ -780,7 +858,12 @@ export default function App() {
       // existing lines' price/unit in place instead of duplicating them.
       const result = await bulkImportSupplierItems(accessToken, {
         supplier: importSupplier,
-        rows: importRows.map((r) => ({ name: r.name, unit: r.unit, price: r.price })),
+        rows: importRows.map((r) => ({
+          name: r.name,
+          unit: r.unit,
+          price: r.price,
+          base_qty_per_unit: r.base_qty_per_unit,
+        })),
       });
       setImportDone({
         created: result.created.length,
@@ -885,6 +968,7 @@ export default function App() {
     setScanUseMatchedPO(false);
     setScanPendingOverrides([]);
     setScanPendingInvoiceNumber(null);
+    setScanExpandedPackRows(new Set());
   }
 
   async function handleCreateScanSupplier() {
@@ -978,6 +1062,7 @@ export default function App() {
           .map((it) => ({ it, score: matchScore(it.name, li.description) }))
           .sort((a, b) => b.score - a.score);
         const best = ranked[0] && ranked[0].score >= 0.5 ? ranked[0].it.id : "";
+        const known = findKnownSupplierUnit(itemSupplierLinks, best, resolvedSupplierId);
         return {
           description: li.description,
           matchedItemId: best,
@@ -985,6 +1070,8 @@ export default function App() {
           unitPrice: cleanNumeric(li.unit_price) || "0.00",
           confidence: li.confidence,
           skip: false,
+          supplierUnit: known?.supplierUnit ?? "",
+          packQty: known?.packQty ?? "1",
         };
       });
       setScanRows(rows);
@@ -1047,6 +1134,30 @@ export default function App() {
   async function handleCreatePOFromScan() {
     if (!accessToken || !scanIncludedRows.length) return;
 
+    // Convert every included row's qty/unitPrice into the matched item's
+    // own base_unit BEFORE anything is created or received -- both
+    // branches below feed these straight into POLine/ItemSupplier, which
+    // must always hold true per-base-unit values (see RecipeLine.unit_cost
+    // and StockMovement.qty_delta). Validated up front, all-or-nothing:
+    // a receipt with one row still needing a pack/unit conversion typed in
+    // shouldn't let the other rows through and create a partially-priced
+    // order -- "the cost implication is huge" if one line silently costs
+    // 1000x what it should.
+    const converted = new Map<ScanRow, { qty: number; unitPrice: number }>();
+    const unresolved: string[] = [];
+    for (const row of scanIncludedRows) {
+      const item = (items ?? []).find((it) => it.id === row.matchedItemId);
+      const result = scanRowBaseUnits(row, item);
+      if (result) converted.set(row, result);
+      else unresolved.push(row.description);
+    }
+    if (unresolved.length) {
+      setScanCreateError(
+        `Enter a pack/unit conversion before continuing: ${unresolved.join(", ")}`
+      );
+      return;
+    }
+
     // Scanning found a PO number on the invoice that traces back to an
     // order we already sent, and the user confirmed it's the right one --
     // receive against that existing PO/lines instead of creating a new,
@@ -1058,11 +1169,16 @@ export default function App() {
         const overrides: ReceiveLineOverride[] = [];
         for (const row of scanIncludedRows) {
           const line = scanMatchedPO.lines.find((l) => l.item === row.matchedItemId);
+          const item = (items ?? []).find((it) => it.id === row.matchedItemId);
+          const conv = converted.get(row)!;
           if (line) {
             overrides.push({
               id: line.id,
-              received_qty: row.qty || "0",
-              received_unit_price: row.unitPrice || "0.00",
+              received_qty: conv.qty.toFixed(3),
+              received_unit_price: conv.unitPrice.toFixed(4),
+              ...(item && row.supplierUnit && row.supplierUnit !== item.base_unit
+                ? { supplier_unit: row.supplierUnit, supplier_unit_price: row.unitPrice || "0" }
+                : {}),
             });
           }
           // A scanned item that isn't one of the matched PO's own lines
@@ -1099,23 +1215,41 @@ export default function App() {
         location: scanLocationId,
         expected_date: null,
       });
+      const overrides: ReceiveLineOverride[] = [];
       for (const row of scanIncludedRows) {
-        await createPOLine(accessToken, {
+        const item = (items ?? []).find((it) => it.id === row.matchedItemId);
+        const conv = converted.get(row)!;
+        const createdLine = await createPOLine(accessToken, {
           po: created.id,
           item: row.matchedItemId,
           department: "kitchen",
-          qty: row.qty || "0",
-          unit_price: row.unitPrice || "0.00",
+          qty: conv.qty.toFixed(3),
+          unit_price: conv.unitPrice.toFixed(4),
         });
+        // Only carried through as an override when the supplier's unit
+        // actually differs -- receive() below already defaults every
+        // line's received qty/price to the (already-converted) POLine
+        // values on its own; this just adds the raw supplier-side
+        // unit/price onto ItemSupplier for display and "remember next
+        // time", same as the matched-existing-PO branch above.
+        if (item && row.supplierUnit && row.supplierUnit !== item.base_unit) {
+          overrides.push({
+            id: createdLine.id,
+            received_qty: conv.qty.toFixed(3),
+            received_unit_price: conv.unitPrice.toFixed(4),
+            supplier_unit: row.supplierUnit,
+            supplier_unit_price: row.unitPrice || "0",
+          });
+        }
       }
       // From this point on the PO and its lines are real, saved data --
       // record that immediately so a failure below can never lead to a
       // second, duplicate PO being created by retrying this function.
       setScanCreatedPO(created);
-      setScanPendingOverrides([]);
+      setScanPendingOverrides(overrides);
       setScanPendingInvoiceNumber(scanInvoiceNumberInput.trim() || null);
 
-      await markScannedPOReceived(created, [], scanInvoiceNumberInput.trim() || null);
+      await markScannedPOReceived(created, overrides, scanInvoiceNumberInput.trim() || null);
 
       closeScanModal();
       loadPOs(accessToken);
@@ -1868,6 +2002,11 @@ export default function App() {
               <div className="vhint">
                 CSV or Excel (.xlsx/.xls). One product per row: name, unit, price — e.g. "Beef mince
                 5%, kg, 7.40". No header row.
+                <br />
+                Optional 4th column if this supplier's unit doesn't match how you'll use the item —
+                how many of your item's own unit one of theirs contains, e.g. "Syrup, kg, 12.00, 1000"
+                for a kg-priced syrup you'll use in grams. Leave it off (or blank) when the units
+                already match.
               </div>
             </div>
 
@@ -1890,7 +2029,15 @@ export default function App() {
                   {importRows.slice(0, 8).map((r, i) => (
                     <tr key={i}>
                       <td>{r.name}</td>
-                      <td>{r.unit}</td>
+                      <td>
+                        {r.unit}
+                        {r.base_qty_per_unit && r.base_qty_per_unit !== "1" && (
+                          <span className="muted" style={{ fontSize: 12 }}>
+                            {" "}
+                            (1 = {r.base_qty_per_unit} of item's unit)
+                          </span>
+                        )}
+                      </td>
                       <td className="num">{formatMoney(Number(r.price), orgCurrency)}</td>
                     </tr>
                   ))}
@@ -2233,7 +2380,13 @@ export default function App() {
                           </tr>
                         </thead>
                         <tbody>
-                          {scanRows.map((row, i) => (
+                          {scanRows.map((row, i) => {
+                            const matchedItem = (items ?? []).find((it) => it.id === row.matchedItemId);
+                            const packExpanded =
+                              scanExpandedPackRows.has(i) ||
+                              (!!row.supplierUnit && !!matchedItem && row.supplierUnit !== matchedItem.base_unit);
+                            const converted = matchedItem ? scanRowBaseUnits(row, matchedItem) : null;
+                            return (
                             <tr key={i} style={row.skip ? { opacity: 0.45 } : undefined}>
                               <td className="muted" style={{ maxWidth: 140 }}>
                                 {row.description}
@@ -2261,7 +2414,12 @@ export default function App() {
                                       setScanNewItemUnit(BASE_UNITS[1]);
                                       setScanNewItemError(null);
                                     } else {
-                                      updateScanRow(i, { matchedItemId: val });
+                                      const known = findKnownSupplierUnit(itemSupplierLinks, val, scanSupplierId);
+                                      updateScanRow(i, {
+                                        matchedItemId: val,
+                                        supplierUnit: known?.supplierUnit ?? "",
+                                        packQty: known?.packQty ?? "1",
+                                      });
                                     }
                                   }}
                                 />
@@ -2300,6 +2458,72 @@ export default function App() {
                                       </button>
                                     </div>
                                     {scanNewItemError && <p className="error">{scanNewItemError}</p>}
+                                  </div>
+                                )}
+                                {matchedItem && !row.skip && (
+                                  <div style={{ marginTop: 4 }}>
+                                    {!packExpanded ? (
+                                      <button
+                                        type="button"
+                                        className="btn-ghost small"
+                                        onClick={() =>
+                                          setScanExpandedPackRows((s) => new Set(s).add(i))
+                                        }
+                                      >
+                                        Different pack or unit?
+                                      </button>
+                                    ) : (
+                                      <div className="sd">
+                                        Supplier's unit:{" "}
+                                        <input
+                                          value={row.supplierUnit}
+                                          placeholder={matchedItem.base_unit}
+                                          onChange={(e) => updateScanRow(i, { supplierUnit: e.target.value })}
+                                          style={{ width: 56 }}
+                                        />
+                                        {row.supplierUnit &&
+                                          row.supplierUnit !== matchedItem.base_unit &&
+                                          autoFactor(row.supplierUnit, matchedItem.base_unit) === null && (
+                                            <>
+                                              {" "}
+                                              = <input
+                                                type="number"
+                                                min="0"
+                                                step="any"
+                                                value={row.packQty}
+                                                onChange={(e) => updateScanRow(i, { packQty: e.target.value })}
+                                                style={{ width: 50 }}
+                                              />{" "}
+                                              {matchedItem.base_unit}
+                                            </>
+                                          )}
+                                        <button
+                                          type="button"
+                                          className="btn-ghost small"
+                                          onClick={() => {
+                                            setScanExpandedPackRows((s) => {
+                                              const next = new Set(s);
+                                              next.delete(i);
+                                              return next;
+                                            });
+                                            updateScanRow(i, { supplierUnit: "", packQty: "1" });
+                                          }}
+                                        >
+                                          ✕
+                                        </button>
+                                        {row.supplierUnit && row.supplierUnit !== matchedItem.base_unit && (
+                                          <div>
+                                            {converted
+                                              ? `→ ${converted.qty.toFixed(3)} ${matchedItem.base_unit} @ ${formatMoney(
+                                                  converted.unitPrice,
+                                                  orgCurrency,
+                                                  4
+                                                )}/${matchedItem.base_unit}`
+                                              : "enter a conversion to include this row"}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </td>
@@ -2344,7 +2568,8 @@ export default function App() {
                                 </button>
                               </td>
                             </tr>
-                          ))}
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
