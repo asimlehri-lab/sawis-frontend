@@ -228,6 +228,7 @@ interface ItemRow {
   category: string;
   vat_rate: string;
   department: string;
+  par_level: string;
   exists: boolean;
   include: boolean;
 }
@@ -275,6 +276,7 @@ function ItemsImportPanel({
       const catIdx = headerIndex(header, "category");
       const vatIdx = headerIndex(header, "vat");
       const deptIdx = headerIndex(header, "department");
+      const parIdx = headerIndexAny(header, ["par_level", "par"]);
       if (nameIdx === -1 || unitIdx === -1) {
         setParseError(`Expected at least "name,unit" columns — found: ${header.join(", ")}`);
         setRows([]);
@@ -286,6 +288,12 @@ function ItemsImportPanel({
         const unitRaw = (r[unitIdx] || "").trim();
         const base_unit = BASE_UNITS.find((u) => u.toLowerCase() === unitRaw.toLowerCase()) || "";
         if (!name || !base_unit) continue;
+        // A non-numeric par cell (typo, stray text) is treated as blank
+        // rather than sent through — better to silently default to 0
+        // server-side than to send garbage the backend would also just
+        // reject back to 0 anyway.
+        const parRaw = parIdx > -1 ? (r[parIdx] || "").trim() : "";
+        const par_level = parRaw && !isNaN(Number(parRaw)) && Number(parRaw) >= 0 ? parRaw : "";
         parsed.push({
           name,
           sku: skuIdx > -1 ? (r[skuIdx] || "").trim() : "",
@@ -293,6 +301,7 @@ function ItemsImportPanel({
           category: catIdx > -1 ? (r[catIdx] || "").trim() : "",
           vat_rate: vatIdx > -1 ? (r[vatIdx] || "").trim() : "",
           department: deptIdx > -1 ? (r[deptIdx] || "").trim().toLowerCase() : "",
+          par_level,
           exists: existingNames.has(name.toLowerCase()),
           include: true,
         });
@@ -332,6 +341,7 @@ function ItemsImportPanel({
           category: r.category || undefined,
           vat_rate: r.vat_rate ? (Number(r.vat_rate) / 100).toFixed(4) : null,
           department: (r.department || undefined) as "kitchen" | "bar" | "foh" | undefined,
+          par_level: r.par_level || undefined,
         }))
       );
       setResult({ created: res.created.length, holdingsBackfilled: res.holdings_backfilled.length });
@@ -366,11 +376,14 @@ function ItemsImportPanel({
         <label>CSV file</label>
         <input type="file" accept=".csv,text/csv" onChange={handleFile} />
         <div className="vhint">
-          Header row required: <code>name,sku,unit,category,vat,department</code> — only <code>name</code> and{" "}
-          <code>unit</code> are required. <code>sku</code>/<code>category</code>/<code>vat</code> (as a % number)
-          can be left blank. <code>department</code> is optional too (<code>kitchen</code>, <code>bar</code> or{" "}
-          <code>foh</code>) and defaults to Kitchen — it decides where each item's stock holding is created at
-          the location below. e.g. "Beef mince 5%,,kg,Meat,20,kitchen".
+          Header row required: <code>name,sku,unit,category,vat,department,par_level</code> — only{" "}
+          <code>name</code> and <code>unit</code> are required. <code>sku</code>/<code>category</code>/
+          <code>vat</code> (as a % number) can be left blank. <code>department</code> is optional too (
+          <code>kitchen</code>, <code>bar</code> or <code>foh</code>) and defaults to Kitchen — it decides where
+          each item's stock holding is created at the location below. <code>par_level</code> is optional and
+          defaults to 0 if blank — it only sets the par on a holding this import actually creates (a brand-new
+          item, or backfilling a missing holding for an existing item); it never changes the par on a holding
+          that already exists. e.g. "Beef mince 5%,,kg,Meat,20,kitchen,3".
         </div>
       </div>
 
@@ -392,6 +405,7 @@ function ItemsImportPanel({
                 <th>Category</th>
                 <th>Unit</th>
                 <th className="num">VAT</th>
+                <th className="num">Par</th>
                 <th>Status</th>
                 <th></th>
               </tr>
@@ -403,6 +417,7 @@ function ItemsImportPanel({
                   <td className="muted">{r.category || "—"}</td>
                   <td className="muted">{r.base_unit}</td>
                   <td className="num">{r.vat_rate ? `${r.vat_rate}%` : "—"}</td>
+                  <td className="num">{r.par_level || "0"}</td>
                   <td>
                     {r.exists ? (
                       <span className="badge b-low">Already exists — will add holding</span>

@@ -193,6 +193,14 @@ export interface BulkItemInput {
   category?: string;
   vat_rate?: string | null;
   department?: "kitchen" | "bar" | "foh";
+  // Optional par level for the ItemHolding this import creates at
+  // `location`. Omitted/blank defaults to 0 server-side, same as before
+  // this field existed. Only ever applied when a NEW holding is created
+  // (a brand-new item, or backfilling a missing holding for an existing
+  // item) -- never overwrites an already-set par level on a holding that
+  // already exists, matching bulk_import's existing "never clobber what's
+  // already there" behavior.
+  par_level?: string;
 }
 
 export interface BulkItemImportResult {
