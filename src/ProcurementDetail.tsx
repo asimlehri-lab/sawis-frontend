@@ -9,7 +9,6 @@ import {
   createPurchaseOrder,
   fetchOnHand,
   formatMoney,
-  currencySymbol,
 } from "./api";
 import type { PurchaseOrder, CatalogItem, Supplier, ItemSupplierRow, Location } from "./api";
 import SearchSelect from "./SearchSelect";
