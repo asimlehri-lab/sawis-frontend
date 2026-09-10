@@ -2172,7 +2172,13 @@ export default function App() {
           className="modal-backdrop"
           onClick={() => !scanning && !creatingPOFromScan && !retryingReceive && closeScanModal()}
         >
-          <div className="modal xwide" onClick={(e) => e.stopPropagation()}>
+          {/* "wide" is what actually caps the modal's height at 88vh and
+              turns on internal scrolling -- "xwide" only widens it. Same
+              combo MenuListImportModal.tsx already uses for the same
+              reason (a tall review list needs a scrollbar, not an
+              ever-growing modal that pushes its own Confirm button off
+              the bottom of the screen). */}
+          <div className="modal wide xwide" onClick={(e) => e.stopPropagation()}>
             <h2>Scan receipt</h2>
 
             {!scanResult && (
@@ -2406,7 +2412,7 @@ export default function App() {
                               </div>
                             </div>
 
-                            <div className="field" style={{ marginTop: 8 }}>
+                            <div className="field" style={{ marginTop: 6 }}>
                               <label>Matched item</label>
                               <SearchSelect
                                 value={row.matchedItemId}
