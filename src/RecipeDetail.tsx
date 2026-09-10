@@ -5,8 +5,10 @@ import {
   createRecipeLine,
   deleteRecipeLine,
   YIELD_UNITS,
+  formatMoney,
+  defaultCurrency,
 } from "./api";
-import type { Recipe, CatalogItem } from "./api";
+import type { Recipe, CatalogItem, Location } from "./api";
 import SearchSelect from "./SearchSelect";
 
 const TARGET_FC = 30;
@@ -16,6 +18,7 @@ interface Props {
   accessToken: string;
   items: CatalogItem[];
   allRecipes: Recipe[];
+  locations: Location[];
   onBack: () => void;
   onChanged: () => void;
   onOpenRecipe: (id: string) => void;
@@ -26,12 +29,17 @@ export default function RecipeDetail({
   accessToken,
   items,
   allRecipes,
+  locations,
   onBack,
   onChanged,
   onOpenRecipe,
 }: Props) {
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Recipe cost/menu price are org-wide, not tied to one location — falls
+  // back to the org's first location's currency (see defaultCurrency's own
+  // notes in api.ts).
+  const currency = defaultCurrency(locations);
 
   const [addItemId, setAddItemId] = useState("");
   const [addItemQty, setAddItemQty] = useState("0.1");
@@ -214,8 +222,8 @@ export default function RecipeDetail({
                   <td className="num">
                     {line.qty} {line.unit}
                   </td>
-                  <td className="num">£{Number(line.unit_cost).toFixed(2)}</td>
-                  <td className="num">£{Number(line.line_cost).toFixed(2)}</td>
+                  <td className="num">{formatMoney(Number(line.unit_cost), currency)}</td>
+                  <td className="num">{formatMoney(Number(line.line_cost), currency)}</td>
                   <td>
                     <button className="rm" onClick={() => handleRemoveLine(line.id)}>
                       ×
@@ -264,7 +272,7 @@ export default function RecipeDetail({
                     options={subRecipeChoices.map((r) => ({
                       value: r.id,
                       label: r.name,
-                      sublabel: `£${r.per_portion_cost.toFixed(2)}/${r.yield_unit}`,
+                      sublabel: `${formatMoney(r.per_portion_cost, currency)}/${r.yield_unit}`,
                     }))}
                   />
                   <div className="addrow-bottom">
@@ -322,11 +330,11 @@ export default function RecipeDetail({
             <>
               <div className="metric big-m">
                 <span className="ml">Batch cost</span>
-                <span className="mv">£{recipe.batch_cost.toFixed(2)}</span>
+                <span className="mv">{formatMoney(recipe.batch_cost, currency)}</span>
               </div>
               <div className="metric big-m">
                 <span className="ml">Cost per {recipe.yield_unit}</span>
-                <span className="mv violet-text">£{recipe.per_portion_cost.toFixed(2)}</span>
+                <span className="mv violet-text">{formatMoney(recipe.per_portion_cost, currency)}</span>
               </div>
               <div className="perplate">
                 Change an ingredient here and every dish using this sub-recipe re-costs automatically —
@@ -413,21 +421,21 @@ export default function RecipeDetail({
                   Batch cost ({recipe.yield_qty} {recipe.yield_unit}
                   {yieldNum > 1 ? "s" : ""})
                 </span>
-                <span className="mv">£{recipe.batch_cost.toFixed(2)}</span>
+                <span className="mv">{formatMoney(recipe.batch_cost, currency)}</span>
               </div>
               <div className="metric big-m">
                 <span className="ml">Cost per {recipe.yield_unit}</span>
-                <span className="mv">£{recipe.per_portion_cost.toFixed(2)}</span>
+                <span className="mv">{formatMoney(recipe.per_portion_cost, currency)}</span>
               </div>
               <div className="metric">
                 <span className="ml">Gross profit / {recipe.yield_unit}</span>
-                <span className="mv">£{(menuPriceNum - recipe.per_portion_cost).toFixed(2)}</span>
+                <span className="mv">{formatMoney(menuPriceNum - recipe.per_portion_cost, currency)}</span>
               </div>
               <div className="perplate">
                 One batch makes <b>{recipe.yield_qty} {recipe.yield_unit}{yieldNum > 1 ? "s" : ""}</b> at{" "}
-                <b>£{menuPriceNum.toFixed(2)}</b> each — batch sales value{" "}
-                <b>£{(menuPriceNum * yieldNum).toFixed(2)}</b>, batch profit{" "}
-                <b>£{(menuPriceNum * yieldNum - recipe.batch_cost).toFixed(2)}</b>.
+                <b>{formatMoney(menuPriceNum, currency)}</b> each — batch sales value{" "}
+                <b>{formatMoney(menuPriceNum * yieldNum, currency)}</b>, batch profit{" "}
+                <b>{formatMoney(menuPriceNum * yieldNum - recipe.batch_cost, currency)}</b>.
               </div>
             </>
           )}

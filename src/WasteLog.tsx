@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createStockMovement, createWasteEvent } from "./api";
+import { createStockMovement, createWasteEvent, formatMoney } from "./api";
 import type { CatalogItem, ItemSupplierRow, Location, StockMovementRow, WasteEventRow } from "./api";
 import SearchSelect from "./SearchSelect";
 
@@ -67,6 +67,7 @@ export default function WasteLog({
 }: Props) {
   const [selectedItem, setSelectedItem] = useState("");
   const [selectedLocation, setSelectedLocation] = useState(locations[0]?.id ?? "");
+  const currency = locations.find((l) => l.id === selectedLocation)?.currency;
   const [selectedDept, setSelectedDept] = useState<"kitchen" | "bar" | "foh">("kitchen");
   const [qty, setQty] = useState("");
   const [reason, setReason] = useState(REASONS[0].value);
@@ -194,7 +195,7 @@ export default function WasteLog({
       <div className="kpi-grid">
         <div className="kpi-card">
           <div className="kpi-label">Waste value (7 days)</div>
-          <div className="kpi-value">£{wasteValue7d.toFixed(2)}</div>
+          <div className="kpi-value">{formatMoney(wasteValue7d, currency)}</div>
           <div className="kpi-sub">
             {last7.length} event{last7.length === 1 ? "" : "s"} logged
           </div>
@@ -205,7 +206,7 @@ export default function WasteLog({
             {topReason7d ? reasonLabel(topReason7d) : "—"}
           </div>
           <div className="kpi-sub">
-            {topReason7d ? `£${(reasonTotals7d[topReason7d] ?? 0).toFixed(2)} of last 7 days' waste` : "No waste logged yet"}
+            {topReason7d ? `${formatMoney(reasonTotals7d[topReason7d] ?? 0, currency)} of last 7 days' waste` : "No waste logged yet"}
           </div>
         </div>
         <div className="kpi-card">
@@ -230,7 +231,7 @@ export default function WasteLog({
               />
               {selectedItem && (
                 <div className="waste-cost-hint">
-                  {unitCost !== null ? `£${unitCost.toFixed(2)} / ${selectedItemObj?.base_unit}` : "No supplier price recorded"}
+                  {unitCost !== null ? `${formatMoney(unitCost, currency)} / ${selectedItemObj?.base_unit}` : "No supplier price recorded"}
                 </div>
               )}
             </div>
@@ -347,7 +348,7 @@ export default function WasteLog({
                       <td>{r.itemName}</td>
                       <td className="muted">{reasonLabel(r.reason)}</td>
                       <td className="num">{r.qty.toFixed(2)}</td>
-                      <td className="num">£{r.value.toFixed(2)}</td>
+                      <td className="num">{formatMoney(r.value, currency)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -365,7 +366,7 @@ export default function WasteLog({
               <div className="bar-track">
                 <div className="bar-fill" style={{ width: `${maxBreakdown ? (total / maxBreakdown) * 100 : 0}%` }} />
               </div>
-              <div className="bar-val">£{total.toFixed(2)}</div>
+              <div className="bar-val">{formatMoney(total, currency)}</div>
             </div>
           ))}
         </div>

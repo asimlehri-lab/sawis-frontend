@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchReportsSummary } from "./api";
+import { fetchReportsSummary, formatMoney, currencySymbol } from "./api";
 import type { Location, ReportsMenuRow, ReportsSummary } from "./api";
 
 interface Props {
@@ -8,9 +8,6 @@ interface Props {
 }
 
 const TARGET_FC = 30;
-
-const gbp = (n: number, d = 0) =>
-  `£${n.toLocaleString("en-GB", { minimumFractionDigits: d, maximumFractionDigits: d })}`;
 
 function pct(n: number | null, d = 1) {
   return n === null ? "—" : `${n.toFixed(d)}%`;
@@ -27,6 +24,7 @@ const sectionHeadStyle: React.CSSProperties = {
 
 export default function Reports({ accessToken, locations }: Props) {
   const [location, setLocation] = useState(locations[0]?.id ?? "");
+  const currency = locations.find((l) => l.id === location)?.currency;
   const [period, setPeriod] = useState<"week" | "month" | "lastmonth">("week");
   const [report, setReport] = useState<ReportsSummary | null>(null);
   const [loading, setLoading] = useState(false);
@@ -100,17 +98,17 @@ export default function Reports({ accessToken, locations }: Props) {
           <div className="muted" style={{ marginTop: -6, marginBottom: 16, fontSize: 11.5 }}>
             {report.range.start} – {report.range.end}
           </div>
-          <RptKpis report={report} />
+          <RptKpis report={report} currency={currency} />
           <TrendChart report={report} asTable={trendAsTable} setAsTable={setTrendAsTable} />
-          <SplitBar report={report} />
-          <MenuTable rows={report.menu} />
+          <SplitBar report={report} currency={currency} />
+          <MenuTable rows={report.menu} currency={currency} />
         </>
       )}
     </div>
   );
 }
 
-function RptKpis({ report }: { report: ReportsSummary }) {
+function RptKpis({ report, currency }: { report: ReportsSummary; currency?: string }) {
   const fc = report.food_cost_pct;
   const fcOver = fc !== null && fc > TARGET_FC;
   const gp = report.gross_profit_pct;
@@ -129,7 +127,7 @@ function RptKpis({ report }: { report: ReportsSummary }) {
       <div className="kpi-grid kpi-grid-5">
         <div className="kpi-card">
           <div className="kpi-label">Net sales</div>
-          <div className="kpi-value">{gbp(report.net_sales)}</div>
+          <div className="kpi-value">{formatMoney(report.net_sales, currency, 0)}</div>
           <div className="kpi-sub">this period</div>
         </div>
 
@@ -165,13 +163,13 @@ function RptKpis({ report }: { report: ReportsSummary }) {
         <div className="kpi-card">
           <div className="kpi-label">Waste</div>
           <div className="kpi-value">{pct(wastePct)}</div>
-          <div className="kpi-sub">{wastePct === null ? "no sales to compare" : `${gbp(report.waste_cost, 2)} of sales`}</div>
+          <div className="kpi-sub">{wastePct === null ? "no sales to compare" : `${formatMoney(report.waste_cost, currency, 2)} of sales`}</div>
         </div>
 
         <div className="kpi-card">
           <div className="kpi-label">Stock variance</div>
           <div className="kpi-value" style={{ color: variance < 0 ? "#A33636" : variance > 0 ? "#1D6B4F" : undefined }}>
-            {gbp(variance, 2)}
+            {formatMoney(variance, currency, 2)}
           </div>
           <div className="kpi-sub">
             {variance < 0 ? "shrinkage vs counts" : variance > 0 ? "surplus vs counts" : "no counts logged, or matched exactly"}
@@ -276,13 +274,13 @@ function TrendChart({
   );
 }
 
-function SplitBar({ report }: { report: ReportsSummary }) {
+function SplitBar({ report, currency }: { report: ReportsSummary; currency?: string }) {
   const fc = report.food_cost_pct;
   const gp = report.gross_profit_pct;
 
   return (
     <section className="card" style={{ marginTop: 16 }}>
-      <h2 style={{ ...sectionHeadStyle, marginBottom: 12 }}>Where each £ of sales went</h2>
+      <h2 style={{ ...sectionHeadStyle, marginBottom: 12 }}>Where each {currencySymbol(currency)} of sales went</h2>
       {fc === null || gp === null ? (
         <p className="muted" style={{ margin: 0 }}>
           No sales recorded in this period yet.
@@ -313,7 +311,7 @@ function SplitBar({ report }: { report: ReportsSummary }) {
   );
 }
 
-function MenuTable({ rows }: { rows: ReportsMenuRow[] }) {
+function MenuTable({ rows, currency }: { rows: ReportsMenuRow[]; currency?: string }) {
   return (
     <section className="card" style={{ marginTop: 16 }}>
       <h2 style={{ ...sectionHeadStyle, marginBottom: 12 }}>Menu performance</h2>
@@ -357,8 +355,8 @@ function MenuTable({ rows }: { rows: ReportsMenuRow[] }) {
                     </span>
                   )}
                 </td>
-                <td className="num">{gbp(r.gp_per_unit, 2)}</td>
-                <td className="num">{gbp(r.gp_contribution, 2)}</td>
+                <td className="num">{formatMoney(r.gp_per_unit, currency, 2)}</td>
+                <td className="num">{formatMoney(r.gp_contribution, currency, 2)}</td>
               </tr>
             ))}
           </tbody>

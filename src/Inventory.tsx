@@ -8,6 +8,7 @@ import {
   createStockMovement,
   deleteSection,
   fetchOnHand,
+  formatMoney,
   scanCountSheet,
   updateCountAssignment,
   updateItemHolding,
@@ -254,6 +255,7 @@ export default function Inventory({
           cheapestPrice={cheapestPrice}
           stockCounts={stockCounts ?? []}
           activeLocation={activeLocation}
+          currency={locations.find((l) => l.id === activeLocation)?.currency}
           stockMovements={stockMovements}
         />
       )}
@@ -306,6 +308,7 @@ function LiveStockTab({
   cheapestPrice,
   stockCounts,
   activeLocation,
+  currency,
   stockMovements,
 }: {
   holdings: FlatHolding[];
@@ -313,6 +316,7 @@ function LiveStockTab({
   cheapestPrice: (itemId: string) => number | null;
   stockCounts: StockCountRow[];
   activeLocation: string;
+  currency?: string;
   stockMovements: StockMovementRow[];
 }) {
   const [search, setSearch] = useState("");
@@ -338,7 +342,7 @@ function LiveStockTab({
       <div className="kpi-grid">
         <div className="kpi-card">
           <div className="kpi-label">Stock value</div>
-          <div className="kpi-value">£{stockValue.toFixed(2)}</div>
+          <div className="kpi-value">{formatMoney(stockValue, currency)}</div>
           <div className="kpi-sub">
             {holdings.length} item{holdings.length === 1 ? "" : "s"} tracked
           </div>
@@ -422,7 +426,7 @@ function LiveStockTab({
                       <td>
                         <span className={`badge ${low ? "b-low" : "b-ok"}`}>{low ? "Low" : "OK"}</span>
                       </td>
-                      <td className="num">£{((oh ?? 0) * (cheapestPrice(h.itemId) ?? 0)).toFixed(2)}</td>
+                      <td className="num">{formatMoney((oh ?? 0) * (cheapestPrice(h.itemId) ?? 0), currency)}</td>
                     </tr>
                     {expanded && (
                       <tr>
@@ -451,7 +455,7 @@ function LiveStockTab({
                                     </td>
                                     <td>{m.movement_type}</td>
                                     <td className="num">{Number(m.qty_delta) > 0 ? "+" : ""}{Number(m.qty_delta).toFixed(2)}</td>
-                                    <td className="num">£{Number(m.unit_cost).toFixed(2)}</td>
+                                    <td className="num">{formatMoney(Number(m.unit_cost), currency)}</td>
                                     <td className="muted">{m.source_type}</td>
                                   </tr>
                                 ))}

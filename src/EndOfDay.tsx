@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchLastImportDate, importSales } from "./api";
+import { fetchLastImportDate, importSales, formatMoney } from "./api";
 import type { CatalogItem, ItemSupplierRow, Location, Recipe } from "./api";
 import Reorder from "./Reorder";
 import EodReport from "./EodReport";
@@ -141,6 +141,7 @@ function fmtImportedAt(iso: string): string {
 export default function EndOfDay({ accessToken, locations, recipes, items, itemSupplierLinks }: Props) {
   const [tab, setTab] = useState<"overview" | "reorder">("overview");
   const [location, setLocation] = useState(locations[0]?.id ?? "");
+  const currency = locations.find((l) => l.id === location)?.currency;
   const [fileName, setFileName] = useState("");
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -560,7 +561,7 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
                           )}
                         </td>
                         <td className="num">{r.qty}</td>
-                        <td className="num">£{(Number(r.revenue) || 0).toFixed(2)}</td>
+                        <td className="num">{formatMoney(Number(r.revenue) || 0, currency)}</td>
                         <td>
                           <button
                             type="button"
@@ -582,7 +583,7 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
                 ✓ <b>
                   {result.sales} sale{result.sales === 1 ? "" : "s"}
                 </b>{" "}
-                imported — {result.dishes} dishes, £{result.revenue.toFixed(2)} revenue.
+                imported — {result.dishes} dishes, {formatMoney(result.revenue, currency)} revenue.
                 {result.skipped > 0 && ` ${result.skipped} row${result.skipped === 1 ? "" : "s"} skipped.`}{" "}
                 {result.undepletedIngredients.length === 0
                   ? "Stock has been depleted for every matched ingredient."

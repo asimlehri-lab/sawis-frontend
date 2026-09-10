@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createPOLine, createPurchaseOrder, fetchOnHand, fetchPurchaseOrders } from "./api";
+import { createPOLine, createPurchaseOrder, fetchOnHand, fetchPurchaseOrders, formatMoney } from "./api";
 import type { CatalogItem, ItemSupplierRow, Location, PurchaseOrder } from "./api";
 
 interface Props {
@@ -19,8 +19,6 @@ interface ReorderLine {
   onHand: number;
 }
 
-const gbp = (n: number) => `£${n.toFixed(2)}`;
-
 // The Reorder step of the End of day workflow: items below par at a
 // location, with supplier prices compared side by side (cheapest flagged
 // against whichever supplier is the item's "usual" one) and a one-click way
@@ -37,6 +35,8 @@ const gbp = (n: number) => `£${n.toFixed(2)}`;
 // sitting right there.
 export default function Reorder({ accessToken, items, locations, itemSupplierLinks }: Props) {
   const [location, setLocation] = useState(locations[0]?.id ?? "");
+  const currency = locations.find((l) => l.id === location)?.currency;
+  const gbp = (n: number) => formatMoney(n, currency);
   const [onHand, setOnHand] = useState<Record<string, number>>({});
   const [loadingOnHand, setLoadingOnHand] = useState(false);
   const [qty, setQty] = useState<Record<string, string>>({});

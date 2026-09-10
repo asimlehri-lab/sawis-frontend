@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchEodReport } from "./api";
+import { fetchEodReport, formatMoney } from "./api";
 import type { EodChampionEntry, EodReport as EodReportData, Location } from "./api";
 
 interface Props {
@@ -13,15 +13,13 @@ const PERIOD_LABEL: Record<string, string> = {
   month: "the previous month",
 };
 
-const gbp = (n: number, d = 0) =>
-  `£${n.toLocaleString("en-GB", { minimumFractionDigits: d, maximumFractionDigits: d })}`;
-
 function pct(n: number | null, d = 1) {
   return n === null ? "—" : `${n.toFixed(d)}%`;
 }
 
 export default function EodReport({ accessToken, locations }: Props) {
   const [location, setLocation] = useState(locations[0]?.id ?? "");
+  const currency = locations.find((l) => l.id === location)?.currency;
   const [period, setPeriod] = useState<"today" | "week" | "month">("today");
   const [champKind, setChampKind] = useState<"food" | "drink">("food");
   const [report, setReport] = useState<EodReportData | null>(null);
@@ -87,16 +85,16 @@ export default function EodReport({ accessToken, locations }: Props) {
 
       {report && (
         <>
-          <KpiHeader report={report} />
-          <ComparisonCard report={report} />
-          <ChampionsSection report={report} champKind={champKind} setChampKind={setChampKind} />
+          <KpiHeader report={report} currency={currency} />
+          <ComparisonCard report={report} currency={currency} />
+          <ChampionsSection report={report} champKind={champKind} setChampKind={setChampKind} currency={currency} />
         </>
       )}
     </div>
   );
 }
 
-function KpiHeader({ report }: { report: EodReportData }) {
+function KpiHeader({ report, currency }: { report: EodReportData; currency?: string }) {
   const c = report.current;
   const fc = c.food_cost_pct;
   const over = fc !== null && fc > 30;
@@ -151,7 +149,7 @@ function KpiHeader({ report }: { report: EodReportData }) {
 
       <section className="card">
         <p className="kl">Net sales</p>
-        <div className="kv">{gbp(c.net_sales)}</div>
+        <div className="kv">{formatMoney(c.net_sales, currency, 0)}</div>
         <div className="ks">
           {c.covers !== null
             ? `${c.covers.toLocaleString("en-GB")} cover${c.covers === 1 ? "" : "s"}${c.covers_partial ? " (partial — not every day logged covers)" : ""}`
@@ -198,7 +196,7 @@ const AVERAGE_LABEL: Record<string, string> = {
   month: "your rolling 3-month average",
 };
 
-function ComparisonCard({ report }: { report: EodReportData }) {
+function ComparisonCard({ report, currency }: { report: EodReportData; currency?: string }) {
   const [mode, setMode] = useState<"previous" | "average">("previous");
   const cur = report.current;
   const avg = report.average;
@@ -225,8 +223,8 @@ function ComparisonCard({ report }: { report: EodReportData }) {
     ? [
         {
           l: "Net sales",
-          cur: gbp(cur.net_sales),
-          prevV: gbp(against.net_sales),
+          cur: formatMoney(cur.net_sales, currency, 0),
+          prevV: formatMoney(against.net_sales, currency, 0),
           delta: deltaChip(cur.net_sales, against.net_sales, "more"),
         },
         {
@@ -290,10 +288,12 @@ function ChampionsSection({
   report,
   champKind,
   setChampKind,
+  currency,
 }: {
   report: EodReportData;
   champKind: "food" | "drink";
   setChampKind: (k: "food" | "drink") => void;
+  currency?: string;
 }) {
   const group = report.champions[champKind];
 
@@ -325,7 +325,7 @@ function ChampionsSection({
             <div className="hero-info">
               <div className="hero-name">{group.hero.name}</div>
               <div className="hero-metric">
-                {gbp(group.hero.gp, 2)} <span>gross profit</span>
+                {formatMoney(group.hero.gp, currency, 2)} <span>gross profit</span>
               </div>
               <div className="hero-stats">
                 <span className="hstat">
@@ -335,7 +335,7 @@ function ChampionsSection({
                   Margin<b>{pct(group.hero.margin_pct)}</b>
                 </span>
                 <span className="hstat">
-                  Revenue<b>{gbp(group.hero.revenue, 2)}</b>
+                  Revenue<b>{formatMoney(group.hero.revenue, currency, 2)}</b>
                 </span>
               </div>
             </div>

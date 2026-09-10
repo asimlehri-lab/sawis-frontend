@@ -13,6 +13,8 @@ import {
   createCategory,
   deleteItem,
   login,
+  formatMoney,
+  defaultCurrency,
 } from "./api";
 import type { CatalogItem, Category, Location, ItemSupplierRow, SupplierItemRow, Supplier } from "./api";
 
@@ -118,6 +120,10 @@ export default function ItemDetail({
   const [item, setItem] = useState<CatalogItem | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [onHandMap, setOnHandMap] = useState<Record<string, number>>({});
+  // Supplier prices are org-wide, not tied to one location — no single
+  // "right" currency for them, so this falls back to the org's first
+  // location's currency (see defaultCurrency's own notes in api.ts).
+  const currency = defaultCurrency(locations);
 
   const [vatPct, setVatPct] = useState("");
   const [showAddHolding, setShowAddHolding] = useState(false);
@@ -650,7 +656,7 @@ export default function ItemDetail({
                 />
               </span>
               <span className="sp">
-                £{Number(row.unit_price).toFixed(2)}/{item.base_unit}
+                {formatMoney(Number(row.unit_price), currency)}/{item.base_unit}
               </span>
               {itemSuppliers.length > 1 && !isDefault && (
                 <button
@@ -684,7 +690,7 @@ export default function ItemDetail({
                   <div className="sd">their line: "{sug.supplierItem.raw_name}"</div>
                 </span>
                 <span className="sp">
-                  £{Number(sug.supplierItem.price).toFixed(2)}/{sug.supplierItem.unit}
+                  {formatMoney(Number(sug.supplierItem.price), currency)}/{sug.supplierItem.unit}
                 </span>
                 <button
                   className="linkbtn"

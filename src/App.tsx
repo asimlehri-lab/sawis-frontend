@@ -28,6 +28,9 @@ import {
   fetchSections,
   fetchStockCounts,
   fetchMemberships,
+  formatMoney,
+  defaultCurrency,
+  currencySymbol,
 } from "./api";
 import type {
   Me,
@@ -317,6 +320,12 @@ export default function App() {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
+  // Recipes/Suppliers are org-wide, not tied to one location — this table's
+  // costs fall back to the org's first location's currency (see
+  // defaultCurrency's own notes in api.ts). Purchase orders and the Scan
+  // receipt flow, further down, use each PO's own location's currency
+  // instead, since a PO genuinely belongs to one location.
+  const orgCurrency = defaultCurrency(locations);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplierItems, setSupplierItems] = useState<SupplierItemRow[]>([]);
 
@@ -1243,6 +1252,7 @@ export default function App() {
             accessToken={accessToken}
             items={items ?? []}
             allRecipes={recipes ?? []}
+            locations={locations}
             onBack={() => setSelectedRecipeId(null)}
             onChanged={() => loadRecipes(accessToken)}
             onOpenRecipe={(id) => setSelectedRecipeId(id)}
@@ -1267,6 +1277,7 @@ export default function App() {
             items={items ?? []}
             suppliers={suppliers}
             itemSupplierLinks={itemSupplierLinks}
+            locations={locations}
             onBack={() => setSelectedPOId(null)}
             onChanged={() => loadPOs(accessToken)}
             onOpenPO={(id) => setSelectedPOId(id)}
@@ -1279,6 +1290,7 @@ export default function App() {
             supplierId={selectedSupplierId}
             suppliers={suppliers}
             purchaseOrders={purchaseOrders ?? []}
+            locations={locations}
             onBack={() => setSelectedSupplierId(null)}
             onOpenPO={(id) => setSelectedPOId(id)}
             onNewPO={openNewPOForSupplier}
@@ -1435,9 +1447,9 @@ export default function App() {
                               <td className="num">
                                 {r.yield_qty} {r.yield_unit}
                               </td>
-                              <td className="num">£{Number(r.batch_cost).toFixed(2)}</td>
-                              <td className="num">£{Number(r.per_portion_cost).toFixed(2)}</td>
-                              <td className="num">{r.menu_price ? `£${Number(r.menu_price).toFixed(2)}` : "—"}</td>
+                              <td className="num">{formatMoney(Number(r.batch_cost), orgCurrency)}</td>
+                              <td className="num">{formatMoney(Number(r.per_portion_cost), orgCurrency)}</td>
+                              <td className="num">{r.menu_price ? formatMoney(Number(r.menu_price), orgCurrency) : "—"}</td>
                               <td className="num">
                                 {r.plate_food_cost_pct !== null ? `${r.plate_food_cost_pct.toFixed(1)}%` : "—"}
                               </td>
@@ -1527,7 +1539,9 @@ export default function App() {
                               </td>
                               <td className="muted">{fmtDate(po.expected_date)}</td>
                               <td className="num">{po.lines.length}</td>
-                              <td className="num">£{Number(po.total).toFixed(2)}</td>
+                              <td className="num">
+                                {formatMoney(Number(po.total), locations.find((l) => l.id === po.location)?.currency)}
+                              </td>
                             </tr>
                           );
                         })}
@@ -1815,7 +1829,7 @@ export default function App() {
                     step="0.01"
                     value={newSupplierMin}
                     onChange={(e) => setNewSupplierMin(e.target.value)}
-                    placeholder="Minimum order value £ (optional)"
+                    placeholder={`Minimum order value ${currencySymbol(orgCurrency)} (optional)`}
                   />
                   <div className="new-sup-row">
                     <button
@@ -1877,7 +1891,7 @@ export default function App() {
                     <tr key={i}>
                       <td>{r.name}</td>
                       <td>{r.unit}</td>
-                      <td className="num">£{Number(r.price).toFixed(2)}</td>
+                      <td className="num">{formatMoney(Number(r.price), orgCurrency)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -2081,7 +2095,8 @@ export default function App() {
                           : ""
                       }.`
                     : "No vendor name detected — pick the supplier below."}{" "}
-                  {scanResult.total && `Receipt total: £${scanResult.total}.`}
+                  {scanResult.total &&
+                    `Receipt total: ${currencySymbol(locations.find((l) => l.id === scanLocationId)?.currency)}${scanResult.total}.`}
                 </div>
 
                 {scanMatchedPO && (

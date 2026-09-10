@@ -1,10 +1,12 @@
 import { DAY_NAMES, fmtDate, nextDeliveryDate } from "./App";
-import type { PurchaseOrder, Supplier } from "./api";
+import { formatMoney, defaultCurrency } from "./api";
+import type { PurchaseOrder, Supplier, Location } from "./api";
 
 interface Props {
   supplierId: string;
   suppliers: Supplier[];
   purchaseOrders: PurchaseOrder[];
+  locations: Location[];
   onBack: () => void;
   onOpenPO: (id: string) => void;
   onNewPO: (supplierId: string, expectedDateISO: string) => void;
@@ -22,6 +24,7 @@ export default function SupplierDeliveries({
   supplierId,
   suppliers,
   purchaseOrders,
+  locations,
   onBack,
   onOpenPO,
   onNewPO,
@@ -69,7 +72,7 @@ export default function SupplierDeliveries({
         <td className="muted">{po.location_name}</td>
         <td className="muted">{fmtDate(po.expected_date)}</td>
         <td className="num">{po.lines.length}</td>
-        <td className="num">£{Number(po.total).toFixed(2)}</td>
+        <td className="num">{formatMoney(Number(po.total), locations.find((l) => l.id === po.location)?.currency)}</td>
       </tr>
     );
   }
@@ -88,7 +91,7 @@ export default function SupplierDeliveries({
       <p className="muted detail-sub">
         {supplier.delivery_day !== null ? `Delivers every ${DAY_NAMES[supplier.delivery_day]}` : "No regular delivery day set"}
         {nextLabel ? ` · next delivery ${nextLabel}` : ""}
-        {supplier.min_order_value ? ` · £${Number(supplier.min_order_value).toFixed(0)} minimum order` : ""}
+        {supplier.min_order_value ? ` · ${formatMoney(Number(supplier.min_order_value), defaultCurrency(locations), 0)} minimum order` : ""}
       </p>
 
       <div className="card">

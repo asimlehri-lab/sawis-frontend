@@ -8,8 +8,10 @@ import {
   receivePurchaseOrder,
   createPurchaseOrder,
   fetchOnHand,
+  formatMoney,
+  currencySymbol,
 } from "./api";
-import type { PurchaseOrder, CatalogItem, Supplier, ItemSupplierRow } from "./api";
+import type { PurchaseOrder, CatalogItem, Supplier, ItemSupplierRow, Location } from "./api";
 import SearchSelect from "./SearchSelect";
 
 interface Props {
@@ -18,6 +20,7 @@ interface Props {
   items: CatalogItem[];
   suppliers: Supplier[];
   itemSupplierLinks: ItemSupplierRow[];
+  locations: Location[];
   onBack: () => void;
   onChanged: () => void;
   onOpenPO: (id: string) => void;
@@ -44,6 +47,7 @@ export default function ProcurementDetail({
   items,
   suppliers,
   itemSupplierLinks,
+  locations,
   onBack,
   onChanged,
   onOpenPO,
@@ -51,6 +55,7 @@ export default function ProcurementDetail({
 }: Props) {
   const label = backLabel ?? "← All purchase orders";
   const [po, setPo] = useState<PurchaseOrder | null>(null);
+  const currency = locations.find((l) => l.id === po?.location)?.currency;
   const [error, setError] = useState<string | null>(null);
   const [advancing, setAdvancing] = useState(false);
 
@@ -151,10 +156,10 @@ export default function ProcurementDetail({
       );
       const poNumberLine = po.po_number ? `PO number: ${po.po_number}%0D%0A%0D%0A` : "";
       const bodyLines = po.lines
-        .map((l) => `${Number(l.qty).toFixed(2)} × ${l.item_name} @ £${Number(l.unit_price).toFixed(2)}`)
+        .map((l) => `${Number(l.qty).toFixed(2)} × ${l.item_name} @ ${formatMoney(Number(l.unit_price), currency)}`)
         .join("%0D%0A");
       window.open(
-        `mailto:${supplier.contact_email}?subject=${subject}&body=${poNumberLine}${bodyLines}%0D%0A%0D%0ATotal: £${Number(po.total).toFixed(2)}`,
+        `mailto:${supplier.contact_email}?subject=${subject}&body=${poNumberLine}${bodyLines}%0D%0A%0D%0ATotal: ${formatMoney(Number(po.total), currency)}`,
         "_blank"
       );
     }
@@ -463,10 +468,10 @@ export default function ProcurementDetail({
         <div className="minwarn">
           <div>
             <b>
-              Below {po.supplier_name}'s £{Number(supplier.min_order_value).toFixed(0)} minimum order.
+              Below {po.supplier_name}'s {formatMoney(Number(supplier.min_order_value), currency, 0)} minimum order.
             </b>{" "}
-            This PO is £{Number(po.total).toFixed(2)} — short by £
-            {(Number(supplier.min_order_value) - Number(po.total)).toFixed(2)}. {po.supplier_name} won't
+            This PO is {formatMoney(Number(po.total), currency)} — short by{" "}
+            {formatMoney(Number(supplier.min_order_value) - Number(po.total), currency)}. {po.supplier_name} won't
             accept it as is.
           </div>
           <button className="minwarn-btn" onClick={handleSuggestItems} disabled={suggesting}>
@@ -502,14 +507,14 @@ export default function ProcurementDetail({
               <tr key={l.id}>
                 <td>{l.item_name}</td>
                 <td>{Number(l.qty).toFixed(2)}</td>
-                <td>£{Number(l.unit_price).toFixed(2)}</td>
-                <td>£{Number(l.line_total).toFixed(2)}</td>
+                <td>{formatMoney(Number(l.unit_price), currency)}</td>
+                <td>{formatMoney(Number(l.line_total), currency)}</td>
               </tr>
             ))}
           </tbody>
         </table>
         <p>
-          <b>Total: £{Number(po.total).toFixed(2)}</b>
+          <b>Total: {formatMoney(Number(po.total), currency)}</b>
         </p>
       </div>
 
@@ -585,7 +590,7 @@ export default function ProcurementDetail({
           </div>
           <div className="field">
             <label>Total</label>
-            <div className="ro">£{Number(po.total).toFixed(2)}</div>
+            <div className="ro">{formatMoney(Number(po.total), currency)}</div>
           </div>
         </div>
       </div>
@@ -632,8 +637,8 @@ export default function ProcurementDetail({
                     Number(l.qty).toFixed(2)
                   )}
                 </td>
-                <td className="num">£{Number(l.unit_price).toFixed(2)}</td>
-                <td className="num">£{Number(l.line_total).toFixed(2)}</td>
+                <td className="num">{formatMoney(Number(l.unit_price), currency)}</td>
+                <td className="num">{formatMoney(Number(l.line_total), currency)}</td>
                 <td>
                   {editable && (
                     <button className="rm" onClick={() => handleRemoveLine(l.id)}>
@@ -732,7 +737,7 @@ export default function ProcurementDetail({
                 <tr key={l.id}>
                   <td className="dispname">{l.item_name}</td>
                   <td className="num muted">
-                    {Number(l.qty).toFixed(2)} @ £{Number(l.unit_price).toFixed(2)}
+                    {Number(l.qty).toFixed(2)} @ {formatMoney(Number(l.unit_price), currency)}
                   </td>
                   <td className="num">
                     <input
