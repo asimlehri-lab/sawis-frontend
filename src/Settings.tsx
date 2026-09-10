@@ -1,7 +1,7 @@
 import { useState } from "react";
 import * as XLSX from "xlsx";
-import { bulkImportItems, bulkImportRecipes, updateLocation, BASE_UNITS } from "./api";
-import type { CatalogItem, Location, Recipe } from "./api";
+import { bulkImportItems, bulkImportRecipes, updateLocation, BASE_UNITS, CURRENCY_OPTIONS, currencySymbol } from "./api";
+import type { CatalogItem, CurrencyCode, Location, Recipe } from "./api";
 import MenuListImportModal from "./MenuListImportModal";
 import type { ParsedMenuRow } from "./MenuListImportModal";
 import SearchSelect from "./SearchSelect";
@@ -170,32 +170,40 @@ export default function Settings({ accessToken, items, recipes, locations, onIte
         onRecipesChanged={onRecipesChanged}
       />
       <div style={{ height: 20 }} />
-      <OverheadPanel accessToken={accessToken} locations={locations} />
+      <LocationSettingsPanel accessToken={accessToken} locations={locations} />
     </>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Monthly overhead — feeds End of day's net margin estimate
+// Per-location settings — currency (display only) + monthly overhead (feeds
+// End of day's net margin estimate)
 // ---------------------------------------------------------------------------
 
-function OverheadPanel({ accessToken, locations }: { accessToken: string; locations: Location[] }) {
-  const [values, setValues] = useState<Record<string, string>>({});
+function LocationSettingsPanel({ accessToken, locations }: { accessToken: string; locations: Location[] }) {
+  const [overheadValues, setOverheadValues] = useState<Record<string, string>>({});
+  const [currencyValues, setCurrencyValues] = useState<Record<string, CurrencyCode>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  function valueFor(loc: Location) {
-    return values[loc.id] ?? loc.monthly_overhead ?? "";
+  function overheadFor(loc: Location) {
+    return overheadValues[loc.id] ?? loc.monthly_overhead ?? "";
+  }
+  function currencyFor(loc: Location) {
+    return currencyValues[loc.id] ?? loc.currency;
   }
 
   async function handleSave(loc: Location) {
-    const raw = valueFor(loc).trim();
+    const raw = overheadFor(loc).trim();
     setSaving((s) => ({ ...s, [loc.id]: true }));
     setErrors((e) => ({ ...e, [loc.id]: "" }));
     setSaved((s) => ({ ...s, [loc.id]: false }));
     try {
-      await updateLocation(accessToken, loc.id, { monthly_overhead: raw === "" ? null : raw });
+      await updateLocation(accessToken, loc.id, {
+        currency: currencyFor(loc),
+        monthly_overhead: raw === "" ? null : raw,
+      });
       setSaved((s) => ({ ...s, [loc.id]: true }));
     } catch (e) {
       setErrors((er) => ({ ...er, [loc.id]: e instanceof Error ? e.message : "Could not save this." }));
@@ -206,29 +214,41 @@ function OverheadPanel({ accessToken, locations }: { accessToken: string; locati
 
   return (
     <div className="card">
-      <h2 style={{ marginTop: 0 }}>Monthly overhead</h2>
+      <h2 style={{ marginTop: 0 }}>Locations</h2>
       <p className="hint">
-        Rent, labour and other fixed monthly costs per location — set once here so End of day can estimate a real
-        net margin (gross margin minus a share of this figure) instead of just food cost. Leave blank if you'd
-        rather not estimate net margin yet; nothing else on the site needs this.
+        Currency changes which symbol this location's own prices/reports show — display only, no exchange-rate
+        conversion. Monthly overhead (rent, labour, other fixed costs) feeds End of day's net margin estimate;
+        leave blank to skip that estimate.
       </p>
       {!locations.length && <p className="muted">No locations yet.</p>}
       {locations.map((loc) => (
-        <div key={loc.id} className="price-row" style={{ alignItems: "center" }}>
+        <div key={loc.id} className="price-row" style={{ alignItems: "center", flexWrap: "wrap" }}>
           <label>{loc.name}</label>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             {errors[loc.id] && <span className="error" style={{ padding: "4px 8px" }}>{errors[loc.id]}</span>}
             {saved[loc.id] && !errors[loc.id] && <span className="badge b-ok">Saved</span>}
-            <span className="muted">£</span>
+            <select
+              value={currencyFor(loc)}
+              onChange={(e) => {
+                setCurrencyValues((v) => ({ ...v, [loc.id]: e.target.value as CurrencyCode }));
+                setSaved((s) => ({ ...s, [loc.id]: false }));
+              }}
+            >
+              {CURRENCY_OPTIONS.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
             <input
               className="price-in"
               type="number"
               min="0"
               step="1"
-              placeholder="e.g. 8000"
-              value={valueFor(loc)}
+              placeholder="Overhead, e.g. 8000"
+              value={overheadFor(loc)}
               onChange={(e) => {
-                setValues((v) => ({ ...v, [loc.id]: e.target.value }));
+                setOverheadValues((v) => ({ ...v, [loc.id]: e.target.value }));
                 setSaved((s) => ({ ...s, [loc.id]: false }));
               }}
             />
@@ -499,18 +519,8 @@ function ItemsImportPanel({
         <label>CSV or Excel file</label>
         <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={handleFile} />
         <div className="vhint">
-          Header row required: <code>name,sku,unit,category,vat,department,par_level,supplier,cost</code> — only{" "}
-          <code>name</code> and <code>unit</code> are required. <code>sku</code>/<code>category</code>/
-          <code>vat</code> (as a % number) can be left blank. <code>department</code> is optional too (
-          <code>kitchen</code>, <code>bar</code> or <code>foh</code>) and defaults to Kitchen — it decides where
-          each item's stock holding is created at the location below. <code>par_level</code> is optional and
-          defaults to 0 if blank — it only sets the par on a holding this import actually creates (a brand-new
-          item, or backfilling a missing holding for an existing item); it never changes the par on a holding
-          that already exists. <code>supplier</code> and <code>cost</code> are optional and only do anything
-          when both are filled in on the same row — together they create (or reuse) a supplier by that name and
-          link it to the item at that price, the same end result as importing a supplier catalogue and clicking
-          "Link" by hand. Re-importing later refreshes the price. e.g. "Beef mince 5%,,kg,Meat,20,kitchen,3,ACME
-          Foods,4.20".
+          Header row: <code>name,sku,unit,category,vat,department,par_level,supplier,cost</code> — only{" "}
+          <code>name</code>/<code>unit</code> required. See the templates above for column details.
         </div>
       </div>
 
@@ -1038,12 +1048,9 @@ function RecipesImportPanel({
           </div>
           {prefillError && <p className="error" style={{ marginTop: 6 }}>{prefillError}</p>}
           <div className="vhint">
-            Both blank templates have one example dish already filled in — the Excel version also groups that
-            example's ingredient rows under it (click the <b>−</b> next to row 2 to collapse them), the same way a
-            real multi-ingredient recipe will once you've filled one in. The prefill option reads the same menu-list
-            file as the import above and hands back the CSV template with <code>recipe</code>/<code>pos_id</code>/
-            <code>menu_category</code>/<code>menu_price</code> already filled in from it — add an ingredient row (or
-            several) under each dish by hand, then upload the result below.
+            Both templates have one example dish filled in — see the templates for column details. Prefill
+            reads your menu-list file and hands back the CSV template with dish details pre-filled; add ingredient
+            rows by hand, then upload below.
           </div>
 
           <div className="field" style={{ marginTop: 12, marginBottom: 0 }}>
@@ -1051,18 +1058,9 @@ function RecipesImportPanel({
             <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={handleFile} />
             <div className="vhint">
               One row per ingredient. Header row:{" "}
-              <code>recipe,pos_id,menu_category,kind,yield_qty,yield_unit,menu_price,menu_group,ingredient,qty,unit</code>.
-              Repeat the recipe name (and its <code>pos_id</code>/<code>menu_category</code>/<code>menu_group</code>,
-              though only the first row of each recipe needs them) on every ingredient row that belongs to it — only{" "}
-              <code>recipe</code>, <code>ingredient</code> and <code>qty</code> are required, the rest default
-              sensibly. A recipe whose <code>pos_id</code> (or, failing that, name) already matches one in SAWIS gets
-              {" "}<b>updated</b> — its ingredient list is replaced by what's in this file — rather than creating a
-              duplicate; anything new is <b>created</b>. <code>menu_group</code> is <b>food</b> or <b>drink</b>,
-              entirely optional — leave it blank to leave an existing recipe's classification alone (a brand-new
-              recipe still defaults to Food if left blank); fill it in to set/change it without opening that recipe
-              individually. Any ingredient that doesn't match an existing item will <b>create a new item
-              automatically</b> (with a stock holding at the location below, in the Kitchen department) — reviewed
-              below before you confirm.
+              <code>recipe,pos_id,menu_category,kind,yield_qty,yield_unit,menu_price,menu_group,ingredient,qty,unit</code>
+              — only <code>recipe</code>/<code>ingredient</code>/<code>qty</code> required. Matches an existing
+              recipe by <code>pos_id</code> or name and updates it; unmatched ingredients create a new item.
             </div>
           </div>
         </div>
@@ -1102,7 +1100,9 @@ function RecipesImportPanel({
                           <b>{r.recipeName}</b>
                           <div className="muted" style={{ fontSize: 11 }}>
                             {r.kind} · yields {r.yield_qty} {r.yield_unit}
-                            {r.kind === "dish" && r.menu_price ? ` · £${r.menu_price}` : ""}
+                            {r.kind === "dish" && r.menu_price
+                              ? ` · ${currencySymbol(locations.find((l) => l.id === location)?.currency)}${r.menu_price}`
+                              : ""}
                             {r.posId ? ` · POS ${r.posId}` : ""}
                             {r.menuCategory ? ` · ${r.menuCategory}` : ""}
                           </div>

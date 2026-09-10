@@ -6,6 +6,42 @@
 // production" convention documented in the project handoff.
 const API_URL = import.meta.env.VITE_API_URL || "https://sawis-backend-1.onrender.com";
 
+// Currency is a per-Location display setting (Settings → Locations) — which
+// symbol/format a location's own prices and reports show, not a live
+// exchange rate. Numbers stay exactly as entered; nothing is converted
+// between currencies. Items/Recipes/Suppliers (and their prices) are
+// org-wide, not per-location, so the same stored price can show under a
+// different symbol depending which location's currency you're viewing it
+// from — screens with no single location in view (Item/Recipe detail) fall
+// back to the org's first location's currency via `defaultCurrency()`.
+export type CurrencyCode = "EUR" | "GBP";
+export const CURRENCY_OPTIONS: { code: CurrencyCode; label: string }[] = [
+  { code: "EUR", label: "Euro (€)" },
+  { code: "GBP", label: "British pound (£)" },
+];
+const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = { EUR: "€", GBP: "£" };
+
+export function currencySymbol(code: string | null | undefined): string {
+  return CURRENCY_SYMBOLS[(code as CurrencyCode) ?? "GBP"] ?? "£";
+}
+
+// Formats a money amount with the right symbol, 2 decimal places by
+// default (pass `d` for a different precision, e.g. 0 for a rounded
+// minimum-order threshold).
+export function formatMoney(n: number, currency?: string | null, d = 2): string {
+  return `${currencySymbol(currency)}${n.toLocaleString("en-GB", {
+    minimumFractionDigits: d,
+    maximumFractionDigits: d,
+  })}`;
+}
+
+// Fallback currency for screens with no single location in view (an item's
+// or recipe's own price is org-wide, not tied to one location) — the org's
+// first location's currency, or GBP if there are no locations yet.
+export function defaultCurrency(locations: { currency?: string }[]): CurrencyCode {
+  return (locations[0]?.currency as CurrencyCode) ?? "GBP";
+}
+
 export interface Membership {
   id: string;
   user: string;
@@ -523,6 +559,9 @@ export interface Location {
   org: string;
   name: string;
   timezone: string;
+  // Display currency for this location's own prices/reports — see the
+  // CurrencyCode/formatMoney notes above. Defaults to GBP server-side.
+  currency: CurrencyCode;
   // Rent + labour + other fixed monthly costs, set by hand in Settings.
   // Only used to estimate End of day's net margin — null means net
   // margin can't be computed yet, and the report says so rather than
@@ -537,7 +576,7 @@ export async function fetchLocations(accessToken: string): Promise<Location[]> {
 export async function updateLocation(
   accessToken: string,
   id: string,
-  patch: { monthly_overhead?: string | null }
+  patch: { currency?: CurrencyCode; monthly_overhead?: string | null }
 ): Promise<Location> {
   const res = await fetch(`${API_URL}/api/tenancy/locations/${id}/`, {
     method: "PATCH",
