@@ -86,6 +86,13 @@ const NAV_ITEMS = [
 // survive past the 8-hour access-token window too, via refreshAccessToken.
 const ACCESS_TOKEN_KEY = "sawis_access_token";
 const REFRESH_TOKEN_KEY = "sawis_refresh_token";
+// Remembers which nav page was open, purely so a page REFRESH (which
+// re-mounts this whole component and re-runs the session-restore effect
+// below) lands back where the user actually was, instead of always
+// snapping to the same startup page. A fresh sign-in is a separate case --
+// handleSubmit explicitly overrides this to "End of day" every time,
+// regardless of whatever page happened to be stored from before.
+const ACTIVE_PAGE_KEY = "sawis_active_page";
 
 function storeTokens(access: string, refresh: string) {
   localStorage.setItem(ACCESS_TOKEN_KEY, access);
@@ -354,7 +361,10 @@ export default function App() {
     () => !!localStorage.getItem(ACCESS_TOKEN_KEY) || !!localStorage.getItem(REFRESH_TOKEN_KEY)
   );
   const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [activePage, setActivePage] = useState("Items");
+  // Lazily read from localStorage so a refresh lands back on whichever
+  // page was open (see ACTIVE_PAGE_KEY above) -- the very first visit
+  // (nothing stored yet) still starts on End of day.
+  const [activePage, setActivePage] = useState(() => localStorage.getItem(ACTIVE_PAGE_KEY) || "End of day");
 
   const [items, setItems] = useState<CatalogItem[] | null>(null);
   const [itemsError, setItemsError] = useState<string | null>(null);
@@ -609,6 +619,12 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, activePage]);
 
+  // Keep localStorage in sync with whatever page is open, so a refresh
+  // (see the ACTIVE_PAGE_KEY lazy initializer above) picks it back up.
+  useEffect(() => {
+    localStorage.setItem(ACTIVE_PAGE_KEY, activePage);
+  }, [activePage]);
+
   // Restore a session from localStorage on load — runs once. Tries the
   // stored access token first (cheap: one request); if that fails (most
   // likely it's simply past its 8-hour lifetime) falls back to the refresh
@@ -678,6 +694,11 @@ export default function App() {
       storeTokens(tokens.access, tokens.refresh);
       setMe(profile);
       setAccessToken(tokens.access);
+      // A genuine sign-in (as opposed to a refresh restoring an existing
+      // session, handled separately above) always starts at End of day,
+      // regardless of whichever page happened to be stored from a
+      // previous session.
+      setActivePage("End of day");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
