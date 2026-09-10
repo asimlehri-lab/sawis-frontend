@@ -1040,6 +1040,13 @@ export interface POLineRow {
   unit_price: string;
   received_qty: string | null;
   received_unit_price: string | null;
+  // As-invoiced unit/qty, frozen on this line at receive time (e.g. "L" /
+  // "1" even though qty/received_qty above are always the true, converted
+  // per-item.base_unit figures) -- blank/null whenever no conversion was
+  // needed. See PurchaseOrderViewSet.receive / the supplier unit/pack
+  // conversion feature.
+  supplier_unit: string;
+  supplier_qty: string | null;
   line_total: string;
 }
 
@@ -1221,6 +1228,11 @@ export interface ReceiveLineOverride {
   // on file untouched -- see PurchaseOrderViewSet.receive.
   supplier_unit?: string;
   supplier_unit_price?: string;
+  // The as-invoiced quantity in that same supplier_unit (e.g. "1" for "1
+  // L") -- frozen directly onto this POLine (not ItemSupplier) so a
+  // received order always shows the unit/qty its own invoice actually
+  // used, letting the user cross-check the two side by side.
+  supplier_qty?: string;
 }
 
 export async function receivePurchaseOrder(

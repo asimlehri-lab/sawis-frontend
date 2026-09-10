@@ -1246,6 +1246,15 @@ input[type="file"] {
   margin-top: 0;
 }
 
+/* Scan receipt review -- one card per line instead of a cramped table (see
+   the comment above .scan-rows' usage in App.tsx). Reflows to full-width
+   at any modal/viewport size, phone included, with no horizontal scroll. */
+.scan-rows { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.scan-row-card { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; background: var(--surface); }
+.scan-row-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.scan-row-nums { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+@media (max-width: 420px) { .scan-row-nums { grid-template-columns: 1fr; } }
+
 .rtabs {
   display: inline-flex;
   gap: 3px;

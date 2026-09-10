@@ -1177,7 +1177,11 @@ export default function App() {
               received_qty: conv.qty.toFixed(3),
               received_unit_price: conv.unitPrice.toFixed(4),
               ...(item && row.supplierUnit && row.supplierUnit !== item.base_unit
-                ? { supplier_unit: row.supplierUnit, supplier_unit_price: row.unitPrice || "0" }
+                ? {
+                    supplier_unit: row.supplierUnit,
+                    supplier_unit_price: row.unitPrice || "0",
+                    supplier_qty: row.qty || "0",
+                  }
                 : {}),
             });
           }
@@ -1239,6 +1243,7 @@ export default function App() {
             received_unit_price: conv.unitPrice.toFixed(4),
             supplier_unit: row.supplierUnit,
             supplier_unit_price: row.unitPrice || "0",
+            supplier_qty: row.qty || "0",
           });
         }
       }
@@ -2167,7 +2172,7 @@ export default function App() {
           className="modal-backdrop"
           onClick={() => !scanning && !creatingPOFromScan && !retryingReceive && closeScanModal()}
         >
-          <div className="modal wide" onClick={(e) => e.stopPropagation()}>
+          <div className="modal xwide" onClick={(e) => e.stopPropagation()}>
             <h2>Scan receipt</h2>
 
             {!scanResult && (
@@ -2360,196 +2365,30 @@ export default function App() {
                   </p>
                 ) : (
                   <>
-                    {/* This table has more columns than the modal is wide
-                        (item description + a full item picker + qty +
-                        price + confidence + skip, vs. e.g. the supplier
-                        import modal's 3 columns) -- scope the horizontal
-                        scroll to just the table, not the whole modal, so
-                        the buttons/hint text below it are never at risk
-                        of scrolling out of view along with it. */}
-                    <div style={{ overflowX: "auto" }}>
-                      <table className="tbl" style={{ marginTop: 4, minWidth: 640 }}>
-                        <thead>
-                          <tr>
-                            <th>On the receipt</th>
-                            <th>Matched item</th>
-                            <th className="num">Qty</th>
-                            <th className="num">Unit price</th>
-                            <th className="num">Confidence</th>
-                            <th></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {scanRows.map((row, i) => {
-                            const matchedItem = (items ?? []).find((it) => it.id === row.matchedItemId);
-                            const packExpanded =
-                              scanExpandedPackRows.has(i) ||
-                              (!!row.supplierUnit && !!matchedItem && row.supplierUnit !== matchedItem.base_unit);
-                            const converted = matchedItem ? scanRowBaseUnits(row, matchedItem) : null;
-                            return (
-                            <tr key={i} style={row.skip ? { opacity: 0.45 } : undefined}>
-                              <td className="muted" style={{ maxWidth: 140 }}>
-                                {row.description}
-                              </td>
-                              <td>
-                                <SearchSelect
-                                  value={row.matchedItemId}
-                                  placeholder="Pick an item…"
-                                  aria-label="Matched item"
-                                  disabled={row.skip}
-                                  style={{ width: 150 }}
-                                  // Pinned above the (filtered) list regardless of what's
-                                  // typed -- with a long item list the user would otherwise
-                                  // have to search past everything just to reach the one
-                                  // option that doesn't require finding a match at all.
-                                  pinnedOptions={[{ value: "__new__", label: "+ Add new item…" }]}
-                                  options={(items ?? []).map((it) => ({ value: it.id, label: it.name }))}
-                                  onChange={(val) => {
-                                    if (val === "__new__") {
-                                      // No confident match on the receipt line -- offer to
-                                      // create the Item right here instead of sending the
-                                      // user off to the Items page and back.
-                                      setScanNewItemRow(i);
-                                      setScanNewItemName(row.description);
-                                      setScanNewItemUnit(BASE_UNITS[1]);
-                                      setScanNewItemError(null);
-                                    } else {
-                                      const known = findKnownSupplierUnit(itemSupplierLinks, val, scanSupplierId);
-                                      updateScanRow(i, {
-                                        matchedItemId: val,
-                                        supplierUnit: known?.supplierUnit ?? "",
-                                        packQty: known?.packQty ?? "1",
-                                      });
-                                    }
-                                  }}
-                                />
-                                {scanNewItemRow === i && (
-                                  <div className="scan-new-item">
-                                    <input
-                                      value={scanNewItemName}
-                                      onChange={(e) => setScanNewItemName(e.target.value)}
-                                      placeholder="Item name"
-                                    />
-                                    <select
-                                      value={scanNewItemUnit}
-                                      onChange={(e) => setScanNewItemUnit(e.target.value)}
-                                    >
-                                      {BASE_UNITS.map((u) => (
-                                        <option key={u} value={u}>
-                                          {u}
-                                        </option>
-                                      ))}
-                                    </select>
-                                    <div style={{ display: "flex", gap: 6 }}>
-                                      <button
-                                        type="button"
-                                        className="btn-ghost small"
-                                        onClick={() => setScanNewItemRow(null)}
-                                      >
-                                        Cancel
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className="mini"
-                                        onClick={() => handleCreateScanItem(i)}
-                                        disabled={scanCreatingItem || !scanNewItemName.trim()}
-                                      >
-                                        {scanCreatingItem ? "Adding…" : "Add item"}
-                                      </button>
-                                    </div>
-                                    {scanNewItemError && <p className="error">{scanNewItemError}</p>}
-                                  </div>
-                                )}
-                                {matchedItem && !row.skip && (
-                                  <div style={{ marginTop: 4 }}>
-                                    {!packExpanded ? (
-                                      <button
-                                        type="button"
-                                        className="btn-ghost small"
-                                        onClick={() =>
-                                          setScanExpandedPackRows((s) => new Set(s).add(i))
-                                        }
-                                      >
-                                        Different pack or unit?
-                                      </button>
-                                    ) : (
-                                      <div className="sd">
-                                        Supplier's unit:{" "}
-                                        <input
-                                          value={row.supplierUnit}
-                                          placeholder={matchedItem.base_unit}
-                                          onChange={(e) => updateScanRow(i, { supplierUnit: e.target.value })}
-                                          style={{ width: 56 }}
-                                        />
-                                        {row.supplierUnit &&
-                                          row.supplierUnit !== matchedItem.base_unit &&
-                                          autoFactor(row.supplierUnit, matchedItem.base_unit) === null && (
-                                            <>
-                                              {" "}
-                                              = <input
-                                                type="number"
-                                                min="0"
-                                                step="any"
-                                                value={row.packQty}
-                                                onChange={(e) => updateScanRow(i, { packQty: e.target.value })}
-                                                style={{ width: 50 }}
-                                              />{" "}
-                                              {matchedItem.base_unit}
-                                            </>
-                                          )}
-                                        <button
-                                          type="button"
-                                          className="btn-ghost small"
-                                          onClick={() => {
-                                            setScanExpandedPackRows((s) => {
-                                              const next = new Set(s);
-                                              next.delete(i);
-                                              return next;
-                                            });
-                                            updateScanRow(i, { supplierUnit: "", packQty: "1" });
-                                          }}
-                                        >
-                                          ✕
-                                        </button>
-                                        {row.supplierUnit && row.supplierUnit !== matchedItem.base_unit && (
-                                          <div>
-                                            {converted
-                                              ? `→ ${converted.qty.toFixed(3)} ${matchedItem.base_unit} @ ${formatMoney(
-                                                  converted.unitPrice,
-                                                  orgCurrency,
-                                                  4
-                                                )}/${matchedItem.base_unit}`
-                                              : "enter a conversion to include this row"}
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="num">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.001"
-                                  value={row.qty}
-                                  onChange={(e) => updateScanRow(i, { qty: e.target.value })}
-                                  disabled={row.skip}
-                                  style={{ width: 60 }}
-                                />
-                              </td>
-                              <td className="num">
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={row.unitPrice}
-                                  onChange={(e) => updateScanRow(i, { unitPrice: e.target.value })}
-                                  disabled={row.skip}
-                                  style={{ width: 60 }}
-                                />
-                              </td>
-                              <td className="num">
+                    {/* One bordered card per scanned line, not a table --
+                        with a full item picker, an expandable pack/unit
+                        block, and two number inputs all living in a single
+                        row, a table forced everything into narrow fixed-
+                        width cells and needed its own horizontal scrollbar
+                        even on a normal-width screen. A stacked card
+                        reflows naturally at any modal/viewport width, phone
+                        included, with no scrolling and no squeezed inputs. */}
+                    <div className="scan-rows">
+                      {scanRows.map((row, i) => {
+                        const matchedItem = (items ?? []).find((it) => it.id === row.matchedItemId);
+                        const packExpanded =
+                          scanExpandedPackRows.has(i) ||
+                          (!!row.supplierUnit && !!matchedItem && row.supplierUnit !== matchedItem.base_unit);
+                        const converted = matchedItem ? scanRowBaseUnits(row, matchedItem) : null;
+                        return (
+                          <div
+                            key={i}
+                            className="scan-row-card"
+                            style={row.skip ? { opacity: 0.45 } : undefined}
+                          >
+                            <div className="scan-row-top">
+                              <span className="muted">{row.description}</span>
+                              <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
                                 <span
                                   className={`badge ${
                                     row.confidence !== null && row.confidence >= 80 ? "b-ok" : "warn"
@@ -2557,8 +2396,6 @@ export default function App() {
                                 >
                                   {row.confidence !== null ? `${row.confidence.toFixed(0)}%` : "—"}
                                 </span>
-                              </td>
-                              <td>
                                 <button
                                   type="button"
                                   className="btn-ghost small"
@@ -2566,12 +2403,174 @@ export default function App() {
                                 >
                                   {row.skip ? "Include" : "Skip"}
                                 </button>
-                              </td>
-                            </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                              </div>
+                            </div>
+
+                            <div className="field" style={{ marginTop: 8 }}>
+                              <label>Matched item</label>
+                              <SearchSelect
+                                value={row.matchedItemId}
+                                placeholder="Pick an item…"
+                                aria-label="Matched item"
+                                disabled={row.skip}
+                                style={{ width: "100%" }}
+                                // Pinned above the (filtered) list regardless of what's
+                                // typed -- with a long item list the user would otherwise
+                                // have to search past everything just to reach the one
+                                // option that doesn't require finding a match at all.
+                                pinnedOptions={[{ value: "__new__", label: "+ Add new item…" }]}
+                                options={(items ?? []).map((it) => ({ value: it.id, label: it.name }))}
+                                onChange={(val) => {
+                                  if (val === "__new__") {
+                                    // No confident match on the receipt line -- offer to
+                                    // create the Item right here instead of sending the
+                                    // user off to the Items page and back.
+                                    setScanNewItemRow(i);
+                                    setScanNewItemName(row.description);
+                                    setScanNewItemUnit(BASE_UNITS[1]);
+                                    setScanNewItemError(null);
+                                  } else {
+                                    const known = findKnownSupplierUnit(itemSupplierLinks, val, scanSupplierId);
+                                    updateScanRow(i, {
+                                      matchedItemId: val,
+                                      supplierUnit: known?.supplierUnit ?? "",
+                                      packQty: known?.packQty ?? "1",
+                                    });
+                                  }
+                                }}
+                              />
+                              {scanNewItemRow === i && (
+                                <div className="scan-new-item">
+                                  <input
+                                    value={scanNewItemName}
+                                    onChange={(e) => setScanNewItemName(e.target.value)}
+                                    placeholder="Item name"
+                                  />
+                                  <select
+                                    value={scanNewItemUnit}
+                                    onChange={(e) => setScanNewItemUnit(e.target.value)}
+                                  >
+                                    {BASE_UNITS.map((u) => (
+                                      <option key={u} value={u}>
+                                        {u}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <div style={{ display: "flex", gap: 6 }}>
+                                    <button
+                                      type="button"
+                                      className="btn-ghost small"
+                                      onClick={() => setScanNewItemRow(null)}
+                                    >
+                                      Cancel
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="mini"
+                                      onClick={() => handleCreateScanItem(i)}
+                                      disabled={scanCreatingItem || !scanNewItemName.trim()}
+                                    >
+                                      {scanCreatingItem ? "Adding…" : "Add item"}
+                                    </button>
+                                  </div>
+                                  {scanNewItemError && <p className="error">{scanNewItemError}</p>}
+                                </div>
+                              )}
+                              {matchedItem && !row.skip && (
+                                <div style={{ marginTop: 4 }}>
+                                  {!packExpanded ? (
+                                    <button
+                                      type="button"
+                                      className="btn-ghost small"
+                                      onClick={() =>
+                                        setScanExpandedPackRows((s) => new Set(s).add(i))
+                                      }
+                                    >
+                                      Different pack or unit?
+                                    </button>
+                                  ) : (
+                                    <div className="sd">
+                                      Supplier's unit:{" "}
+                                      <input
+                                        value={row.supplierUnit}
+                                        placeholder={matchedItem.base_unit}
+                                        onChange={(e) => updateScanRow(i, { supplierUnit: e.target.value })}
+                                        style={{ width: 56 }}
+                                      />
+                                      {row.supplierUnit &&
+                                        row.supplierUnit !== matchedItem.base_unit &&
+                                        autoFactor(row.supplierUnit, matchedItem.base_unit) === null && (
+                                          <>
+                                            {" "}
+                                            = <input
+                                              type="number"
+                                              min="0"
+                                              step="any"
+                                              value={row.packQty}
+                                              onChange={(e) => updateScanRow(i, { packQty: e.target.value })}
+                                              style={{ width: 50 }}
+                                            />{" "}
+                                            {matchedItem.base_unit}
+                                          </>
+                                        )}
+                                      <button
+                                        type="button"
+                                        className="btn-ghost small"
+                                        onClick={() => {
+                                          setScanExpandedPackRows((s) => {
+                                            const next = new Set(s);
+                                            next.delete(i);
+                                            return next;
+                                          });
+                                          updateScanRow(i, { supplierUnit: "", packQty: "1" });
+                                        }}
+                                      >
+                                        ✕
+                                      </button>
+                                      {row.supplierUnit && row.supplierUnit !== matchedItem.base_unit && (
+                                        <div>
+                                          {converted
+                                            ? `→ ${converted.qty.toFixed(3)} ${matchedItem.base_unit} @ ${formatMoney(
+                                                converted.unitPrice,
+                                                orgCurrency,
+                                                4
+                                              )}/${matchedItem.base_unit}`
+                                            : "enter a conversion to include this row"}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+
+                            <div className="scan-row-nums">
+                              <div className="field">
+                                <label>Qty{row.supplierUnit ? ` (${row.supplierUnit})` : ""}</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.001"
+                                  value={row.qty}
+                                  onChange={(e) => updateScanRow(i, { qty: e.target.value })}
+                                  disabled={row.skip}
+                                />
+                              </div>
+                              <div className="field">
+                                <label>Unit price</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={row.unitPrice}
+                                  onChange={(e) => updateScanRow(i, { unitPrice: e.target.value })}
+                                  disabled={row.skip}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                     {scanUnmatchedCount > 0 && (
                       <p className="hint" style={{ marginTop: 8 }}>

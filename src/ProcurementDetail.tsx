@@ -40,6 +40,14 @@ const DEPARTMENTS = [
   { value: "foh", label: "Front of house" },
 ] as const;
 
+// Trims a quantity to at most 3 decimals without padding on trailing zeros
+// ("1" not "1.000", "0.75" not "0.750") -- used for the as-invoiced
+// supplier_qty display below, which is a whole "1 L"/"2 case" most of the
+// time and shouldn't look like a raw stored decimal.
+function formatQty(n: number): string {
+  return parseFloat(n.toFixed(3)).toString();
+}
+
 export default function ProcurementDetail({
   poId,
   accessToken,
@@ -614,7 +622,10 @@ export default function ProcurementDetail({
                 </td>
               </tr>
             )}
-            {po.lines.map((l) => (
+            {po.lines.map((l) => {
+              const lineItem = items.find((it) => it.id === l.item);
+              const baseUnit = lineItem?.base_unit ?? "";
+              return (
               <tr key={l.id}>
                 <td className="dispname">{l.item_name}</td>
                 <td className="num">
@@ -632,8 +643,20 @@ export default function ProcurementDetail({
                         if (e.key === "Enter") (e.target as HTMLInputElement).blur();
                       }}
                     />
+                  ) : l.supplier_unit && l.supplier_qty != null ? (
+                    // As-invoiced qty/unit, e.g. "1 L" -- matches what's
+                    // printed on the supplier's own paper invoice, with the
+                    // converted, actually-costed figure shown underneath
+                    // for anyone who needs it (never the other way round;
+                    // see supplier_unit/supplier_qty's model comment).
+                    <>
+                      {formatQty(Number(l.supplier_qty))} {l.supplier_unit}
+                      <div className="sd">
+                        = {formatQty(Number(l.qty))} {baseUnit}
+                      </div>
+                    </>
                   ) : (
-                    Number(l.qty).toFixed(2)
+                    `${Number(l.qty).toFixed(2)}${baseUnit ? ` ${baseUnit}` : ""}`
                   )}
                 </td>
                 <td className="num">{formatMoney(Number(l.unit_price), currency)}</td>
@@ -646,7 +669,8 @@ export default function ProcurementDetail({
                   )}
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
 
