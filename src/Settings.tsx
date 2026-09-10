@@ -396,11 +396,18 @@ function ItemsImportPanel({
           cost: r.supplier && r.cost ? r.cost : undefined,
         }))
       );
+      // Defensive against an older backend that hasn't picked up the
+      // supplier/cost change yet (or any future field this screen doesn't
+      // know about) -- `res.suppliers_created`/`res.supplier_links_set`
+      // would come back undefined rather than an empty array in that case,
+      // and reading `.length` off undefined used to crash the whole import
+      // result right after a real, successful import. `|| []` makes a
+      // stale backend just show 0 for the new counts instead of erroring.
       setResult({
-        created: res.created.length,
-        holdingsBackfilled: res.holdings_backfilled.length,
-        suppliersCreated: res.suppliers_created.length,
-        supplierLinksSet: res.supplier_links_set.length,
+        created: (res.created || []).length,
+        holdingsBackfilled: (res.holdings_backfilled || []).length,
+        suppliersCreated: (res.suppliers_created || []).length,
+        supplierLinksSet: (res.supplier_links_set || []).length,
       });
       setRows([]);
       setFileName("");
