@@ -10,6 +10,13 @@
   --brand-soft: #E9ECFC;
   --brick: #A33636;
   --brick-soft: #F5E2E0;
+  /* New for the delivery calendar (Sep 14 2026) -- a "received/done" state
+     distinct from --brand's "expected/scheduled" blue. No green token
+     existed before this; Reorder.tsx references a var(--green) that was
+     never actually defined anywhere -- a pre-existing dead reference, left
+     alone rather than silently repurposed for this. */
+  --good: #3F7D53;
+  --good-soft: #E3EEE6;
 }
 
 * { box-sizing: border-box; }
@@ -257,10 +264,16 @@ h1 {
 }
 
 .notif-date {
+  border: none;
+  background: none;
+  padding: 0;
+  font-family: inherit;
   font-size: 12px;
   color: var(--muted);
   font-weight: 500;
+  cursor: pointer;
 }
+.notif-date:hover { color: var(--ink); text-decoration: underline; }
 
 .notif-panel {
   position: absolute;
@@ -332,6 +345,156 @@ h1 {
   position: sticky;
   top: 0;
   z-index: 15;
+}
+
+/* NotificationCalendar.tsx -- opens when the date next to the notification
+   icon is clicked. Month/week grid with marker dots for PurchaseOrder
+   expected_date/received_date; clicking a marked day shows that day's
+   deliveries in a detail panel BELOW the grid, not a popover floating over
+   the cell -- the modal reuses .modal.wide's max-height/overflow:auto (so
+   tall month grids scroll within the viewport), which would risk clipping
+   an absolutely-positioned popover near the grid's edges. A panel in normal
+   document flow gets the same job done (see a marked day's deliveries,
+   click through to the PO) without that risk. */
+.cal-modal { text-align: left; }
+
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+.cal-head h2 { margin: 0; }
+
+.cal-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.cal-nav { display: flex; align-items: center; gap: 8px; }
+.cal-label { min-width: 150px; text-align: center; font-size: 14px; }
+
+.cal-view-toggle {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.cal-view-btn {
+  border: none;
+  background: var(--surface);
+  padding: 6px 12px;
+  font-size: 12.5px;
+  cursor: pointer;
+  color: var(--muted);
+}
+.cal-view-btn + .cal-view-btn { border-left: 1px solid var(--border); }
+.cal-view-btn.on { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+
+.cal-weekday-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.cal-weekday-row span {
+  display: block;
+  text-align: center;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.cal-day {
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--bg);
+  cursor: default;
+  padding: 4px;
+}
+.cal-day:not(:disabled) { cursor: pointer; }
+.cal-day:not(:disabled):hover { border-color: var(--brand); }
+.cal-day:disabled { opacity: 0.55; }
+
+.cal-grid-week .cal-day { aspect-ratio: auto; height: 74px; }
+
+.cal-day-outside { opacity: 0.4; }
+.cal-day-today { border-color: var(--brand); background: var(--brand-soft); }
+.cal-day-selected { border-color: var(--brand); background: var(--brand-soft); }
+
+.cal-day-num { font-size: 13px; font-weight: 600; }
+
+.cal-day-dots { display: flex; gap: 3px; }
+.cal-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+.cal-dot-expected { background: var(--brand); }
+.cal-dot-received { background: var(--good); }
+
+.cal-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.cal-legend span { display: inline-flex; align-items: center; gap: 5px; }
+
+.cal-day-detail {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.cal-day-detail > b { display: block; margin-bottom: 8px; font-size: 13px; }
+
+.cal-day-detail-list { display: flex; flex-direction: column; gap: 6px; }
+
+.cal-day-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 12px;
+  background: var(--surface);
+  cursor: pointer;
+  font-size: 12.5px;
+}
+.cal-day-detail-row:hover { border-color: var(--brand); background: var(--brand-soft); }
+
+.cal-kind-tag {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.cal-kind-expected { background: var(--brand-soft); color: var(--brand); }
+.cal-kind-received { background: var(--good-soft); color: var(--good); }
+
+.cal-day-detail-main { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 560px) {
+  .cal-toolbar { flex-direction: column; align-items: stretch; }
+  .cal-label { min-width: 0; }
 }
 
 form {

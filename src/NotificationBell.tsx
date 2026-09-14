@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { CatalogItem, Location, StockMovementRow } from "./api";
+import NotificationCalendar from "./NotificationCalendar";
 
 interface Props {
   items: CatalogItem[];
   locations: Location[];
   stockMovements: StockMovementRow[];
+  accessToken: string;
   onViewReorder: () => void;
+  onOpenPO: (id: string) => void;
 }
 
 interface ReorderAlert {
@@ -48,8 +51,22 @@ interface ReorderAlert {
 // reflects what's true right now. An item drops off the list the moment
 // it's restocked, and nothing can go stale by being dismissed while still
 // genuinely low (the option chosen when this was scoped with the user).
-export default function NotificationBell({ items, locations, stockMovements, onViewReorder }: Props) {
+//
+// Phase 2 (Sep 14 2026): today's date is now clickable, opening
+// NotificationCalendar.tsx -- the delivery calendar. Kept as a separate
+// component/file rather than folded in here since it has its own real data
+// dependency (every PurchaseOrder) and its own fairly involved month/week
+// grid -- this file stays focused on the alert-list dropdown.
+export default function NotificationBell({
+  items,
+  locations,
+  stockMovements,
+  accessToken,
+  onViewReorder,
+  onOpenPO,
+}: Props) {
   const [open, setOpen] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -103,7 +120,16 @@ export default function NotificationBell({ items, locations, stockMovements, onV
         </svg>
         {alerts.length > 0 && <span className="notif-badge">{alerts.length}</span>}
       </button>
-      <span className="notif-date">{today}</span>
+      <button
+        type="button"
+        className="notif-date"
+        onClick={() => {
+          setOpen(false);
+          setShowCalendar(true);
+        }}
+      >
+        {today}
+      </button>
 
       {open && (
         <div className="notif-panel">
@@ -142,6 +168,17 @@ export default function NotificationBell({ items, locations, stockMovements, onV
             </>
           )}
         </div>
+      )}
+
+      {showCalendar && (
+        <NotificationCalendar
+          accessToken={accessToken}
+          onClose={() => setShowCalendar(false)}
+          onOpenPO={(id) => {
+            setShowCalendar(false);
+            onOpenPO(id);
+          }}
+        />
       )}
     </div>
   );

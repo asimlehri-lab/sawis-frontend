@@ -1435,12 +1435,19 @@ export default function App() {
 
       <main className="content">
         <div className="content-header">
-          <NotificationBell
-            items={items ?? []}
-            locations={locations}
-            stockMovements={stockMovements}
-            onViewReorder={() => goToNav("End of day", { eodTab: "reorder" })}
-          />
+          {accessToken && (
+            <NotificationBell
+              items={items ?? []}
+              locations={locations}
+              stockMovements={stockMovements}
+              accessToken={accessToken}
+              onViewReorder={() => goToNav("End of day", { eodTab: "reorder" })}
+              onOpenPO={(id) => {
+                goToNav("Procurement");
+                setSelectedPOId(id);
+              }}
+            />
+          )}
         </div>
         {activePage === "Recipes" && selectedRecipeId && accessToken ? (
           <RecipeDetail
