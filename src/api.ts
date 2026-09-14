@@ -614,6 +614,10 @@ export interface Location {
   // margin can't be computed yet, and the report says so rather than
   // guessing zero overhead.
   monthly_overhead: string | null;
+  // How many days before a PurchaseOrder's expected_date the delivery
+  // reminder notification (Phase 3) should first appear. Defaults to 1
+  // server-side, adjustable per location in Settings.
+  delivery_reminder_lead_days: number;
 }
 
 export async function fetchLocations(accessToken: string): Promise<Location[]> {
@@ -623,7 +627,7 @@ export async function fetchLocations(accessToken: string): Promise<Location[]> {
 export async function updateLocation(
   accessToken: string,
   id: string,
-  patch: { currency?: CurrencyCode; monthly_overhead?: string | null }
+  patch: { currency?: CurrencyCode; monthly_overhead?: string | null; delivery_reminder_lead_days?: number }
 ): Promise<Location> {
   const res = await fetch(`${API_URL}/api/tenancy/locations/${id}/`, {
     method: "PATCH",
@@ -635,6 +639,79 @@ export async function updateLocation(
   });
   if (!res.ok) throw new Error("Could not save changes.");
   return res.json();
+}
+
+// ---------------------------------------------------------------------------
+// Notifications (Phase 3) — a location's fixed recurring stock-count
+// cadence, and the persisted Notification rows a daily backend job
+// generates from it plus upcoming/overdue PurchaseOrder dates. See
+// NotificationBell.tsx, which merges these with the still-live-computed
+// reorder alert (that one has no backend model of its own, by design).
+// ---------------------------------------------------------------------------
+
+// 0=Monday..6=Sunday — matches App.tsx's own DAY_NAMES/nextDeliveryDate
+// convention (and Supplier.delivery_day), reused here rather than
+// reinvented.
+export interface InventoryCheckSchedule {
+  id: string;
+  location: string;
+  location_name: string;
+  weekday: number;
+  enabled: boolean;
+}
+
+export async function fetchInventoryCheckSchedules(accessToken: string): Promise<InventoryCheckSchedule[]> {
+  return authedFetchAllPages<InventoryCheckSchedule>("/api/tenancy/inventory-check-schedules/", accessToken);
+}
+
+export async function createInventoryCheckSchedule(
+  accessToken: string,
+  input: { location: string; weekday: number; enabled?: boolean }
+): Promise<InventoryCheckSchedule> {
+  const res = await fetch(`${API_URL}/api/tenancy/inventory-check-schedules/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error("Could not save the inventory check schedule.");
+  return res.json();
+}
+
+export async function updateInventoryCheckSchedule(
+  accessToken: string,
+  id: string,
+  patch: { weekday?: number; enabled?: boolean }
+): Promise<InventoryCheckSchedule> {
+  const res = await fetch(`${API_URL}/api/tenancy/inventory-check-schedules/${id}/`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error("Could not save the inventory check schedule.");
+  return res.json();
+}
+
+export type NotificationKind = "delivery_reminder" | "inventory_check_due";
+
+export interface AppNotification {
+  id: string;
+  location: string;
+  location_name: string;
+  kind: NotificationKind;
+  relevant_date: string;
+  purchase_order: string | null;
+  po_number: string | null;
+  supplier_name: string | null;
+  inventory_check_schedule: string | null;
+}
+
+// Read-only — rows are only ever written by the backend's daily
+// generate_notifications command. Returns every notification in the org;
+// NotificationBell.tsx does its own "today ± a few days" windowing on the
+// result, same as NotificationCalendar.tsx already does with the full
+// PurchaseOrder list rather than a server-side date-range query.
+export async function fetchNotifications(accessToken: string): Promise<AppNotification[]> {
+  return authedFetchAllPages<AppNotification>("/api/tenancy/notifications/", accessToken);
 }
 
 export async function fetchMemberships(accessToken: string): Promise<Membership[]> {

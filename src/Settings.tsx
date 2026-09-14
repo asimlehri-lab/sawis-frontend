@@ -1,10 +1,22 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
-import { bulkImportItems, bulkImportRecipes, updateLocation, BASE_UNITS, CURRENCY_OPTIONS, currencySymbol } from "./api";
-import type { CatalogItem, CurrencyCode, Location, Recipe } from "./api";
+import {
+  bulkImportItems,
+  bulkImportRecipes,
+  createInventoryCheckSchedule,
+  fetchInventoryCheckSchedules,
+  updateInventoryCheckSchedule,
+  updateLocation,
+  BASE_UNITS,
+} from "./api";
+import type { CatalogItem, InventoryCheckSchedule, Location, Recipe } from "./api";
 import MenuListImportModal from "./MenuListImportModal";
 import type { ParsedMenuRow } from "./MenuListImportModal";
 import SearchSelect from "./SearchSelect";
+// DAY_NAMES is exported from App.tsx, which imports Settings back -- same
+// established circular-import pattern already used by SupplierDeliveries.tsx
+// (see its own DAY_NAMES import) rather than duplicating the array here.
+import { DAY_NAMES } from "./App";
 
 interface Props {
   accessToken: string;
@@ -170,40 +182,34 @@ export default function Settings({ accessToken, items, recipes, locations, onIte
         onRecipesChanged={onRecipesChanged}
       />
       <div style={{ height: 20 }} />
-      <LocationSettingsPanel accessToken={accessToken} locations={locations} />
+      <OverheadPanel accessToken={accessToken} locations={locations} />
+      <div style={{ height: 20 }} />
+      <NotificationSettingsPanel accessToken={accessToken} locations={locations} />
     </>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Per-location settings — currency (display only) + monthly overhead (feeds
-// End of day's net margin estimate)
+// Monthly overhead — feeds End of day's net margin estimate
 // ---------------------------------------------------------------------------
 
-function LocationSettingsPanel({ accessToken, locations }: { accessToken: string; locations: Location[] }) {
-  const [overheadValues, setOverheadValues] = useState<Record<string, string>>({});
-  const [currencyValues, setCurrencyValues] = useState<Record<string, CurrencyCode>>({});
+function OverheadPanel({ accessToken, locations }: { accessToken: string; locations: Location[] }) {
+  const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  function overheadFor(loc: Location) {
-    return overheadValues[loc.id] ?? loc.monthly_overhead ?? "";
-  }
-  function currencyFor(loc: Location) {
-    return currencyValues[loc.id] ?? loc.currency;
+  function valueFor(loc: Location) {
+    return values[loc.id] ?? loc.monthly_overhead ?? "";
   }
 
   async function handleSave(loc: Location) {
-    const raw = overheadFor(loc).trim();
+    const raw = valueFor(loc).trim();
     setSaving((s) => ({ ...s, [loc.id]: true }));
     setErrors((e) => ({ ...e, [loc.id]: "" }));
     setSaved((s) => ({ ...s, [loc.id]: false }));
     try {
-      await updateLocation(accessToken, loc.id, {
-        currency: currencyFor(loc),
-        monthly_overhead: raw === "" ? null : raw,
-      });
+      await updateLocation(accessToken, loc.id, { monthly_overhead: raw === "" ? null : raw });
       setSaved((s) => ({ ...s, [loc.id]: true }));
     } catch (e) {
       setErrors((er) => ({ ...er, [loc.id]: e instanceof Error ? e.message : "Could not save this." }));
@@ -214,41 +220,29 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
 
   return (
     <div className="card">
-      <h2 style={{ marginTop: 0 }}>Locations</h2>
+      <h2 style={{ marginTop: 0 }}>Monthly overhead</h2>
       <p className="hint">
-        Currency changes which symbol this location's own prices/reports show — display only, no exchange-rate
-        conversion. Monthly overhead (rent, labour, other fixed costs) feeds End of day's net margin estimate;
-        leave blank to skip that estimate.
+        Rent, labour and other fixed monthly costs per location — set once here so End of day can estimate a real
+        net margin (gross margin minus a share of this figure) instead of just food cost. Leave blank if you'd
+        rather not estimate net margin yet; nothing else on the site needs this.
       </p>
       {!locations.length && <p className="muted">No locations yet.</p>}
       {locations.map((loc) => (
-        <div key={loc.id} className="price-row" style={{ alignItems: "center", flexWrap: "wrap" }}>
+        <div key={loc.id} className="price-row" style={{ alignItems: "center" }}>
           <label>{loc.name}</label>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {errors[loc.id] && <span className="error" style={{ padding: "4px 8px" }}>{errors[loc.id]}</span>}
             {saved[loc.id] && !errors[loc.id] && <span className="badge b-ok">Saved</span>}
-            <select
-              value={currencyFor(loc)}
-              onChange={(e) => {
-                setCurrencyValues((v) => ({ ...v, [loc.id]: e.target.value as CurrencyCode }));
-                setSaved((s) => ({ ...s, [loc.id]: false }));
-              }}
-            >
-              {CURRENCY_OPTIONS.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
+            <span className="muted">£</span>
             <input
               className="price-in"
               type="number"
               min="0"
               step="1"
-              placeholder="Overhead, e.g. 8000"
-              value={overheadFor(loc)}
+              placeholder="e.g. 8000"
+              value={valueFor(loc)}
               onChange={(e) => {
-                setOverheadValues((v) => ({ ...v, [loc.id]: e.target.value }));
+                setValues((v) => ({ ...v, [loc.id]: e.target.value }));
                 setSaved((s) => ({ ...s, [loc.id]: false }));
               }}
             />
@@ -263,6 +257,186 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Delivery reminders & inventory checks (Phase 3 notification settings) —
+// feeds the notification bell top-right and its calendar. Two independent
+// per-location settings share one panel since they're both "notification
+// timing" from the user's point of view: how much notice before a
+// delivery, and which day the regular stock count falls on.
+// ---------------------------------------------------------------------------
+
+function NotificationSettingsPanel({ accessToken, locations }: { accessToken: string; locations: Location[] }) {
+  const [leadValues, setLeadValues] = useState<Record<string, string>>({});
+  const [leadSaving, setLeadSaving] = useState<Record<string, boolean>>({});
+  const [leadSaved, setLeadSaved] = useState<Record<string, boolean>>({});
+  const [leadErrors, setLeadErrors] = useState<Record<string, string>>({});
+
+  const [schedules, setSchedules] = useState<InventoryCheckSchedule[]>([]);
+  const [schedulesLoaded, setSchedulesLoaded] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [scheduleSaving, setScheduleSaving] = useState<Record<string, boolean>>({});
+  const [scheduleSaved, setScheduleSaved] = useState<Record<string, boolean>>({});
+  // Draft weekday/enabled per location, keyed the same way as leadValues —
+  // seeded from the fetched schedule once it loads, or sane defaults
+  // (Monday, enabled) for a location that doesn't have one saved yet.
+  const [weekdayDraft, setWeekdayDraft] = useState<Record<string, number>>({});
+  const [enabledDraft, setEnabledDraft] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    fetchInventoryCheckSchedules(accessToken)
+      .then((rows) => {
+        setSchedules(rows);
+        setSchedulesLoaded(true);
+      })
+      .catch((e) => setScheduleError(e instanceof Error ? e.message : "Could not load inventory check schedules."));
+  }, [accessToken]);
+
+  function scheduleFor(locId: string): InventoryCheckSchedule | null {
+    return schedules.find((s) => s.location === locId) ?? null;
+  }
+  function weekdayFor(locId: string): number {
+    if (locId in weekdayDraft) return weekdayDraft[locId];
+    return scheduleFor(locId)?.weekday ?? 0;
+  }
+  function enabledFor(locId: string): boolean {
+    if (locId in enabledDraft) return enabledDraft[locId];
+    return scheduleFor(locId)?.enabled ?? true;
+  }
+
+  function leadValueFor(loc: Location): string {
+    return leadValues[loc.id] ?? String(loc.delivery_reminder_lead_days ?? 1);
+  }
+
+  async function handleSaveLead(loc: Location) {
+    const raw = leadValueFor(loc).trim();
+    const parsed = Number(raw);
+    if (!raw || isNaN(parsed) || parsed < 0) {
+      setLeadErrors((er) => ({ ...er, [loc.id]: "Enter 0 or more days." }));
+      return;
+    }
+    setLeadSaving((s) => ({ ...s, [loc.id]: true }));
+    setLeadErrors((er) => ({ ...er, [loc.id]: "" }));
+    setLeadSaved((s) => ({ ...s, [loc.id]: false }));
+    try {
+      await updateLocation(accessToken, loc.id, { delivery_reminder_lead_days: parsed });
+      setLeadSaved((s) => ({ ...s, [loc.id]: true }));
+    } catch (e) {
+      setLeadErrors((er) => ({ ...er, [loc.id]: e instanceof Error ? e.message : "Could not save this." }));
+    } finally {
+      setLeadSaving((s) => ({ ...s, [loc.id]: false }));
+    }
+  }
+
+  async function handleSaveSchedule(loc: Location) {
+    const weekday = weekdayFor(loc.id);
+    const enabled = enabledFor(loc.id);
+    setScheduleSaving((s) => ({ ...s, [loc.id]: true }));
+    setScheduleError(null);
+    setScheduleSaved((s) => ({ ...s, [loc.id]: false }));
+    try {
+      const existing = scheduleFor(loc.id);
+      const saved = existing
+        ? await updateInventoryCheckSchedule(accessToken, existing.id, { weekday, enabled })
+        : await createInventoryCheckSchedule(accessToken, { location: loc.id, weekday, enabled });
+      setSchedules((rows) => [...rows.filter((r) => r.location !== loc.id), saved]);
+      setScheduleSaved((s) => ({ ...s, [loc.id]: true }));
+    } catch (e) {
+      setScheduleError(e instanceof Error ? e.message : "Could not save this schedule.");
+    } finally {
+      setScheduleSaving((s) => ({ ...s, [loc.id]: false }));
+    }
+  }
+
+  return (
+    <div className="card">
+      <h2 style={{ marginTop: 0 }}>Delivery reminders & inventory checks</h2>
+      <p className="hint">
+        How much notice to give before a delivery is due, and which day each location runs its regular stock
+        count — both feed the notification bell (top right) and its calendar.
+      </p>
+      {!locations.length && <p className="muted">No locations yet.</p>}
+      {locations.map((loc) => (
+        <div key={loc.id} style={{ marginBottom: 18 }}>
+          <b>{loc.name}</b>
+
+          <div className="price-row" style={{ alignItems: "center", marginTop: 6 }}>
+            <label>Delivery reminder</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              {leadErrors[loc.id] && (
+                <span className="error" style={{ padding: "4px 8px" }}>
+                  {leadErrors[loc.id]}
+                </span>
+              )}
+              {leadSaved[loc.id] && !leadErrors[loc.id] && <span className="badge b-ok">Saved</span>}
+              <input
+                className="price-in"
+                type="number"
+                min="0"
+                step="1"
+                value={leadValueFor(loc)}
+                onChange={(e) => {
+                  setLeadValues((v) => ({ ...v, [loc.id]: e.target.value }));
+                  setLeadSaved((s) => ({ ...s, [loc.id]: false }));
+                }}
+              />
+              <span className="muted">day{leadValueFor(loc) === "1" ? "" : "s"} before</span>
+              <button
+                type="button"
+                className="btn-ghost small"
+                disabled={leadSaving[loc.id]}
+                onClick={() => handleSaveLead(loc)}
+              >
+                {leadSaving[loc.id] ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+
+          <div className="price-row" style={{ alignItems: "center" }}>
+            <label>Inventory check</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              {scheduleSaved[loc.id] && <span className="badge b-ok">Saved</span>}
+              <select
+                value={weekdayFor(loc.id)}
+                disabled={!schedulesLoaded}
+                onChange={(e) => {
+                  setWeekdayDraft((d) => ({ ...d, [loc.id]: Number(e.target.value) }));
+                  setScheduleSaved((s) => ({ ...s, [loc.id]: false }));
+                }}
+              >
+                {DAY_NAMES.map((name, i) => (
+                  <option key={i} value={i}>
+                    Every {name}
+                  </option>
+                ))}
+              </select>
+              <label style={{ display: "flex", alignItems: "center", gap: 4, fontWeight: "normal" }}>
+                <input
+                  type="checkbox"
+                  checked={enabledFor(loc.id)}
+                  onChange={(e) => {
+                    setEnabledDraft((d) => ({ ...d, [loc.id]: e.target.checked }));
+                    setScheduleSaved((s) => ({ ...s, [loc.id]: false }));
+                  }}
+                />
+                Enabled
+              </label>
+              <button
+                type="button"
+                className="btn-ghost small"
+                disabled={scheduleSaving[loc.id] || !schedulesLoaded}
+                onClick={() => handleSaveSchedule(loc)}
+              >
+                {scheduleSaving[loc.id] ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ))}
+      {scheduleError && <p className="error">{scheduleError}</p>}
     </div>
   );
 }
@@ -519,8 +693,18 @@ function ItemsImportPanel({
         <label>CSV or Excel file</label>
         <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={handleFile} />
         <div className="vhint">
-          Header row: <code>name,sku,unit,category,vat,department,par_level,supplier,cost</code> — only{" "}
-          <code>name</code>/<code>unit</code> required. See the templates above for column details.
+          Header row required: <code>name,sku,unit,category,vat,department,par_level,supplier,cost</code> — only{" "}
+          <code>name</code> and <code>unit</code> are required. <code>sku</code>/<code>category</code>/
+          <code>vat</code> (as a % number) can be left blank. <code>department</code> is optional too (
+          <code>kitchen</code>, <code>bar</code> or <code>foh</code>) and defaults to Kitchen — it decides where
+          each item's stock holding is created at the location below. <code>par_level</code> is optional and
+          defaults to 0 if blank — it only sets the par on a holding this import actually creates (a brand-new
+          item, or backfilling a missing holding for an existing item); it never changes the par on a holding
+          that already exists. <code>supplier</code> and <code>cost</code> are optional and only do anything
+          when both are filled in on the same row — together they create (or reuse) a supplier by that name and
+          link it to the item at that price, the same end result as importing a supplier catalogue and clicking
+          "Link" by hand. Re-importing later refreshes the price. e.g. "Beef mince 5%,,kg,Meat,20,kitchen,3,ACME
+          Foods,4.20".
         </div>
       </div>
 
@@ -1048,9 +1232,12 @@ function RecipesImportPanel({
           </div>
           {prefillError && <p className="error" style={{ marginTop: 6 }}>{prefillError}</p>}
           <div className="vhint">
-            Both templates have one example dish filled in — see the templates for column details. Prefill
-            reads your menu-list file and hands back the CSV template with dish details pre-filled; add ingredient
-            rows by hand, then upload below.
+            Both blank templates have one example dish already filled in — the Excel version also groups that
+            example's ingredient rows under it (click the <b>−</b> next to row 2 to collapse them), the same way a
+            real multi-ingredient recipe will once you've filled one in. The prefill option reads the same menu-list
+            file as the import above and hands back the CSV template with <code>recipe</code>/<code>pos_id</code>/
+            <code>menu_category</code>/<code>menu_price</code> already filled in from it — add an ingredient row (or
+            several) under each dish by hand, then upload the result below.
           </div>
 
           <div className="field" style={{ marginTop: 12, marginBottom: 0 }}>
@@ -1058,9 +1245,18 @@ function RecipesImportPanel({
             <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={handleFile} />
             <div className="vhint">
               One row per ingredient. Header row:{" "}
-              <code>recipe,pos_id,menu_category,kind,yield_qty,yield_unit,menu_price,menu_group,ingredient,qty,unit</code>
-              — only <code>recipe</code>/<code>ingredient</code>/<code>qty</code> required. Matches an existing
-              recipe by <code>pos_id</code> or name and updates it; unmatched ingredients create a new item.
+              <code>recipe,pos_id,menu_category,kind,yield_qty,yield_unit,menu_price,menu_group,ingredient,qty,unit</code>.
+              Repeat the recipe name (and its <code>pos_id</code>/<code>menu_category</code>/<code>menu_group</code>,
+              though only the first row of each recipe needs them) on every ingredient row that belongs to it — only{" "}
+              <code>recipe</code>, <code>ingredient</code> and <code>qty</code> are required, the rest default
+              sensibly. A recipe whose <code>pos_id</code> (or, failing that, name) already matches one in SAWIS gets
+              {" "}<b>updated</b> — its ingredient list is replaced by what's in this file — rather than creating a
+              duplicate; anything new is <b>created</b>. <code>menu_group</code> is <b>food</b> or <b>drink</b>,
+              entirely optional — leave it blank to leave an existing recipe's classification alone (a brand-new
+              recipe still defaults to Food if left blank); fill it in to set/change it without opening that recipe
+              individually. Any ingredient that doesn't match an existing item will <b>create a new item
+              automatically</b> (with a stock holding at the location below, in the Kitchen department) — reviewed
+              below before you confirm.
             </div>
           </div>
         </div>
@@ -1100,9 +1296,7 @@ function RecipesImportPanel({
                           <b>{r.recipeName}</b>
                           <div className="muted" style={{ fontSize: 11 }}>
                             {r.kind} · yields {r.yield_qty} {r.yield_unit}
-                            {r.kind === "dish" && r.menu_price
-                              ? ` · ${currencySymbol(locations.find((l) => l.id === location)?.currency)}${r.menu_price}`
-                              : ""}
+                            {r.kind === "dish" && r.menu_price ? ` · £${r.menu_price}` : ""}
                             {r.posId ? ` · POS ${r.posId}` : ""}
                             {r.menuCategory ? ` · ${r.menuCategory}` : ""}
                           </div>

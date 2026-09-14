@@ -308,6 +308,27 @@ h1 {
 }
 .notif-item:last-child { border-bottom: none; }
 
+/* .notif-item is also used on a <button> for a clickable row (a delivery
+   reminder that jumps to its PO) -- this resets the button chrome so it
+   still looks/lays out exactly like the plain-div rows around it. */
+.notif-item-clickable {
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.notif-item-clickable:hover { background: var(--bg); }
+
+.notif-section-label {
+  padding: 10px 14px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 .notif-view-btn {
   display: block;
   width: calc(100% - 20px);
