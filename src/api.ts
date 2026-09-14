@@ -714,6 +714,45 @@ export async function fetchNotifications(accessToken: string): Promise<AppNotifi
   return authedFetchAllPages<AppNotification>("/api/tenancy/notifications/", accessToken);
 }
 
+// ---------------------------------------------------------------------------
+// Browser push (Phase 6) — opt-in per device via Settings' notification
+// panel (see PushNotificationToggle in Settings.tsx). No vendor or
+// per-message cost: this talks to the open Web Push standard through the
+// browser's own PushManager, with the backend only ever storing the
+// subscription and signing pushes with its own VAPID key pair (see
+// apps/tenancy/push.py). See public/sw.js for the service worker that
+// actually receives a push and shows it as a native OS notification.
+// ---------------------------------------------------------------------------
+
+export async function fetchVapidPublicKey(accessToken: string): Promise<string> {
+  const data: { public_key: string | null } = await authedFetch("/api/tenancy/push-public-key/", accessToken);
+  if (!data.public_key) throw new Error("Push notifications aren't set up on the server yet.");
+  return data.public_key;
+}
+
+export interface PushSubscriptionInput {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+}
+
+export async function subscribePush(accessToken: string, subscription: PushSubscriptionInput): Promise<void> {
+  const res = await fetch(`${API_URL}/api/tenancy/push-subscriptions/subscribe/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(subscription),
+  });
+  if (!res.ok) throw new Error("Could not save this device's push subscription.");
+}
+
+export async function unsubscribePush(accessToken: string, endpoint: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/tenancy/push-subscriptions/unsubscribe/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ endpoint }),
+  });
+  if (!res.ok) throw new Error("Could not disable push notifications on this device.");
+}
+
 export async function fetchMemberships(accessToken: string): Promise<Membership[]> {
   return authedFetchAllPages<Membership>("/api/tenancy/memberships/", accessToken);
 }

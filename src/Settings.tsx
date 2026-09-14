@@ -5,6 +5,9 @@ import {
   bulkImportRecipes,
   createInventoryCheckSchedule,
   fetchInventoryCheckSchedules,
+  fetchVapidPublicKey,
+  subscribePush,
+  unsubscribePush,
   updateInventoryCheckSchedule,
   updateLocation,
   BASE_UNITS,
@@ -437,6 +440,137 @@ function NotificationSettingsPanel({ accessToken, locations }: { accessToken: st
         </div>
       ))}
       {scheduleError && <p className="error">{scheduleError}</p>}
+
+      <PushNotificationToggle accessToken={accessToken} />
+    </div>
+  );
+}
+
+// urlBase64ToUint8Array -- converts the VAPID public key (base64url text,
+// as the backend hands it back from GET /push-public-key/) into the raw
+// byte array pushManager.subscribe()'s applicationServerKey actually wants.
+// Standard, widely-used conversion for the Push API -- nothing SAWIS-specific.
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+// Phase 6 of the notification plan -- browser push, opted into per device
+// (not per location/org like everything else in this panel), so it's kept
+// as its own small block at the bottom of the same card rather than a
+// separate one: it's still "notification timing/delivery" from the user's
+// point of view, just for a different channel. No backend cost beyond a
+// couple of DB rows -- the Web Push standard itself has no vendor or
+// per-message fee (see the project handoff for the cost comparison against
+// email/Phase 5, which does have a real, if tiny, per-message AWS SES cost).
+function PushNotificationToggle({ accessToken }: { accessToken: string }) {
+  const supported =
+    typeof navigator !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
+  const [checked, setChecked] = useState(false);
+  const [subscribed, setSubscribed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [permission, setPermission] = useState<string>(
+    supported && "Notification" in window ? Notification.permission : "unsupported"
+  );
+
+  useEffect(() => {
+    if (!supported) {
+      setChecked(true);
+      return;
+    }
+    navigator.serviceWorker.ready
+      .then((reg) => reg.pushManager.getSubscription())
+      .then((sub) => setSubscribed(!!sub))
+      .catch(() => {})
+      .finally(() => setChecked(true));
+  }, [supported]);
+
+  async function handleEnable() {
+    setBusy(true);
+    setError(null);
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const publicKey = await fetchVapidPublicKey(accessToken);
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+      const json = sub.toJSON();
+      if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
+        throw new Error("This browser returned an incomplete push subscription.");
+      }
+      await subscribePush(accessToken, {
+        endpoint: json.endpoint,
+        keys: { p256dh: json.keys.p256dh, auth: json.keys.auth },
+      });
+      setSubscribed(true);
+      setPermission("Notification" in window ? Notification.permission : "unsupported");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not enable push notifications on this device.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDisable() {
+    setBusy(true);
+    setError(null);
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await unsubscribePush(accessToken, sub.endpoint);
+        await sub.unsubscribe();
+      }
+      setSubscribed(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not disable push notifications on this device.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
+      <b>Browser push notifications</b>
+      <p className="hint" style={{ marginTop: 4 }}>
+        Get a notification on this device the moment a delivery reminder, inventory check, or below-par alert
+        comes up — even when SAWIS isn't open in a tab. This is per device: enable it separately on your phone
+        and your laptop if you want both.
+      </p>
+      {!supported && <p className="muted">This browser doesn't support push notifications.</p>}
+      {supported && permission === "denied" && (
+        <p className="error">
+          Notifications are blocked for this site in your browser's own settings — allow them there first, then
+          come back here.
+        </p>
+      )}
+      {supported && permission !== "denied" && checked && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          {error && (
+            <span className="error" style={{ padding: "4px 8px" }}>
+              {error}
+            </span>
+          )}
+          {subscribed ? (
+            <>
+              <span className="badge b-ok">Enabled on this device</span>
+              <button type="button" className="btn-ghost small" disabled={busy} onClick={handleDisable}>
+                {busy ? "Disabling…" : "Disable"}
+              </button>
+            </>
+          ) : (
+            <button type="button" className="btn-ghost small" disabled={busy} onClick={handleEnable}>
+              {busy ? "Enabling…" : "Enable on this device"}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
