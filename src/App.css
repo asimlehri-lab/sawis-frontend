@@ -202,6 +202,114 @@ h1 {
   .sparkle { opacity: 0.7; }
 }
 
+/* NotificationBell.tsx — bell + today's date, top-left of the sidebar.
+   Same line-art-in-brand-tokens language as the cloche loader, and the same
+   plateau-then-idle keyframe shape, but shakes instead of lifting, and only
+   while there's actually something to flag. */
+.notif-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 16px;
+  position: relative;
+}
+
+.notif-bell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  color: var(--muted);
+}
+.notif-bell:hover { background: var(--bg); }
+
+.bell-icon { width: 19px; height: 19px; fill: currentColor; transform-origin: 50% 12%; }
+
+.notif-bell.has-alerts { color: var(--brick); }
+.notif-bell.has-alerts .bell-icon { animation: bell-shake 3.4s ease-in-out infinite; }
+
+.notif-badge {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 8px;
+  background: var(--brick);
+  color: #fff;
+  font-size: 9.5px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+}
+
+.notif-date {
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.notif-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 8px;
+  width: 280px;
+  max-width: calc(100vw - 40px);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 10px 28px rgba(33, 31, 27, 0.14);
+  z-index: 40;
+  overflow: hidden;
+}
+
+.notif-panel-head {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.notif-list { max-height: 260px; overflow-y: auto; }
+
+.notif-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12.5px;
+}
+.notif-item:last-child { border-bottom: none; }
+
+.notif-view-btn {
+  display: block;
+  width: calc(100% - 20px);
+  margin: 10px;
+}
+
+@keyframes bell-shake {
+  0%, 62%, 100% { transform: rotate(0deg); }
+  4%  { transform: rotate(-13deg); }
+  8%  { transform: rotate(11deg); }
+  12% { transform: rotate(-8deg); }
+  16% { transform: rotate(6deg); }
+  20% { transform: rotate(-4deg); }
+  24% { transform: rotate(2deg); }
+  28% { transform: rotate(0deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .notif-bell.has-alerts .bell-icon { animation: none !important; }
+}
+
 form {
   text-align: left;
   display: flex;

@@ -64,6 +64,7 @@ import EndOfDay from "./EndOfDay";
 import Settings from "./Settings";
 import Reports from "./Reports";
 import SearchSelect from "./SearchSelect";
+import NotificationBell from "./NotificationBell";
 import "./App.css";
 
 const NAV_ITEMS = [
@@ -365,6 +366,14 @@ export default function App() {
   // page was open (see ACTIVE_PAGE_KEY above) -- the very first visit
   // (nothing stored yet) still starts on End of day.
   const [activePage, setActivePage] = useState(() => localStorage.getItem(ACTIVE_PAGE_KEY) || "End of day");
+  // Which tab End of day should mount on -- normally "overview" (the
+  // default every nav click resets to, see goToNav), only ever set to
+  // "reorder" for the moment it takes to jump there from the notification
+  // bell's "View reorder list" button. EndOfDay only mounts while
+  // activePage === "End of day" (conditional render, not a persistent
+  // component), so a fresh initial tab on every mount is enough -- no
+  // effect needed to reset it afterwards.
+  const [eodInitialTab, setEodInitialTab] = useState<"overview" | "reorder">("overview");
 
   const [items, setItems] = useState<CatalogItem[] | null>(null);
   const [itemsError, setItemsError] = useState<string | null>(null);
@@ -619,6 +628,22 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, activePage]);
 
+  // Powers the notification bell (NotificationBell.tsx) -- loaded once per
+  // session, independent of which page happens to be open. Without this,
+  // the bell would only have real stock-movement data after visiting
+  // Waste log or Inventory (the only two pages that otherwise fetch it),
+  // and would misread an empty ledger as everything being below par on a
+  // fresh sign-in. The activePage effect above keeps these fresh as the
+  // user navigates; this just guarantees a first load regardless of where
+  // they land.
+  useEffect(() => {
+    if (!accessToken) return;
+    if (!items) fetchItems(accessToken).then(setItems).catch(() => {});
+    fetchLocations(accessToken).then(setLocations).catch(() => {});
+    fetchStockMovements(accessToken).then(setStockMovements).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken]);
+
   // Keep localStorage in sync with whatever page is open, so a refresh
   // (see the ACTIVE_PAGE_KEY lazy initializer above) picks it back up.
   useEffect(() => {
@@ -718,7 +743,7 @@ export default function App() {
     setPassword("");
   }
 
-  function goToNav(label: string) {
+  function goToNav(label: string, opts?: { eodTab?: "overview" | "reorder" }) {
     setActivePage(label);
     setSelectedRecipeId(null);
     setSelectedItemId(null);
@@ -726,6 +751,9 @@ export default function App() {
     setSelectedPOId(null);
     setSelectedSupplierId(null);
     setShowNewPO(false);
+    // Every ordinary nav click lands End of day back on Overview -- only the
+    // notification bell's "View reorder list" passes eodTab explicitly.
+    if (label === "End of day") setEodInitialTab(opts?.eodTab ?? "overview");
   }
 
   function openNewPOForSupplier(supplierId: string, expectedDateISO: string) {
@@ -1373,6 +1401,12 @@ export default function App() {
             <span>back office</span>
           </div>
         </div>
+        <NotificationBell
+          items={items ?? []}
+          locations={locations}
+          stockMovements={stockMovements}
+          onViewReorder={() => goToNav("End of day", { eodTab: "reorder" })}
+        />
         <nav>
           {NAV_ITEMS.map((label) => (
             <button
@@ -1761,6 +1795,7 @@ export default function App() {
                 recipes={recipes ?? []}
                 items={items ?? []}
                 itemSupplierLinks={itemSupplierLinks}
+                initialTab={eodInitialTab}
               />
             )}
 
