@@ -107,9 +107,12 @@ export default function ProcurementDetail({
   }, [poId]);
 
   useEffect(() => {
-    if (items.length && !addItemId) setAddItemId(items[0].id);
+    // Waits on `po` too (not just `items`) so the very first default-selected
+    // item also gets its price looked up correctly -- otherwise this would
+    // fire before `po.supplier` is known and silently skip the pre-fill.
+    if (items.length && po && !addItemId) handleAddItemSelect(items[0].id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items]);
+  }, [items, po]);
 
   async function saveField(patch: Parameters<typeof updatePurchaseOrder>[2]) {
     try {
@@ -378,6 +381,18 @@ export default function ProcurementDetail({
     } finally {
       setSuggesting(false);
     }
+  }
+
+  function handleAddItemSelect(itemId: string) {
+    setAddItemId(itemId);
+    // Pre-fill the unit price from this item's existing link to THIS PO's
+    // supplier, if one is on record -- ItemSupplier.unit_price is always a
+    // true price per the item's own base_unit, so it's safe to drop straight
+    // into the line as-is (see ItemSupplierRow's comment in api.ts). Falls
+    // back to "0.00" (not left stale) when switching to an item with no such
+    // link, so the field never silently carries over a previous item's price.
+    const link = po && itemSupplierLinks.find((l) => l.item === itemId && l.supplier === po.supplier);
+    setAddPrice(link ? link.unit_price : "0.00");
   }
 
   async function handleAddLine(e: React.FormEvent) {
@@ -681,7 +696,7 @@ export default function ProcurementDetail({
                 <label>Item</label>
                 <SearchSelect
                   value={addItemId}
-                  onChange={setAddItemId}
+                  onChange={handleAddItemSelect}
                   aria-label="Item"
                   options={items.map((it) => ({ value: it.id, label: `${it.name} (${it.base_unit})` }))}
                 />
