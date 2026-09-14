@@ -1401,12 +1401,6 @@ export default function App() {
             <span>back office</span>
           </div>
         </div>
-        <NotificationBell
-          items={items ?? []}
-          locations={locations}
-          stockMovements={stockMovements}
-          onViewReorder={() => goToNav("End of day", { eodTab: "reorder" })}
-        />
         <nav>
           {NAV_ITEMS.map((label) => (
             <button
@@ -1440,6 +1434,14 @@ export default function App() {
       </aside>
 
       <main className="content">
+        <div className="content-header">
+          <NotificationBell
+            items={items ?? []}
+            locations={locations}
+            stockMovements={stockMovements}
+            onViewReorder={() => goToNav("End of day", { eodTab: "reorder" })}
+          />
+        </div>
         {activePage === "Recipes" && selectedRecipeId && accessToken ? (
           <RecipeDetail
             recipeId={selectedRecipeId}

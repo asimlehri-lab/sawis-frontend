@@ -202,15 +202,19 @@ h1 {
   .sparkle { opacity: 0.7; }
 }
 
-/* NotificationBell.tsx — bell + today's date, top-left of the sidebar.
-   Same line-art-in-brand-tokens language as the cloche loader, and the same
-   plateau-then-idle keyframe shape, but shakes instead of lifting, and only
-   while there's actually something to flag. */
+/* NotificationBell.tsx — the cloche mark + today's date, top-right of the
+   content header (see .content-header below) -- deliberately NOT in the
+   sidebar next to the brand mark; a shaking icon right beside the logo
+   competed with it for attention, and top-right is the conventional home
+   for a notification control anyway. The icon reuses Loader.tsx's own
+   dome-and-knob shape (own class names, `currentColor`-based, so it can
+   recolor for the alert state without touching the loader itself) so it
+   reads as the same SAWIS mark, but rings side-to-side instead of lifting
+   straight up, and only while there's actually something to flag. */
 .notif-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 8px 16px;
   position: relative;
 }
 
@@ -218,8 +222,8 @@ h1 {
   position: relative;
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   border: none;
   border-radius: 8px;
   background: none;
@@ -228,10 +232,12 @@ h1 {
 }
 .notif-bell:hover { background: var(--bg); }
 
-.bell-icon { width: 19px; height: 19px; fill: currentColor; transform-origin: 50% 12%; }
+.cloche-mark { width: 24px; height: 24px; overflow: visible; transform-origin: 50% 28%; }
+.cloche-mark-body { fill: none; stroke: currentColor; stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; }
+.cloche-mark-knob { fill: currentColor; }
 
 .notif-bell.has-alerts { color: var(--brick); }
-.notif-bell.has-alerts .bell-icon { animation: bell-shake 3.4s ease-in-out infinite; }
+.notif-bell.has-alerts .cloche-mark { animation: cloche-ring 3.4s ease-in-out infinite; }
 
 .notif-badge {
   position: absolute;
@@ -259,7 +265,7 @@ h1 {
 .notif-panel {
   position: absolute;
   top: calc(100% + 4px);
-  left: 8px;
+  right: 0;
   width: 280px;
   max-width: calc(100vw - 40px);
   background: var(--surface);
@@ -295,7 +301,7 @@ h1 {
   margin: 10px;
 }
 
-@keyframes bell-shake {
+@keyframes cloche-ring {
   0%, 62%, 100% { transform: rotate(0deg); }
   4%  { transform: rotate(-13deg); }
   8%  { transform: rotate(11deg); }
@@ -307,7 +313,25 @@ h1 {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .notif-bell.has-alerts .bell-icon { animation: none !important; }
+  .notif-bell.has-alerts .cloche-mark { animation: none !important; }
+}
+
+/* Persistent bar above every page's own content, holding the notification
+   cloche top-right -- separate from the sidebar (see the notif-row comment
+   above) and from each page's own heading. Sticky so it stays visible on
+   long pages; z-index kept below .modal-backdrop's (20) so an open modal
+   still layers above it, same as it would above ordinary page content. */
+.content-header {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin: -24px -28px 20px;
+  padding: 12px 28px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 15;
 }
 
 form {

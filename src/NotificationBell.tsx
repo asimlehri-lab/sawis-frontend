@@ -17,13 +17,22 @@ interface ReorderAlert {
   baseUnit: string;
 }
 
-// The notification bell in the sidebar's top-left corner. Phase 1 of the
+// The notification bell, top-right of the content header (see App.tsx's
+// <main> -- a small persistent bar above every page, separate from the
+// sidebar's brand mark, per a UX call on Sep 14 2026: a bell that shakes
+// right next to the logo competes with the brand for attention, and
+// top-right is where users actually expect to find alerts). Phase 1 of the
 // SAWIS notification plan -- covers one alert type (items below par) using
 // data the app already has, with no new backend endpoint. Later phases
 // (delivery-coming-soon / inventory-check-due reminders, a persisted
 // Notification record, email) need a real scheduled job on the backend and
 // are deliberately not part of this component -- see the notification plan
 // doc for the full phased build.
+//
+// The icon is SAWIS's own cloche mark (the same dome-and-knob shape as
+// Loader.tsx's loading animation), not a generic bell glyph -- it rings
+// (rotates back and forth) instead of lifting straight up, but it's
+// recognizably the same brand symbol either way.
 //
 // On-hand is derived from the stock_movement ledger client-side (summing
 // qty_delta per item/location/department, the same append-only-ledger
@@ -86,9 +95,11 @@ export default function NotificationBell({ items, locations, stockMovements, onV
         onClick={() => setOpen((o) => !o)}
         aria-label={alerts.length > 0 ? `Notifications, ${alerts.length} item${alerts.length === 1 ? "" : "s"} below par` : "Notifications"}
       >
-        <svg viewBox="0 0 24 24" className="bell-icon" aria-hidden="true">
-          <path d="M12 3.4c-.94 0-1.7.76-1.7 1.7v.46C7.75 6.1 5.9 8.46 5.9 11.3v3.5L4.2 17.3c-.3.44.02 1.03.55 1.03h14.5c.53 0 .84-.6.55-1.03l-1.7-2.5v-3.5c0-2.84-1.85-5.2-4.4-5.74V5.1c0-.94-.76-1.7-1.7-1.7Z" />
-          <path d="M9.7 19.3a2.3 2.3 0 0 0 4.6 0Z" />
+        <svg viewBox="0 0 100 100" className="cloche-mark" aria-hidden="true">
+          <path className="cloche-mark-body" d="M 26 74 Q 26 34 50 34 Q 74 34 74 74" />
+          <line className="cloche-mark-body" x1="20" y1="74" x2="80" y2="74" />
+          <line className="cloche-mark-body" x1="50" y1="34" x2="50" y2="30" />
+          <circle className="cloche-mark-knob" cx="50" cy="28" r="6" />
         </svg>
         {alerts.length > 0 && <span className="notif-badge">{alerts.length}</span>}
       </button>
