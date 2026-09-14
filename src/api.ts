@@ -1217,6 +1217,16 @@ export interface NewPOLineInput {
   department: "kitchen" | "bar" | "foh";
   qty: string;
   unit_price: string;
+  // Freezes the as-invoiced unit/qty directly onto this POLine, same as
+  // PurchaseOrderViewSet.receive's own per-line override does for a
+  // received line -- POLineSerializer already accepts both as plain
+  // writable fields (see apps/procurement/serializers.py), so no backend
+  // change was needed to also set them at line-creation time. Omit both
+  // (don't send empty strings) when qty/unit_price above are already in
+  // the item's own base_unit -- see ProcurementDetail.tsx's "Different pack
+  // or unit?" control.
+  supplier_unit?: string;
+  supplier_qty?: string;
 }
 
 export async function createPOLine(accessToken: string, input: NewPOLineInput): Promise<POLineRow> {

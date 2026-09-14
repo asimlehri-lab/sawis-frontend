@@ -9,6 +9,8 @@ import {
   createPurchaseOrder,
   fetchOnHand,
   formatMoney,
+  autoFactor,
+  convertToBaseUnit,
 } from "./api";
 import type { PurchaseOrder, CatalogItem, Supplier, ItemSupplierRow, Location } from "./api";
 import SearchSelect from "./SearchSelect";
@@ -70,6 +72,18 @@ export default function ProcurementDetail({
   const [addDept, setAddDept] = useState<"kitchen" | "bar" | "foh">("kitchen");
   const [addQty, setAddQty] = useState("1");
   const [addPrice, setAddPrice] = useState("0.00");
+  // Supplier pack/unit conversion for the manual "Add line" form -- mirrors
+  // ScanRow's supplierUnit/packQty in App.tsx's Scan receipt modal (see
+  // scanRowBaseUnits/findKnownSupplierUnit there for the source pattern).
+  // "" means "qty/price above are already in the item's own base_unit, no
+  // conversion needed" -- the same meaning as an empty ScanRow.supplierUnit.
+  // When set and different from the item's base_unit, addQty/addPrice are
+  // instead read as the supplier's own qty/price (e.g. "3 bottles @
+  // €1.20/L") and converted at submit time -- never stored as-is, since
+  // POLine.qty/unit_price must always be true base_unit figures.
+  const [addSupplierUnit, setAddSupplierUnit] = useState("");
+  const [addPackQty, setAddPackQty] = useState("1");
+  const [addPackExpanded, setAddPackExpanded] = useState(false);
   const [savingLine, setSavingLine] = useState(false);
   const [lineError, setLineError] = useState<string | null>(null);
 
@@ -383,21 +397,81 @@ export default function ProcurementDetail({
     }
   }
 
+  // "If unit is already present then software should match and auto fill for
+  // the user" -- when this exact (item, supplier) pair was already linked
+  // with a recorded supplier_unit (via ItemDetail's Link flow, a PO receive,
+  // or a catalogue import), back out the pack factor from the two prices
+  // already on file rather than asking the user to re-teach it. A direct
+  // copy of findKnownSupplierUnit in App.tsx -- this file already has its
+  // own copies of small cross-screen helpers, per this codebase's established
+  // convention (see e.g. Inventory.tsx's local matchScore/cleanNumeric).
+  function findKnownSupplierUnit(itemId: string, supplierId: string): { supplierUnit: string; packQty: string } | null {
+    const link = itemSupplierLinks.find((l) => l.item === itemId && l.supplier === supplierId);
+    if (!link || !link.supplier_unit || link.supplier_unit_price == null) return null;
+    const unitPriceNum = Number(link.unit_price);
+    const supplierUnitPriceNum = Number(link.supplier_unit_price);
+    if (!Number.isFinite(unitPriceNum) || unitPriceNum <= 0) return null;
+    if (!Number.isFinite(supplierUnitPriceNum)) return null;
+    const factor = supplierUnitPriceNum / unitPriceNum;
+    if (!Number.isFinite(factor) || factor <= 0) return null;
+    return { supplierUnit: link.supplier_unit, packQty: String(factor) };
+  }
+
   function handleAddItemSelect(itemId: string) {
     setAddItemId(itemId);
-    // Pre-fill the unit price from this item's existing link to THIS PO's
-    // supplier, if one is on record -- ItemSupplier.unit_price is always a
-    // true price per the item's own base_unit, so it's safe to drop straight
-    // into the line as-is (see ItemSupplierRow's comment in api.ts). Falls
-    // back to "0.00" (not left stale) when switching to an item with no such
-    // link, so the field never silently carries over a previous item's price.
     const link = po && itemSupplierLinks.find((l) => l.item === itemId && l.supplier === po.supplier);
-    setAddPrice(link ? link.unit_price : "0.00");
+    const known = po ? findKnownSupplierUnit(itemId, po.supplier) : null;
+    if (known) {
+      // A pack/unit conversion is already on file for this exact
+      // (item, supplier) pair -- show it expanded with the supplier's own
+      // raw price (addPrice means "price per supplierUnit" while expanded),
+      // not the converted base-unit figure, so the user sees the same terms
+      // their invoice actually uses.
+      setAddSupplierUnit(known.supplierUnit);
+      setAddPackQty(known.packQty);
+      setAddPackExpanded(true);
+      setAddPrice(link?.supplier_unit_price ?? "0.00");
+    } else {
+      // No known pack/unit -- fall back to the plain base-unit price from
+      // the link if one exists (ItemSupplier.unit_price is always a true
+      // price per the item's own base_unit, safe to use as-is). "0.00" when
+      // switching to an item with no link at all, so the field never
+      // silently carries over a previous item's price.
+      setAddSupplierUnit("");
+      setAddPackQty("1");
+      setAddPackExpanded(false);
+      setAddPrice(link ? link.unit_price : "0.00");
+    }
+  }
+
+  // Resolves the Add-line form's current qty/price into the selected item's
+  // own base_unit, applying whatever pack/unit conversion is active. Mirrors
+  // scanRowBaseUnits in App.tsx. Returns null when a conversion is set up
+  // but not (yet) usable, so the caller can block submission rather than
+  // storing a corrupted cost.
+  function resolveAddLineBaseUnits(item: CatalogItem | undefined): { qty: number; unitPrice: number } | null {
+    const rawQty = Number(addQty || "0");
+    const rawPrice = Number(addPrice || "0");
+    if (!Number.isFinite(rawQty) || !Number.isFinite(rawPrice)) return null;
+    if (!item || !addSupplierUnit || addSupplierUnit === item.base_unit) {
+      return { qty: rawQty, unitPrice: rawPrice };
+    }
+    const auto = autoFactor(addSupplierUnit, item.base_unit);
+    const factor = auto ?? Number(addPackQty || "1");
+    if (!Number.isFinite(factor) || factor <= 0) return null;
+    return { qty: rawQty * factor, unitPrice: convertToBaseUnit(rawPrice, factor) ?? 0 };
   }
 
   async function handleAddLine(e: React.FormEvent) {
     e.preventDefault();
     if (!po || !addItemId) return;
+    const item = items.find((it) => it.id === addItemId);
+    const resolved = resolveAddLineBaseUnits(item);
+    if (!resolved) {
+      setLineError("Enter a valid pack/unit conversion before adding this line.");
+      return;
+    }
+    const converting = !!addSupplierUnit && !!item && addSupplierUnit !== item.base_unit;
     setLineError(null);
     setSavingLine(true);
     try {
@@ -405,9 +479,17 @@ export default function ProcurementDetail({
         po: po.id,
         item: addItemId,
         department: addDept,
-        qty: addQty,
-        unit_price: addPrice,
+        qty: resolved.qty.toFixed(3),
+        unit_price: resolved.unitPrice.toFixed(4),
+        // Freeze the as-invoiced unit/qty onto the line itself when a
+        // conversion is in play, same as a receive-via-Scan-receipt line
+        // already does -- lets a manually-created line show its own
+        // invoice's terms later too, not just converted ones.
+        ...(converting ? { supplier_unit: addSupplierUnit, supplier_qty: addQty } : {}),
       });
+      setAddSupplierUnit("");
+      setAddPackQty("1");
+      setAddPackExpanded(false);
       reload();
       onChanged();
     } catch (err) {
@@ -732,6 +814,69 @@ export default function ProcurementDetail({
                 />
               </div>
             </div>
+            {addItemId &&
+              (() => {
+                const addItem = items.find((it) => it.id === addItemId);
+                if (!addItem) return null;
+                const resolved = resolveAddLineBaseUnits(addItem);
+                return (
+                  <div style={{ marginTop: 4 }}>
+                    {!addPackExpanded ? (
+                      <button type="button" className="btn-ghost small" onClick={() => setAddPackExpanded(true)}>
+                        Different pack or unit?
+                      </button>
+                    ) : (
+                      <div style={{ marginTop: 4, fontSize: 13 }}>
+                        Supplier's unit:{" "}
+                        <input
+                          value={addSupplierUnit}
+                          placeholder={addItem.base_unit}
+                          onChange={(e) => setAddSupplierUnit(e.target.value)}
+                          style={{ width: 56 }}
+                        />
+                        {addSupplierUnit &&
+                          addSupplierUnit !== addItem.base_unit &&
+                          autoFactor(addSupplierUnit, addItem.base_unit) === null && (
+                            <>
+                              {" "}
+                              = <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={addPackQty}
+                                onChange={(e) => setAddPackQty(e.target.value)}
+                                style={{ width: 50 }}
+                              />{" "}
+                              {addItem.base_unit}
+                            </>
+                          )}
+                        <button
+                          type="button"
+                          className="btn-ghost small"
+                          onClick={() => {
+                            setAddPackExpanded(false);
+                            setAddSupplierUnit("");
+                            setAddPackQty("1");
+                          }}
+                        >
+                          ✕
+                        </button>
+                        {addSupplierUnit && addSupplierUnit !== addItem.base_unit && (
+                          <div className="muted">
+                            {resolved
+                              ? `→ ${resolved.qty.toFixed(3)} ${addItem.base_unit} @ ${formatMoney(
+                                  resolved.unitPrice,
+                                  currency,
+                                  4
+                                )}/${addItem.base_unit}`
+                              : "enter a conversion to add this line"}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             {lineError && <p className="error">{lineError}</p>}
             <div className="modal-actions" style={{ marginTop: 12 }}>
               <button className="btn-primary" type="submit" disabled={savingLine || !items.length}>
