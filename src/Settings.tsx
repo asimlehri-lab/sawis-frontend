@@ -470,7 +470,11 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 function PushNotificationToggle({ accessToken }: { accessToken: string }) {
   const supported =
     typeof navigator !== "undefined" && "serviceWorker" in navigator && "PushManager" in window;
-  const [checked, setChecked] = useState(false);
+  // Lazily initialized to !supported so the unsupported case never needs a
+  // synchronous setState call inside the effect below (avoids the
+  // react-hooks/set-state-in-effect lint error -- same fix pattern used
+  // elsewhere in this app, see the project handoff's Eighteenth gotcha).
+  const [checked, setChecked] = useState(!supported);
   const [subscribed, setSubscribed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -479,10 +483,7 @@ function PushNotificationToggle({ accessToken }: { accessToken: string }) {
   );
 
   useEffect(() => {
-    if (!supported) {
-      setChecked(true);
-      return;
-    }
+    if (!supported) return;
     navigator.serviceWorker.ready
       .then((reg) => reg.pushManager.getSubscription())
       .then((sub) => setSubscribed(!!sub))
@@ -498,7 +499,13 @@ function PushNotificationToggle({ accessToken }: { accessToken: string }) {
       const publicKey = await fetchVapidPublicKey(accessToken);
       const sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
+        // Cast needed because newer TS DOM lib typings make Uint8Array's
+        // buffer generic (ArrayBufferLike, which also covers
+        // SharedArrayBuffer) while PushSubscriptionOptionsInit still wants a
+        // plain BufferSource -- the underlying Uint8Array is always backed
+        // by a real ArrayBuffer here (see urlBase64ToUint8Array), so this is
+        // a type-level mismatch only, not a runtime one.
+        applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
       });
       const json = sub.toJSON();
       if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
