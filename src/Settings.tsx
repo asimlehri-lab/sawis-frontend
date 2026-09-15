@@ -11,8 +11,10 @@ import {
   updateInventoryCheckSchedule,
   updateLocation,
   BASE_UNITS,
+  CURRENCY_OPTIONS,
+  currencySymbol,
 } from "./api";
-import type { CatalogItem, InventoryCheckSchedule, Location, Recipe } from "./api";
+import type { CatalogItem, CurrencyCode, InventoryCheckSchedule, Location, Recipe } from "./api";
 import MenuListImportModal from "./MenuListImportModal";
 import type { ParsedMenuRow } from "./MenuListImportModal";
 import SearchSelect from "./SearchSelect";
@@ -185,7 +187,7 @@ export default function Settings({ accessToken, items, recipes, locations, onIte
         onRecipesChanged={onRecipesChanged}
       />
       <div style={{ height: 20 }} />
-      <OverheadPanel accessToken={accessToken} locations={locations} />
+      <LocationSettingsPanel accessToken={accessToken} locations={locations} />
       <div style={{ height: 20 }} />
       <NotificationSettingsPanel accessToken={accessToken} locations={locations} />
     </>
@@ -193,26 +195,48 @@ export default function Settings({ accessToken, items, recipes, locations, onIte
 }
 
 // ---------------------------------------------------------------------------
-// Monthly overhead — feeds End of day's net margin estimate
+// Per-location settings — currency (display only) + monthly overhead (feeds
+// End of day's net margin estimate).
+//
+// Restored Sep 15, 2026: this panel (currency + overhead together, as
+// "Locations") existed and was confirmed working, but a later commit
+// (93929f2, "Add Notification Phase 3: Settings UI, bell integration") was
+// built from a copy of this file that predated the currency work and
+// silently reverted this whole component back to overhead-only with a
+// hardcoded "£" -- currency had genuinely been missing from the Settings
+// page since then, invisibly, because the file still compiled fine either
+// way. Found by walking `git log -p -- src/Settings.tsx` for the removed
+// `currency`/`CURRENCY_OPTIONS` lines, not by guessing. The other ~13 files
+// made currency-aware that same week (EndOfDay, Reports, Inventory, etc.)
+// were untouched by that stale-base commit and were never affected -- only
+// the one editing UI itself was lost, along with the ability to change a
+// location's currency going forward.
 // ---------------------------------------------------------------------------
 
-function OverheadPanel({ accessToken, locations }: { accessToken: string; locations: Location[] }) {
-  const [values, setValues] = useState<Record<string, string>>({});
+function LocationSettingsPanel({ accessToken, locations }: { accessToken: string; locations: Location[] }) {
+  const [overheadValues, setOverheadValues] = useState<Record<string, string>>({});
+  const [currencyValues, setCurrencyValues] = useState<Record<string, CurrencyCode>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  function valueFor(loc: Location) {
-    return values[loc.id] ?? loc.monthly_overhead ?? "";
+  function overheadFor(loc: Location) {
+    return overheadValues[loc.id] ?? loc.monthly_overhead ?? "";
+  }
+  function currencyFor(loc: Location) {
+    return currencyValues[loc.id] ?? loc.currency;
   }
 
   async function handleSave(loc: Location) {
-    const raw = valueFor(loc).trim();
+    const raw = overheadFor(loc).trim();
     setSaving((s) => ({ ...s, [loc.id]: true }));
     setErrors((e) => ({ ...e, [loc.id]: "" }));
     setSaved((s) => ({ ...s, [loc.id]: false }));
     try {
-      await updateLocation(accessToken, loc.id, { monthly_overhead: raw === "" ? null : raw });
+      await updateLocation(accessToken, loc.id, {
+        currency: currencyFor(loc),
+        monthly_overhead: raw === "" ? null : raw,
+      });
       setSaved((s) => ({ ...s, [loc.id]: true }));
     } catch (e) {
       setErrors((er) => ({ ...er, [loc.id]: e instanceof Error ? e.message : "Could not save this." }));
@@ -223,29 +247,41 @@ function OverheadPanel({ accessToken, locations }: { accessToken: string; locati
 
   return (
     <div className="card">
-      <h2 style={{ marginTop: 0 }}>Monthly overhead</h2>
+      <h2 style={{ marginTop: 0 }}>Locations</h2>
       <p className="hint">
-        Rent, labour and other fixed monthly costs per location — set once here so End of day can estimate a real
-        net margin (gross margin minus a share of this figure) instead of just food cost. Leave blank if you'd
-        rather not estimate net margin yet; nothing else on the site needs this.
+        Currency changes which symbol this location's own prices/reports show — display only, no exchange-rate
+        conversion. Monthly overhead (rent, labour, other fixed costs) feeds End of day's net margin estimate;
+        leave blank to skip that estimate.
       </p>
       {!locations.length && <p className="muted">No locations yet.</p>}
       {locations.map((loc) => (
-        <div key={loc.id} className="price-row" style={{ alignItems: "center" }}>
+        <div key={loc.id} className="price-row" style={{ alignItems: "center", flexWrap: "wrap" }}>
           <label>{loc.name}</label>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             {errors[loc.id] && <span className="error" style={{ padding: "4px 8px" }}>{errors[loc.id]}</span>}
             {saved[loc.id] && !errors[loc.id] && <span className="badge b-ok">Saved</span>}
-            <span className="muted">£</span>
+            <select
+              value={currencyFor(loc)}
+              onChange={(e) => {
+                setCurrencyValues((v) => ({ ...v, [loc.id]: e.target.value as CurrencyCode }));
+                setSaved((s) => ({ ...s, [loc.id]: false }));
+              }}
+            >
+              {CURRENCY_OPTIONS.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
             <input
               className="price-in"
               type="number"
               min="0"
               step="1"
-              placeholder="e.g. 8000"
-              value={valueFor(loc)}
+              placeholder="Overhead, e.g. 8000"
+              value={overheadFor(loc)}
               onChange={(e) => {
-                setValues((v) => ({ ...v, [loc.id]: e.target.value }));
+                setOverheadValues((v) => ({ ...v, [loc.id]: e.target.value }));
                 setSaved((s) => ({ ...s, [loc.id]: false }));
               }}
             />
@@ -1504,7 +1540,9 @@ function RecipesImportPanel({
                           <b>{r.recipeName}</b>
                           <div className="muted" style={{ fontSize: 11 }}>
                             {r.kind} · yields {r.yield_qty} {r.yield_unit}
-                            {r.kind === "dish" && r.menu_price ? ` · £${r.menu_price}` : ""}
+                            {r.kind === "dish" && r.menu_price
+                              ? ` · ${currencySymbol(locations.find((l) => l.id === location)?.currency)}${r.menu_price}`
+                              : ""}
                             {r.posId ? ` · POS ${r.posId}` : ""}
                             {r.menuCategory ? ` · ${r.menuCategory}` : ""}
                           </div>
