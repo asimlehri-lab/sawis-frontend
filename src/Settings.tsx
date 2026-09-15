@@ -1069,20 +1069,31 @@ function RecipesImportPanel({
         // with no qty, or a qty with no name), which is more likely a
         // typo than an intentional blank row.
         if ((ingredientRaw && !qty) || (!ingredientRaw && qty)) continue;
-        const kindRaw = (kindIdx > -1 ? r[kindIdx] : "").trim().toLowerCase();
-        const groupRaw = (groupIdx > -1 ? r[groupIdx] : "").trim().toLowerCase();
+        // Optional columns fall back to "" the same way recIdx/ingIdx/qtyIdx
+        // do above — necessary, not just tidy: SheetJS's sheet_to_json({header:1})
+        // returns each row sized to that row's own populated cells, so a row
+        // with a blank trailing or interior cell (e.g. an ingredient-only
+        // continuation line with no kind/menu_category/menu_group of its own)
+        // comes back shorter than the header, or with a "hole" at that index
+        // that Array.prototype.map (in rowsToTable) silently skips over rather
+        // than converting to "". Either way r[idx] is `undefined` even though
+        // idx > -1 (the column exists in the header) — CSV rows never hit this
+        // because parseCsv always emits an explicit "" field per column, which
+        // is why the same file imports fine as CSV but threw here as Excel.
+        const kindRaw = (kindIdx > -1 ? r[kindIdx] || "" : "").trim().toLowerCase();
+        const groupRaw = (groupIdx > -1 ? r[groupIdx] || "" : "").trim().toLowerCase();
         parsed.push({
           recipeName,
-          posId: (posIdIdx > -1 ? r[posIdIdx] : "").trim(),
-          menuCategory: (catIdx > -1 ? r[catIdx] : "").trim(),
+          posId: (posIdIdx > -1 ? r[posIdIdx] || "" : "").trim(),
+          menuCategory: (catIdx > -1 ? r[catIdx] || "" : "").trim(),
           kind: kindRaw === "sub" ? "sub" : "dish",
-          yield_qty: (yqIdx > -1 ? r[yqIdx] : "").trim() || "1",
-          yield_unit: (yuIdx > -1 ? r[yuIdx] : "").trim() || "plate",
-          menu_price: (priceIdx > -1 ? r[priceIdx] : "").trim(),
+          yield_qty: (yqIdx > -1 ? r[yqIdx] || "" : "").trim() || "1",
+          yield_unit: (yuIdx > -1 ? r[yuIdx] || "" : "").trim() || "plate",
+          menu_price: (priceIdx > -1 ? r[priceIdx] || "" : "").trim(),
           menuGroup: groupRaw === "food" || groupRaw === "drink" ? groupRaw : "",
           ingredientRaw,
           qty,
-          unit: (unitIdx > -1 ? r[unitIdx] : "").trim(),
+          unit: (unitIdx > -1 ? r[unitIdx] || "" : "").trim(),
           matchedItemId: ingredientRaw ? matchItem(ingredientRaw) : null,
         });
       }
