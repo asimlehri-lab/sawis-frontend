@@ -612,6 +612,23 @@ function ItemsImportPanel({
   onItemsChanged: () => void;
 }) {
   const [location, setLocation] = useState(locations[0]?.id ?? "");
+  // locations loads asynchronously (App.tsx fetches it once per session,
+  // separately from this panel mounting) -- if this component first renders
+  // before that resolves, the useState initializer above only ever runs
+  // once and bakes in "" for good. With a single location the picker below
+  // doesn't even render (only shown when locations.length > 1), so there's
+  // no way to fix `location` by hand either -- the Import button just sits
+  // disabled with no visible explanation. Fill it in as soon as locations
+  // actually arrives. Deliberately not a useEffect: React's "adjust state
+  // while rendering" pattern (comparing against a snapshot of the last-seen
+  // prop, right here in the render body) applies the fix in the same render
+  // pass instead of one tick later, and this project's lint config
+  // (react-hooks/set-state-in-effect) flags setState-in-effect outright.
+  const [locationsSeen, setLocationsSeen] = useState(locations);
+  if (locations !== locationsSeen) {
+    setLocationsSeen(locations);
+    if (!location && locations[0]?.id) setLocation(locations[0].id);
+  }
   const [fileName, setFileName] = useState("");
   const [rows, setRows] = useState<ItemRow[]>([]);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -975,6 +992,18 @@ function RecipesImportPanel({
   onRecipesChanged: () => void;
 }) {
   const [location, setLocation] = useState(locations[0]?.id ?? "");
+  // Same fix as ItemsImportPanel above, for the same reason: locations
+  // loads asynchronously, and if this panel mounts first, the useState
+  // initializer bakes in "" permanently -- with one location the picker
+  // never renders to let the user fix it, so Import stays silently
+  // disabled (see handleImport's `!location` guard further down). Uses the
+  // render-time "adjust state" pattern rather than an effect -- see that
+  // comment for why.
+  const [locationsSeen, setLocationsSeen] = useState(locations);
+  if (locations !== locationsSeen) {
+    setLocationsSeen(locations);
+    if (!location && locations[0]?.id) setLocation(locations[0].id);
+  }
   const [fileName, setFileName] = useState("");
   const [rows, setRows] = useState<RecipeRow[]>([]);
   const [parseError, setParseError] = useState<string | null>(null);
@@ -991,6 +1020,33 @@ function RecipesImportPanel({
     const norm = name.trim().toLowerCase();
     const found = items.find((i) => i.name.trim().toLowerCase() === norm);
     return found ? found.id : null;
+  }
+
+  // handleFile below bakes matchedItemId into each row at parse time, using
+  // whatever `items` this component happened to have at that exact moment.
+  // items is fetched once, app-wide, on login (App.tsx) and can still be
+  // loading (or briefly empty right after it) when someone opens this panel
+  // and picks a file immediately — the parse then runs against a stale/empty
+  // items list and every ingredient looks unmatched, even ones that already
+  // exist. Re-run the match whenever `items` changes so a late-arriving
+  // catalog fixes already-parsed rows without the user needing to know to
+  // re-pick the file. Only fills in rows that are still unmatched (null) —
+  // never overwrites a match the user already made by hand in the "or match
+  // existing" dropdown below. Render-time "adjust state" pattern rather
+  // than an effect, same as the location fixes above.
+  const [itemsSeen, setItemsSeen] = useState(items);
+  if (items !== itemsSeen) {
+    setItemsSeen(items);
+    if (rows.length > 0) {
+      const hasNewMatch = rows.some((r) => r.ingredientRaw && !r.matchedItemId && matchItem(r.ingredientRaw));
+      if (hasNewMatch) {
+        setRows((prev) =>
+          prev.map((r) =>
+            r.ingredientRaw && !r.matchedItemId ? { ...r, matchedItemId: matchItem(r.ingredientRaw) } : r
+          )
+        );
+      }
+    }
   }
 
   // Same CSV-or-Excel convergence pattern used by ItemsImportPanel.handleFile
