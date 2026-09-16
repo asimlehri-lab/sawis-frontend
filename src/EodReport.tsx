@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchEodReport, formatMoney } from "./api";
 import type { EodChampionEntry, EodReport as EodReportData, Location } from "./api";
+import PeriodPicker from "./PeriodPicker";
 
 interface Props {
   accessToken: string;
@@ -13,18 +14,60 @@ const PERIOD_LABEL: Record<string, string> = {
   month: "the previous month",
 };
 
+// PeriodPicker's "mode" prop names day/week/month the way a user thinks
+// about them; the API/report's own `period` field keeps its existing
+// today/week/month values (unchanged, so the backend needs no changes) --
+// this just maps between the two vocabularies.
+const PICKER_MODE: Record<"today" | "week" | "month", "day" | "week" | "month"> = {
+  today: "day",
+  week: "week",
+  month: "month",
+};
+
 function pct(n: number | null, d = 1) {
   return n === null ? "—" : `${n.toFixed(d)}%`;
+}
+
+// Local-date key (not toISOString(), which is UTC-based and can land on
+// the wrong calendar day near midnight) -- matches PeriodPicker.tsx's own
+// dateKey() convention.
+function todayIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// A short, human label for the currently-selected day/week/month --
+// computed straight from the anchor date so the picker chip is never
+// waiting on a network round trip to update.
+function fmtAnchor(period: "today" | "week" | "month", anchorIso: string): string {
+  const d = new Date(`${anchorIso}T00:00:00`);
+  if (period === "month") return d.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  if (period === "week") {
+    const start = new Date(d);
+    start.setDate(start.getDate() - 6);
+    return `${start.toLocaleDateString("en-GB", { day: "numeric", month: "short" })} – ${d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`;
+  }
+  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
 
 export default function EodReport({ accessToken, locations }: Props) {
   const [location, setLocation] = useState(locations[0]?.id ?? "");
   const currency = locations.find((l) => l.id === location)?.currency;
   const [period, setPeriod] = useState<"today" | "week" | "month">("today");
+  const [anchorDate, setAnchorDate] = useState(todayIso());
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [champKind, setChampKind] = useState<"food" | "drink">("food");
   const [report, setReport] = useState<EodReportData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The second, freely-chosen comparison period -- see ComparisonCard's
+  // "specific" mode. Kept here (not inside ComparisonCard) since it needs
+  // its own report fetch, same as the primary period.
+  const [compareDate, setCompareDate] = useState<string | null>(null);
+  const [comparePickerOpen, setComparePickerOpen] = useState(false);
+  const [compareReport, setCompareReport] = useState<EodReportData | null>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
 
   useEffect(() => {
     if (!location && locations[0]) setLocation(locations[0].id);
@@ -36,7 +79,7 @@ export default function EodReport({ accessToken, locations }: Props) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchEodReport(accessToken, location, period)
+    fetchEodReport(accessToken, location, period, anchorDate)
       .then((data) => {
         if (!cancelled) setReport(data);
       })
@@ -49,7 +92,29 @@ export default function EodReport({ accessToken, locations }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, location, period]);
+  }, [accessToken, location, period, anchorDate]);
+
+  useEffect(() => {
+    if (!location || !compareDate) {
+      setCompareReport(null);
+      return;
+    }
+    let cancelled = false;
+    setCompareLoading(true);
+    fetchEodReport(accessToken, location, period, compareDate)
+      .then((data) => {
+        if (!cancelled) setCompareReport(data);
+      })
+      .catch(() => {
+        if (!cancelled) setCompareReport(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCompareLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, location, period, compareDate]);
 
   if (!locations.length) {
     return <p className="error">No locations yet — add one before there's anything to report on.</p>;
@@ -68,16 +133,37 @@ export default function EodReport({ accessToken, locations }: Props) {
           </select>
         )}
         <div className="rtabs" style={{ marginBottom: 0 }}>
-          <button className={`rtab ${period === "today" ? "on" : ""}`} onClick={() => setPeriod("today")}>
-            Today
+          <button
+            className={`rtab ${period === "today" ? "on" : ""}`}
+            onClick={() => {
+              setPeriod("today");
+              setCompareDate(null);
+            }}
+          >
+            Day
           </button>
-          <button className={`rtab ${period === "week" ? "on" : ""}`} onClick={() => setPeriod("week")}>
-            This week
+          <button
+            className={`rtab ${period === "week" ? "on" : ""}`}
+            onClick={() => {
+              setPeriod("week");
+              setCompareDate(null);
+            }}
+          >
+            Week
           </button>
-          <button className={`rtab ${period === "month" ? "on" : ""}`} onClick={() => setPeriod("month")}>
-            This month
+          <button
+            className={`rtab ${period === "month" ? "on" : ""}`}
+            onClick={() => {
+              setPeriod("month");
+              setCompareDate(null);
+            }}
+          >
+            Month
           </button>
         </div>
+        <button type="button" className="btn-ghost small eod-period-chip" onClick={() => setPickerOpen(true)}>
+          📅 {fmtAnchor(period, anchorDate)}
+        </button>
       </div>
 
       {error && <p className="error">{error}</p>}
@@ -86,9 +172,47 @@ export default function EodReport({ accessToken, locations }: Props) {
       {report && (
         <>
           <KpiHeader report={report} currency={currency} />
-          <ComparisonCard report={report} currency={currency} />
+          <ComparisonCard
+            report={report}
+            currency={currency}
+            compareDate={compareDate}
+            compareReport={compareReport}
+            compareLoading={compareLoading}
+            onPickCompareDate={() => setComparePickerOpen(true)}
+            onClearCompareDate={() => setCompareDate(null)}
+          />
           <ChampionsSection report={report} champKind={champKind} setChampKind={setChampKind} currency={currency} />
         </>
+      )}
+
+      {pickerOpen && (
+        <PeriodPicker
+          accessToken={accessToken}
+          location={location}
+          mode={PICKER_MODE[period]}
+          initialDate={anchorDate}
+          title={`Pick a ${PICKER_MODE[period]}`}
+          onSelect={(key) => {
+            setAnchorDate(key);
+            setPickerOpen(false);
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
+
+      {comparePickerOpen && (
+        <PeriodPicker
+          accessToken={accessToken}
+          location={location}
+          mode={PICKER_MODE[period]}
+          initialDate={compareDate ?? anchorDate}
+          title={`Compare with which ${PICKER_MODE[period]}?`}
+          onSelect={(key) => {
+            setCompareDate(key);
+            setComparePickerOpen(false);
+          }}
+          onClose={() => setComparePickerOpen(false)}
+        />
       )}
     </div>
   );
@@ -196,28 +320,62 @@ const AVERAGE_LABEL: Record<string, string> = {
   month: "your rolling 3-month average",
 };
 
-function ComparisonCard({ report, currency }: { report: EodReportData; currency?: string }) {
-  const [mode, setMode] = useState<"previous" | "average">("previous");
+function ComparisonCard({
+  report,
+  currency,
+  compareDate,
+  compareReport,
+  compareLoading,
+  onPickCompareDate,
+  onClearCompareDate,
+}: {
+  report: EodReportData;
+  currency?: string;
+  compareDate: string | null;
+  compareReport: EodReportData | null;
+  compareLoading: boolean;
+  onPickCompareDate: () => void;
+  onClearCompareDate: () => void;
+}) {
+  const [mode, setMode] = useState<"previous" | "average" | "specific">("previous");
   const cur = report.current;
   const avg = report.average;
   const notEnoughHistory = mode === "average" && (!avg || avg.populated_count === 0);
+  const specificPending = mode === "specific" && !compareDate;
+  const specificLoading = mode === "specific" && !!compareDate && (compareLoading || !compareReport);
 
-  // Both comparison targets already came back in the same fetch — see
-  // fetchEodReport — so switching modes here is instant, no re-fetch.
+  // Every comparison target that doesn't need picking (previous/average)
+  // already came back in the same fetch as `report` — see fetchEodReport
+  // — so switching to either of those is instant, no re-fetch. "specific"
+  // is the one mode with its own independent fetch, kicked off by the
+  // parent as soon as compareDate is set.
   const against =
     mode === "previous"
       ? { net_sales: report.previous.net_sales, covers: report.previous.covers, food_cost_pct: report.previous.food_cost_pct }
-      : avg
-        ? { net_sales: avg.net_sales, covers: avg.covers, food_cost_pct: avg.food_cost_pct }
-        : null;
+      : mode === "average"
+        ? avg
+          ? { net_sales: avg.net_sales, covers: avg.covers, food_cost_pct: avg.food_cost_pct }
+          : null
+        : compareReport
+          ? {
+              net_sales: compareReport.current.net_sales,
+              covers: compareReport.current.covers,
+              food_cost_pct: compareReport.current.food_cost_pct,
+            }
+          : null;
 
-  const label = mode === "previous" ? PERIOD_LABEL[report.period] : AVERAGE_LABEL[report.period];
+  const label =
+    mode === "previous" ? PERIOD_LABEL[report.period] : mode === "average" ? AVERAGE_LABEL[report.period] : "the period you picked";
   const rangeNote =
     mode === "previous"
       ? `${report.previous_range.start} – ${report.previous_range.end}`
-      : avg
-        ? `based on ${avg.populated_count} of the last ${avg.window_count} comparable periods with sales`
-        : "";
+      : mode === "average"
+        ? avg
+          ? `based on ${avg.populated_count} of the last ${avg.window_count} comparable periods with sales`
+          : ""
+        : compareReport
+          ? `${compareReport.range.start} – ${compareReport.range.end}`
+          : "";
 
   const rows: { l: string; cur: string; prevV: string; delta: React.ReactNode }[] = against
     ? [
@@ -248,16 +406,27 @@ function ComparisonCard({ report, currency }: { report: EodReportData; currency?
   return (
     <section className="card" style={{ marginTop: 16 }}>
       <div className="cmp-h">
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <span style={{ fontSize: 15, fontWeight: 600 }}>Compare with</span>
           <select
             className="cmp-mode-select"
             value={mode}
-            onChange={(e) => setMode(e.target.value as "previous" | "average")}
+            onChange={(e) => setMode(e.target.value as "previous" | "average" | "specific")}
           >
             <option value="previous">previous period</option>
             <option value="average">rolling average</option>
+            <option value="specific">a period I pick</option>
           </select>
+          {mode === "specific" && (
+            <button type="button" className="btn-ghost small" onClick={onPickCompareDate}>
+              📅 {compareDate ? "Change" : "Pick a period"}
+            </button>
+          )}
+          {mode === "specific" && compareDate && (
+            <button type="button" className="btn-ghost small" onClick={onClearCompareDate}>
+              ✕
+            </button>
+          )}
         </div>
         <span className="muted" style={{ fontSize: 11.5 }}>{rangeNote}</span>
       </div>
@@ -265,6 +434,15 @@ function ComparisonCard({ report, currency }: { report: EodReportData; currency?
         <p className="muted" style={{ margin: 0 }}>
           Not enough trading history yet to build a rolling average for this period — check back once you've got a
           few more {report.period === "month" ? "months" : "weeks"} of sales recorded.
+        </p>
+      ) : specificPending ? (
+        <p className="muted" style={{ margin: 0 }}>
+          Pick a day, week or month above to compare {report.period === "today" ? "today" : "this period"} against
+          it.
+        </p>
+      ) : specificLoading ? (
+        <p className="muted" style={{ margin: 0 }}>
+          Loading…
         </p>
       ) : (
         <div className="cmp-rows">

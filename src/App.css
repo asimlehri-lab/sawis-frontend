@@ -467,6 +467,39 @@ h1 {
 .cal-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
 .cal-dot-expected { background: var(--brand); }
 .cal-dot-received { background: var(--good); }
+.cal-dot-data { background: var(--good); }
+
+/* PeriodPicker.tsx: the day-grid's hover preview of a "week" selection
+   (the 7 days ending on the hovered day) -- a lighter touch than
+   .cal-day-selected/.cal-day-today so it doesn't get confused with an
+   actual selection. */
+.cal-day-in-week { background: var(--brand-soft); }
+
+/* PeriodPicker.tsx: the Month tab's year grid -- 12 month cells instead
+   of a day grid, since a month is picked as one whole unit. */
+.cal-year-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.cal-month-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 64px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--bg);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.cal-month-cell:hover { border-color: var(--brand); }
+@media (max-width: 560px) {
+  .cal-year-grid { grid-template-columns: repeat(3, 1fr); }
+}
 
 .cal-legend {
   display: flex;

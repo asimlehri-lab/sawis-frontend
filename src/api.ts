@@ -1532,6 +1532,18 @@ export async function fetchLastImportDate(accessToken: string, location: string)
   return data.last_imported_at;
 }
 
+// Every distinct date this location has sales on file for — powers the
+// "has data" dots on End of day's period-comparison calendar
+// (PeriodPicker.tsx). See SaleViewSet.sale_dates in apps/ledger/viewsets.py.
+export async function fetchSaleDates(accessToken: string, location: string): Promise<string[]> {
+  const params = new URLSearchParams({ location });
+  const data: { dates: string[] } = await authedFetch(
+    `/api/ledger/sales/sale_dates/?${params.toString()}`,
+    accessToken
+  );
+  return data.dates;
+}
+
 // ---------------------------------------------------------------------------
 // End of day: the KPI/comparison/Champions report
 // ---------------------------------------------------------------------------
