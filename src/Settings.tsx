@@ -888,17 +888,10 @@ function ItemsImportPanel({
         <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={handleFile} />
         <div className="vhint">
           Header row required: <code>name,sku,unit,category,vat,department,par_level,supplier,cost</code> — only{" "}
-          <code>name</code> and <code>unit</code> are required. <code>sku</code>/<code>category</code>/
-          <code>vat</code> (as a % number) can be left blank. <code>department</code> is optional too (
-          <code>kitchen</code>, <code>bar</code> or <code>foh</code>) and defaults to Kitchen — it decides where
-          each item's stock holding is created at the location below. <code>par_level</code> is optional and
-          defaults to 0 if blank — it only sets the par on a holding this import actually creates (a brand-new
-          item, or backfilling a missing holding for an existing item); it never changes the par on a holding
-          that already exists. <code>supplier</code> and <code>cost</code> are optional and only do anything
-          when both are filled in on the same row — together they create (or reuse) a supplier by that name and
-          link it to the item at that price, the same end result as importing a supplier catalogue and clicking
-          "Link" by hand. Re-importing later refreshes the price. e.g. "Beef mince 5%,,kg,Meat,20,kitchen,3,ACME
-          Foods,4.20".
+          <code>name</code> and <code>unit</code> are required, everything else can be left blank.{" "}
+          <code>supplier</code> + <code>cost</code> together link a supplier at that price (re-importing refreshes
+          it); <code>department</code> defaults to Kitchen. See the template above for the full field guide and a
+          worked example.
         </div>
       </div>
 
@@ -1407,16 +1400,86 @@ function RecipesImportPanel({
         </div>
       )}
 
-      <div className="field" style={{ marginBottom: 14 }}>
-        <label>Import menu list</label>
-        <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={handleMenuListFile} />
-        {menuListError && <p className="error" style={{ marginTop: 6 }}>{menuListError}</p>}
-        <div className="vhint">
-          Upload your menu export from your POS or till system (CSV or Excel — a recipe/dish name column is all
-          that's required; ID, category, and price columns are picked up automatically if present). You'll then
-          pick each dish's ingredients from your existing items on screen — nothing to type into a spreadsheet.
+      <div className="field" style={{ marginBottom: 12 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <button
+            type="button"
+            className="btn-ghost small"
+            onClick={() =>
+              downloadCsv(
+                "recipe-ingredients-template.csv",
+                ["recipe", "pos_id", "menu_category", "kind", "yield_qty", "yield_unit", "menu_price", "menu_group", "ingredient", "qty", "unit"],
+                [
+                  ["Spaghetti Bolognese", "101", "Mains", "dish", "1", "plate", "14.50", "food", "Spaghetti", "0.15", "kg"],
+                  ["", "", "", "", "", "", "", "", "Beef mince 5%", "0.12", "kg"],
+                  ["", "", "", "", "", "", "", "", "Tomato passata", "0.1", "l"],
+                ]
+              )
+            }
+          >
+            ⇩ Download blank CSV template
+          </button>
+          <button
+            type="button"
+            className="btn-ghost small"
+            onClick={() => downloadXlsxTemplate("recipe-import-template.xlsx", RECIPE_TEMPLATE_XLSX_B64)}
+          >
+            ⇩ Download blank Excel template
+          </button>
+        </div>
+        <div className="vhint" style={{ marginTop: 6 }}>
+          Both blank templates have one example dish already filled in — the Excel version groups its ingredient
+          rows under it (click the <b>−</b> next to row 2 to collapse them). Got a POS menu export instead of
+          typing it by hand? Use "Prefill from your menu list" under Advanced below.
         </div>
       </div>
+
+      <div className="field" style={{ marginBottom: 14 }}>
+        <label>CSV or Excel file</label>
+        <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={handleFile} />
+        <div className="vhint">
+          One row per ingredient. Header row:{" "}
+          <code>recipe,pos_id,menu_category,kind,yield_qty,yield_unit,menu_price,menu_group,ingredient,qty,unit</code>{" "}
+          — only <code>recipe</code>, <code>ingredient</code> and <code>qty</code> are required. Matching{" "}
+          <code>pos_id</code> (or name) <b>updates</b> an existing recipe, replacing its ingredients; anything new
+          is <b>created</b>, and any unmatched ingredient auto-creates a new item. See the template above for the
+          full field guide.
+        </div>
+      </div>
+
+      <details className="field" style={{ marginBottom: 12 }}>
+        <summary className="mini-link">Advanced: import from your POS or till system instead</summary>
+        <div style={{ marginTop: 10 }}>
+          <div className="field" style={{ marginBottom: 12 }}>
+            <label>Import menu list</label>
+            <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={handleMenuListFile} />
+            {menuListError && <p className="error" style={{ marginTop: 6 }}>{menuListError}</p>}
+            <div className="vhint">
+              Upload your menu export from your POS or till system (CSV or Excel — a recipe/dish name column is
+              all that's required). You'll then pick each dish's ingredients from your existing items on screen —
+              nothing to type into a spreadsheet.
+            </div>
+          </div>
+
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label className="btn-ghost small" style={{ cursor: "pointer" }}>
+              ⇩ Prefill the template above from your menu list
+              <input
+                type="file"
+                accept=".csv,text/csv,.xlsx,.xls"
+                onChange={handlePrefillFromMenuList}
+                style={{ display: "none" }}
+              />
+            </label>
+            {prefillError && <p className="error" style={{ marginTop: 6 }}>{prefillError}</p>}
+            <div className="vhint" style={{ marginTop: 6 }}>
+              Reads the same POS export and hands back the CSV template with <code>recipe</code>/<code>pos_id</code>/
+              <code>menu_category</code>/<code>menu_price</code> already filled in — add ingredient rows by hand,
+              then upload the template above.
+            </div>
+          </div>
+        </div>
+      </details>
 
       {menuListRows && (
         <MenuListImportModal
@@ -1434,77 +1497,6 @@ function RecipesImportPanel({
           }}
         />
       )}
-
-      <details className="field" style={{ marginBottom: 12 }}>
-        <summary className="mini-link">Advanced: use a spreadsheet template instead</summary>
-        <div style={{ marginTop: 10 }}>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <button
-              type="button"
-              className="btn-ghost small"
-              onClick={() =>
-                downloadCsv(
-                  "recipe-ingredients-template.csv",
-                  ["recipe", "pos_id", "menu_category", "kind", "yield_qty", "yield_unit", "menu_price", "menu_group", "ingredient", "qty", "unit"],
-                  [
-                    ["Spaghetti Bolognese", "101", "Mains", "dish", "1", "plate", "14.50", "food", "Spaghetti", "0.15", "kg"],
-                    ["", "", "", "", "", "", "", "", "Beef mince 5%", "0.12", "kg"],
-                    ["", "", "", "", "", "", "", "", "Tomato passata", "0.1", "l"],
-                  ]
-                )
-              }
-            >
-              ⇩ Download blank CSV template
-            </button>
-            <button
-              type="button"
-              className="btn-ghost small"
-              onClick={() => downloadXlsxTemplate("recipe-import-template.xlsx", RECIPE_TEMPLATE_XLSX_B64)}
-            >
-              ⇩ Download blank Excel template
-            </button>
-            <span className="muted" style={{ fontSize: 12 }}>or</span>
-            <label className="btn-ghost small" style={{ cursor: "pointer" }}>
-              ⇩ Prefill from your menu list
-              <input
-                type="file"
-                accept=".csv,text/csv,.xlsx,.xls"
-                onChange={handlePrefillFromMenuList}
-                style={{ display: "none" }}
-              />
-            </label>
-          </div>
-          {prefillError && <p className="error" style={{ marginTop: 6 }}>{prefillError}</p>}
-          <div className="vhint">
-            Both blank templates have one example dish already filled in — the Excel version also groups that
-            example's ingredient rows under it (click the <b>−</b> next to row 2 to collapse them), the same way a
-            real multi-ingredient recipe will once you've filled one in. The prefill option reads the same menu-list
-            file as the import above and hands back the CSV template with <code>recipe</code>/<code>pos_id</code>/
-            <code>menu_category</code>/<code>menu_price</code> already filled in from it — add an ingredient row (or
-            several) under each dish by hand, then upload the result below.
-          </div>
-
-          <div className="field" style={{ marginTop: 12, marginBottom: 0 }}>
-            <label>CSV or Excel file</label>
-            <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={handleFile} />
-            <div className="vhint">
-              One row per ingredient. Header row:{" "}
-              <code>recipe,pos_id,menu_category,kind,yield_qty,yield_unit,menu_price,menu_group,ingredient,qty,unit</code>.
-              Repeat the recipe name (and its <code>pos_id</code>/<code>menu_category</code>/<code>menu_group</code>,
-              though only the first row of each recipe needs them) on every ingredient row that belongs to it — only{" "}
-              <code>recipe</code>, <code>ingredient</code> and <code>qty</code> are required, the rest default
-              sensibly. A recipe whose <code>pos_id</code> (or, failing that, name) already matches one in SAWIS gets
-              {" "}<b>updated</b> — its ingredient list is replaced by what's in this file — rather than creating a
-              duplicate; anything new is <b>created</b>. <code>menu_group</code> is <b>food</b> or <b>drink</b>,
-              entirely optional — leave it blank to leave an existing recipe's classification alone (a brand-new
-              recipe still defaults to Food if left blank); fill it in to set/change it without opening that recipe
-              individually. Any ingredient that doesn't match an existing item will <b>create a new item
-              automatically</b> (with a stock holding at the location below, in the Kitchen department) — reviewed
-              below before you confirm.
-            </div>
-          </div>
-        </div>
-      </details>
 
       {!locations.length && <p className="error">No locations yet — add one before importing recipes.</p>}
       {parseError && <p className="error">{parseError}</p>}
