@@ -1662,6 +1662,7 @@ input[type="file"] {
     color: #000;
   }
   .print-only h1 { font-size: 20px; margin: 0 0 16px; }
+  .print-only h2 { font-size: 15px; margin: 18px 0 6px; }
   .print-only p { margin: 4px 0; font-size: 13px; }
   .print-only table { width: 100%; border-collapse: collapse; margin-top: 16px; }
   .print-only th, .print-only td {
@@ -1670,11 +1671,17 @@ input[type="file"] {
     text-align: left;
     font-size: 12.5px;
   }
+  .print-only tfoot td { border-top: 2px solid #000; }
+  .print-only .print-low { font-weight: 700; }
   /* Count sheets: one section per printed page (per-section sheets, not one
      combined list) -- every .print-sheet-page starts a fresh page except
      the last, which shouldn't leave a trailing blank page behind it. */
   .print-sheet-page { page-break-after: always; }
   .print-sheet-page.last { page-break-after: auto; }
+  /* Stock report: department tables flow continuously (this is a document
+     to read, not blank sheets to hand out) -- just avoid an awkward
+     mid-table split across a page boundary. */
+  .print-report-section { break-inside: avoid; margin-bottom: 20px; }
 }
 
 .deliv-strip { margin-bottom: 16px; }

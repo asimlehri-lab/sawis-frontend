@@ -255,6 +255,7 @@ export default function Inventory({
           cheapestPrice={cheapestPrice}
           stockCounts={stockCounts ?? []}
           activeLocation={activeLocation}
+          locationName={locations.find((l) => l.id === activeLocation)?.name ?? ""}
           currency={locations.find((l) => l.id === activeLocation)?.currency}
           stockMovements={stockMovements}
         />
@@ -308,6 +309,7 @@ function LiveStockTab({
   cheapestPrice,
   stockCounts,
   activeLocation,
+  locationName,
   currency,
   stockMovements,
 }: {
@@ -316,6 +318,7 @@ function LiveStockTab({
   cheapestPrice: (itemId: string) => number | null;
   stockCounts: StockCountRow[];
   activeLocation: string;
+  locationName: string;
   currency?: string;
   stockMovements: StockMovementRow[];
 }) {
@@ -362,8 +365,13 @@ function LiveStockTab({
       </div>
 
       <div className="card">
-        <h2 style={{ marginTop: 0 }}>Stock on hand</h2>
-        <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h2 style={{ margin: 0 }}>Stock on hand</h2>
+          <button className="btn-ghost small" onClick={() => window.print()} disabled={holdings.length === 0}>
+            🖨 Print stock report
+          </button>
+        </div>
+        <div style={{ display: "flex", gap: 10, marginBottom: 14, marginTop: 14, flexWrap: "wrap", alignItems: "center" }}>
           <input
             placeholder="Search items…"
             value={search}
@@ -471,6 +479,80 @@ function LiveStockTab({
             </tbody>
           </table>
         )}
+      </div>
+
+      {/* Printable stock report -- header KPIs + one table per department,
+          built from the exact same holdings/onHand/cheapestPrice data
+          already driving the on-screen KPI cards and table above, so the
+          printed numbers can never drift from what's shown on screen.
+          Hidden on screen, shown only by @media print (App.css). */}
+      <div className="print-only">
+        <h1>Live stock report — {locationName || "—"}</h1>
+        <p>
+          <b>Stock value:</b> {formatMoney(stockValue, currency)} &nbsp;&nbsp;
+          <b>Items below par:</b> {belowPar} of {holdings.length} &nbsp;&nbsp;
+          <b>Last count:</b>{" "}
+          {lastCounted?.counted_at
+            ? new Date(lastCounted.counted_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })
+            : "Never"}
+        </p>
+        <p>
+          <b>Printed:</b> {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+        </p>
+
+        {DEPARTMENTS.map((d) => {
+          const deptHoldings = holdings.filter((h) => h.department === d.value);
+          if (deptHoldings.length === 0) return null;
+          const deptValue = deptHoldings.reduce(
+            (sum, h) => sum + (onHand[h.id] ?? 0) * (cheapestPrice(h.itemId) ?? 0),
+            0
+          );
+          return (
+            <div key={d.value} className="print-report-section">
+              <h2>{d.label}</h2>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Item</th>
+                    <th>Section</th>
+                    <th>On hand</th>
+                    <th>Par</th>
+                    <th>Status</th>
+                    <th>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {deptHoldings.map((h) => {
+                    const oh = onHand[h.id] ?? 0;
+                    const low = oh < h.parLevel;
+                    return (
+                      <tr key={h.id}>
+                        <td>{h.itemName}</td>
+                        <td>{h.sectionName ?? "—"}</td>
+                        <td>
+                          {oh.toFixed(2)} {h.baseUnit}
+                        </td>
+                        <td>{h.parLevel.toFixed(2)}</td>
+                        <td className={low ? "print-low" : undefined}>{low ? "Low" : "OK"}</td>
+                        <td>{formatMoney(oh * (cheapestPrice(h.itemId) ?? 0), currency)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={5}>
+                      <b>Department subtotal</b>
+                    </td>
+                    <td>
+                      <b>{formatMoney(deptValue, currency)}</b>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          );
+        })}
       </div>
     </>
   );
