@@ -1,15 +1,18 @@
+import { useState } from "react";
 import { DAY_NAMES, fmtDate, nextDeliveryDate } from "./App";
-import { formatMoney, defaultCurrency } from "./api";
+import { formatMoney, defaultCurrency, updateSupplier } from "./api";
 import type { PurchaseOrder, Supplier, Location } from "./api";
 
 interface Props {
   supplierId: string;
+  accessToken: string;
   suppliers: Supplier[];
   purchaseOrders: PurchaseOrder[];
   locations: Location[];
   onBack: () => void;
   onOpenPO: (id: string) => void;
   onNewPO: (supplierId: string, expectedDateISO: string) => void;
+  onSupplierUpdated: (updated: Supplier) => void;
 }
 
 function toISODate(d: Date): string {
@@ -22,14 +25,18 @@ function shortDate(d: Date): string {
 
 export default function SupplierDeliveries({
   supplierId,
+  accessToken,
   suppliers,
   purchaseOrders,
   locations,
   onBack,
   onOpenPO,
   onNewPO,
+  onSupplierUpdated,
 }: Props) {
   const supplier = suppliers.find((s) => s.id === supplierId);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [archiving, setArchiving] = useState(false);
 
   if (!supplier) {
     return (
@@ -40,6 +47,31 @@ export default function SupplierDeliveries({
         <p className="error">Supplier not found.</p>
       </div>
     );
+  }
+
+  async function handleSaveField(patch: Parameters<typeof updateSupplier>[2]) {
+    setSaveError(null);
+    try {
+      const updated = await updateSupplier(accessToken, supplier!.id, patch);
+      onSupplierUpdated(updated);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Could not save changes.");
+    }
+  }
+
+  async function handleToggleArchive() {
+    setArchiving(true);
+    setSaveError(null);
+    try {
+      const updated = await updateSupplier(accessToken, supplier!.id, {
+        archived: !supplier!.archived,
+      });
+      onSupplierUpdated(updated);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Could not save changes.");
+    } finally {
+      setArchiving(false);
+    }
   }
 
   const next = supplier.delivery_day !== null ? nextDeliveryDate(supplier.delivery_day) : null;
@@ -78,7 +110,7 @@ export default function SupplierDeliveries({
   }
 
   return (
-    <div>
+    <div key={supplier.id}>
       <button className="back-link" onClick={onBack}>
         ← All purchase orders
       </button>
@@ -87,12 +119,82 @@ export default function SupplierDeliveries({
         <h1 className="page-title" style={{ margin: 0 }}>
           {supplier.name}
         </h1>
+        {supplier.archived && (
+          <span className="badge b-archived" style={{ marginLeft: 12 }}>
+            Archived
+          </span>
+        )}
       </div>
       <p className="muted detail-sub">
         {supplier.delivery_day !== null ? `Delivers every ${DAY_NAMES[supplier.delivery_day]}` : "No regular delivery day set"}
         {nextLabel ? ` · next delivery ${nextLabel}` : ""}
         {supplier.min_order_value ? ` · ${formatMoney(Number(supplier.min_order_value), defaultCurrency(locations), 0)} minimum order` : ""}
       </p>
+
+      {saveError && <p className="error">{saveError}</p>}
+
+      <div className="card">
+        <h2>Contact & terms</h2>
+        <div className="fgrid fgrid-2">
+          <div className="field">
+            <label>Contact email</label>
+            <input
+              type="email"
+              defaultValue={supplier.contact_email ?? ""}
+              onBlur={(e) => handleSaveField({ contact_email: e.target.value || null })}
+              placeholder="optional"
+            />
+          </div>
+          <div className="field">
+            <label>Contact phone</label>
+            <input
+              defaultValue={supplier.contact_phone}
+              onBlur={(e) => handleSaveField({ contact_phone: e.target.value })}
+              placeholder="optional"
+            />
+          </div>
+          <div className="field">
+            <label>Delivery day</label>
+            <select
+              defaultValue={supplier.delivery_day ?? ""}
+              onChange={(e) =>
+                handleSaveField({ delivery_day: e.target.value === "" ? null : Number(e.target.value) })
+              }
+            >
+              <option value="">No regular delivery day</option>
+              {DAY_NAMES.map((day, idx) => (
+                <option key={idx} value={idx}>
+                  {day}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label>Minimum order value</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              defaultValue={supplier.min_order_value ?? ""}
+              onBlur={(e) =>
+                handleSaveField({
+                  min_order_value: e.target.value === "" ? null : Number(e.target.value).toFixed(2),
+                })
+              }
+              placeholder="optional"
+            />
+          </div>
+        </div>
+        <div className="field" style={{ marginTop: 16 }}>
+          <label>Notes</label>
+          <textarea
+            defaultValue={supplier.notes}
+            onBlur={(e) => handleSaveField({ notes: e.target.value })}
+            placeholder="optional — e.g. account number, delivery instructions"
+            rows={3}
+          />
+        </div>
+      </div>
 
       <div className="card">
         <div className="content-head" style={{ marginBottom: open.length ? 18 : 0 }}>
@@ -146,6 +248,23 @@ export default function SupplierDeliveries({
           </table>
         </div>
       )}
+
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>Archive</h2>
+        <div className="dz-row">
+          <div>
+            <b>{supplier.archived ? "This supplier is archived" : "Archive this supplier"}</b>
+            <p className="hint" style={{ margin: "3px 0 0" }}>
+              {supplier.archived
+                ? "Hidden from new-item supplier suggestions and pickers, but every past order stays intact."
+                : "Stops it being suggested for new items or new purchase orders, without losing any order history — reversible any time. If it's still set as an item's default supplier or has an open order, those keep working; you'll just see an \"archived\" note."}
+            </p>
+          </div>
+          <button className="btn-ghost" onClick={handleToggleArchive} disabled={archiving}>
+            {archiving ? "Saving…" : supplier.archived ? "Unarchive" : "Archive supplier"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

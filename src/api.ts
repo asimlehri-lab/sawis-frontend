@@ -935,8 +935,11 @@ export interface Supplier {
   org: string;
   name: string;
   contact_email: string | null;
+  contact_phone: string;
   delivery_day: number | null;
   min_order_value: string | null;
+  notes: string;
+  archived: boolean;
 }
 
 export async function fetchSuppliers(accessToken: string): Promise<Supplier[]> {
@@ -946,8 +949,10 @@ export async function fetchSuppliers(accessToken: string): Promise<Supplier[]> {
 export interface NewSupplierInput {
   name: string;
   contact_email: string | null;
+  contact_phone?: string;
   delivery_day?: number | null;
   min_order_value?: string | null;
+  notes?: string;
 }
 
 export async function createSupplier(accessToken: string, input: NewSupplierInput): Promise<Supplier> {
@@ -969,6 +974,31 @@ export async function createSupplier(accessToken: string, input: NewSupplierInpu
     }
     throw new Error("Could not create supplier.");
   }
+  return res.json();
+}
+
+export async function updateSupplier(
+  accessToken: string,
+  id: string,
+  patch: {
+    name?: string;
+    contact_email?: string | null;
+    contact_phone?: string;
+    delivery_day?: number | null;
+    min_order_value?: string | null;
+    notes?: string;
+    archived?: boolean;
+  }
+): Promise<Supplier> {
+  const res = await fetch(`${API_URL}/api/catalog/suppliers/${id}/`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error("Could not save changes.");
   return res.json();
 }
 

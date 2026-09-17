@@ -30,6 +30,7 @@ interface Props {
   onBack: () => void;
   onChanged: () => void;
   onCategoriesChanged: () => void;
+  onOpenSupplier?: (supplierId: string) => void;
 }
 
 const DEPARTMENTS = [
@@ -74,9 +75,12 @@ function suggestSuppliers(
   const out: Suggestion[] = [];
   supplierItems.forEach((si) => {
     if (alreadyLinkedSupplierIds.has(si.supplier)) return;
+    const supplier = suppliers.find((s) => s.id === si.supplier);
+    // Never suggest linking to a supplier the user has archived -- they no
+    // longer work with them, so a fresh match shouldn't resurface it.
+    if (supplier?.archived) return;
     const score = matchScore(itemName, si.raw_name);
     if (score >= 0.5) {
-      const supplier = suppliers.find((s) => s.id === si.supplier);
       out.push({ supplierItem: si, supplierName: supplier?.name ?? "Unknown supplier", score });
     }
   });
@@ -117,6 +121,7 @@ export default function ItemDetail({
   onBack,
   onChanged,
   onCategoriesChanged,
+  onOpenSupplier,
 }: Props) {
   const [item, setItem] = useState<CatalogItem | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -687,10 +692,30 @@ export default function ItemDetail({
             Number(r.unit_price) < Number(min.unit_price) ? r : min
           );
           const isDefault = itemSuppliers.length > 1 && item.default_supplier === row.supplier;
+          const linkedSupplier = suppliers.find((s) => s.id === row.supplier);
           return (
             <div className="sup-row" key={row.id}>
               <span>
-                <span className="sn">{row.supplier_name}</span>
+                {onOpenSupplier ? (
+                  <span
+                    className="sn sn-link"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => onOpenSupplier(row.supplier)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") onOpenSupplier(row.supplier);
+                    }}
+                  >
+                    {row.supplier_name}
+                  </span>
+                ) : (
+                  <span className="sn">{row.supplier_name}</span>
+                )}
+                {linkedSupplier?.archived && (
+                  <span className="badge b-archived" style={{ marginLeft: 6 }}>
+                    Archived
+                  </span>
+                )}
                 {isDefault && <span className="deftag">★ default</span>}
                 {row.id === cheapest.id && itemSuppliers.length > 1 && (
                   <span className="best">cheapest</span>

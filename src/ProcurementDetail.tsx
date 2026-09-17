@@ -1074,11 +1074,14 @@ export default function ProcurementDetail({
                               setResourceLines((prev) => ({ ...prev, [l.id]: e.target.value }))
                             }
                           >
-                            {suppliers.map((s) => (
-                              <option key={s.id} value={s.id}>
-                                {s.name}
-                              </option>
-                            ))}
+                            {suppliers
+                              .filter((s) => !s.archived || s.id === (resourceLines[l.id] ?? po.supplier))
+                              .map((s) => (
+                                <option key={s.id} value={s.id}>
+                                  {s.name}
+                                  {s.archived ? " (archived)" : ""}
+                                </option>
+                              ))}
                           </select>
                         </td>
                       </tr>

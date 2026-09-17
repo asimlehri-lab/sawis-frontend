@@ -57,6 +57,7 @@ import ItemDetail from "./ItemDetail";
 import Loader from "./Loader";
 import ProcurementDetail from "./ProcurementDetail";
 import SupplierDeliveries from "./SupplierDeliveries";
+import SupplierList from "./SupplierList";
 import WasteLog from "./WasteLog";
 import Inventory from "./Inventory";
 import Team from "./Team";
@@ -439,6 +440,7 @@ export default function App() {
   const [poError, setPoError] = useState<string | null>(null);
   const [selectedPOId, setSelectedPOId] = useState<string | null>(null);
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
+  const [showSupplierList, setShowSupplierList] = useState(false);
   const [showNewPO, setShowNewPO] = useState(false);
   const [newPOSupplier, setNewPOSupplier] = useState("");
   const [newPOLocation, setNewPOLocation] = useState("");
@@ -1472,6 +1474,20 @@ export default function App() {
             onBack={() => setSelectedItemId(null)}
             onChanged={() => loadItems(accessToken)}
             onCategoriesChanged={() => fetchCategories(accessToken).then(setCategories).catch(() => {})}
+            onOpenSupplier={(id) => {
+              goToNav("Procurement");
+              setSelectedSupplierId(id);
+            }}
+          />
+        ) : activePage === "Procurement" && showSupplierList && accessToken ? (
+          <SupplierList
+            suppliers={suppliers}
+            locations={locations}
+            onBack={() => setShowSupplierList(false)}
+            onOpenSupplier={(id) => {
+              setShowSupplierList(false);
+              setSelectedSupplierId(id);
+            }}
           />
         ) : activePage === "Procurement" && selectedPOId && accessToken ? (
           <ProcurementDetail
@@ -1491,12 +1507,16 @@ export default function App() {
         ) : activePage === "Procurement" && selectedSupplierId && accessToken ? (
           <SupplierDeliveries
             supplierId={selectedSupplierId}
+            accessToken={accessToken}
             suppliers={suppliers}
             purchaseOrders={purchaseOrders ?? []}
             locations={locations}
             onBack={() => setSelectedSupplierId(null)}
             onOpenPO={(id) => setSelectedPOId(id)}
             onNewPO={openNewPOForSupplier}
+            onSupplierUpdated={(updated) =>
+              setSuppliers((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
+            }
           />
         ) : (
           <>
@@ -1533,6 +1553,16 @@ export default function App() {
               )}
               {activePage === "Procurement" && (
                 <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    className="btn-ghost small"
+                    onClick={() => {
+                      setSelectedPOId(null);
+                      setSelectedSupplierId(null);
+                      setShowSupplierList(true);
+                    }}
+                  >
+                    🏬 Suppliers
+                  </button>
                   <button className="btn-ghost small" onClick={() => setShowScanReceipt(true)}>
                     📷 Scan receipt
                   </button>
@@ -1992,7 +2022,7 @@ export default function App() {
               <label>Supplier</label>
               <select value={importSupplier} onChange={(e) => setImportSupplier(e.target.value)}>
                 <option value="">Choose a supplier…</option>
-                {suppliers.map((s) => (
+                {suppliers.filter((s) => !s.archived).map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
@@ -2178,7 +2208,7 @@ export default function App() {
                 Supplier
                 <select value={newPOSupplier} onChange={(e) => setNewPOSupplier(e.target.value)} required>
                   <option value="">Choose a supplier…</option>
-                  {suppliers.map((s) => (
+                  {suppliers.filter((s) => !s.archived).map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name}
                     </option>
@@ -2347,7 +2377,7 @@ export default function App() {
                   <label>Supplier</label>
                   <select value={scanSupplierId} onChange={(e) => setScanSupplierId(e.target.value)} required>
                     <option value="">Choose a supplier…</option>
-                    {suppliers.map((s) => (
+                    {suppliers.filter((s) => !s.archived).map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name}
                       </option>
