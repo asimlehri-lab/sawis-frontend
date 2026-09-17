@@ -1280,6 +1280,23 @@ export async function updatePurchaseOrder(
   return res.json();
 }
 
+// Admin-only, and only while the order is still a draft -- enforced
+// server-side (PurchaseOrderViewSet.perform_destroy), this is just the
+// matching client call. A sent/received/amended order can't be deleted
+// this way; see ProcurementDetail's "Delete draft" button, which only
+// ever shows for a draft PO.
+export async function deletePurchaseOrder(accessToken: string, id: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/procurement/purchase-orders/${id}/`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const msg = (body && (body.detail || body.error || body.message)) || "Could not delete this purchase order.";
+    throw new Error(msg);
+  }
+}
+
 export interface NewPOLineInput {
   po: string;
   item: string;

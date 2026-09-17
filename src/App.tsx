@@ -1442,11 +1442,16 @@ export default function App() {
               items={items ?? []}
               locations={locations}
               stockMovements={stockMovements}
+              suppliers={suppliers}
               accessToken={accessToken}
               onViewReorder={() => goToNav("End of day", { eodTab: "reorder" })}
               onOpenPO={(id) => {
                 goToNav("Procurement");
                 setSelectedPOId(id);
+              }}
+              onOpenSupplier={(id) => {
+                goToNav("Procurement");
+                setSelectedSupplierId(id);
               }}
             />
           )}
@@ -1483,16 +1488,19 @@ export default function App() {
           <SupplierList
             suppliers={suppliers}
             locations={locations}
+            accessToken={accessToken}
             onBack={() => setShowSupplierList(false)}
             onOpenSupplier={(id) => {
               setShowSupplierList(false);
               setSelectedSupplierId(id);
             }}
+            onSupplierCreated={(created) => setSuppliers((prev) => [...prev, created])}
           />
         ) : activePage === "Procurement" && selectedPOId && accessToken ? (
           <ProcurementDetail
             poId={selectedPOId}
             accessToken={accessToken}
+            isAdmin={me.memberships.some((m) => m.role === "admin")}
             items={items ?? []}
             suppliers={suppliers}
             itemSupplierLinks={itemSupplierLinks}

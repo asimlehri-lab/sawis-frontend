@@ -5,6 +5,7 @@ import {
   createPOLine,
   updatePOLine,
   deletePOLine,
+  deletePurchaseOrder,
   receivePurchaseOrder,
   createPurchaseOrder,
   fetchOnHand,
@@ -18,6 +19,7 @@ import SearchSelect from "./SearchSelect";
 interface Props {
   poId: string;
   accessToken: string;
+  isAdmin: boolean;
   items: CatalogItem[];
   suppliers: Supplier[];
   itemSupplierLinks: ItemSupplierRow[];
@@ -53,6 +55,7 @@ function formatQty(n: number): string {
 export default function ProcurementDetail({
   poId,
   accessToken,
+  isAdmin,
   items,
   suppliers,
   itemSupplierLinks,
@@ -108,6 +111,10 @@ export default function ProcurementDetail({
   const [suggestNote, setSuggestNote] = useState<string | null>(null);
   const [suggestError, setSuggestError] = useState<string | null>(null);
 
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   function reload() {
     setError(null);
     fetchPurchaseOrder(accessToken, poId)
@@ -135,6 +142,19 @@ export default function ProcurementDetail({
       onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save changes.");
+    }
+  }
+
+  async function handleDeleteDraft() {
+    setDeleteError(null);
+    setDeleting(true);
+    try {
+      await deletePurchaseOrder(accessToken, poId);
+      onChanged();
+      onBack();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Could not delete this purchase order.");
+      setDeleting(false);
     }
   }
 
@@ -644,6 +664,37 @@ export default function ProcurementDetail({
           >
             Report supplier issue
           </button>
+        )}
+        {po.status === "draft" && isAdmin && (
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px dashed var(--border)" }}>
+            {!showDeleteConfirm ? (
+              <button className="btn-danger" onClick={() => setShowDeleteConfirm(true)}>
+                Delete draft
+              </button>
+            ) : (
+              <div className="dz-confirm">
+                <p className="hint" style={{ margin: "0 0 8px" }}>
+                  This deletes the draft permanently — there's nothing to send or receive yet, so
+                  nothing else is affected.
+                </p>
+                <div className="dz-confirm-row">
+                  <button className="btn-danger" onClick={handleDeleteDraft} disabled={deleting}>
+                    {deleting ? "Deleting…" : "Confirm & delete"}
+                  </button>
+                  <button
+                    className="btn-ghost"
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      setDeleteError(null);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {deleteError && <p className="error">{deleteError}</p>}
+              </div>
+            )}
+          </div>
         )}
         {po.status === "received" && po.received_date && (
           <p className="hint" style={{ marginTop: 10 }}>

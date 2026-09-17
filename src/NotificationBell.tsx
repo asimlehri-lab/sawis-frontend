@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchNotifications } from "./api";
-import type { AppNotification, CatalogItem, Location, StockMovementRow } from "./api";
+import type { AppNotification, CatalogItem, Location, StockMovementRow, Supplier } from "./api";
 import NotificationCalendar from "./NotificationCalendar";
 
 // How far past/future of today a persisted Notification (Phase 3 — delivery
@@ -36,9 +36,11 @@ interface Props {
   items: CatalogItem[];
   locations: Location[];
   stockMovements: StockMovementRow[];
+  suppliers: Supplier[];
   accessToken: string;
   onViewReorder: () => void;
   onOpenPO: (id: string) => void;
+  onOpenSupplier: (id: string) => void;
 }
 
 interface ReorderAlert {
@@ -96,9 +98,11 @@ export default function NotificationBell({
   items,
   locations,
   stockMovements,
+  suppliers,
   accessToken,
   onViewReorder,
   onOpenPO,
+  onOpenSupplier,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
@@ -272,10 +276,15 @@ export default function NotificationBell({
       {showCalendar && (
         <NotificationCalendar
           accessToken={accessToken}
+          suppliers={suppliers}
           onClose={() => setShowCalendar(false)}
           onOpenPO={(id) => {
             setShowCalendar(false);
             onOpenPO(id);
+          }}
+          onOpenSupplier={(id) => {
+            setShowCalendar(false);
+            onOpenSupplier(id);
           }}
         />
       )}

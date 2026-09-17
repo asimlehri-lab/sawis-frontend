@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import type { PurchaseOrder } from "./api";
+import type { PurchaseOrder, Supplier } from "./api";
 import { fetchPurchaseOrders } from "./api";
 import Loader from "./Loader";
 
 interface Props {
   accessToken: string;
+  suppliers: Supplier[];
   onOpenPO: (id: string) => void;
+  onOpenSupplier: (id: string) => void;
   onClose: () => void;
 }
 
@@ -74,7 +76,7 @@ function fmtDay(key: string): string {
 // time it opens is simpler than threading another always-loaded array
 // through the whole app, and guarantees the calendar never shows stale data
 // from before a PO's dates were last edited.
-export default function NotificationCalendar({ accessToken, onOpenPO, onClose }: Props) {
+export default function NotificationCalendar({ accessToken, suppliers, onOpenPO, onOpenSupplier, onClose }: Props) {
   const [pos, setPos] = useState<PurchaseOrder[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<ViewMode>("month");
@@ -100,6 +102,21 @@ export default function NotificationCalendar({ accessToken, onOpenPO, onClose }:
     return map;
   }, [pos]);
 
+  // Suppliers' delivery_day is a weekly recurring pattern, not a dated PO --
+  // grouped by weekday (0=Mon..6=Sun, matching mondayOf's convention below)
+  // rather than by a specific date, so every occurrence of that weekday in
+  // the visible grid shows the same reminder. Archived suppliers are left
+  // out -- no longer being ordered from, so no point flagging their old
+  // delivery day.
+  const suppliersByWeekday = useMemo(() => {
+    const map: Record<number, Supplier[]> = {};
+    suppliers.forEach((s) => {
+      if (s.archived || s.delivery_day === null) return;
+      (map[s.delivery_day] ??= []).push(s);
+    });
+    return map;
+  }, [suppliers]);
+
   const todayKey = dateKey(new Date());
   const gridDays = view === "month" ? monthGrid(cursor) : weekGrid(cursor);
 
@@ -123,6 +140,9 @@ export default function NotificationCalendar({ accessToken, onOpenPO, onClose }:
   }
 
   const selectedEntries = selectedDayKey ? markersByDay[selectedDayKey] ?? [] : [];
+  const selectedScheduled = selectedDayKey
+    ? suppliersByWeekday[(new Date(`${selectedDayKey}T00:00:00`).getDay() + 6) % 7] ?? []
+    : [];
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -183,6 +203,8 @@ export default function NotificationCalendar({ accessToken, onOpenPO, onClose }:
                 const inMonth = view === "week" || d.getMonth() === cursor.getMonth();
                 const hasExpected = entries.some((e) => e.kind === "expected");
                 const hasReceived = entries.some((e) => e.kind === "received");
+                const scheduled = suppliersByWeekday[(d.getDay() + 6) % 7] ?? [];
+                const hasScheduled = scheduled.length > 0;
                 return (
                   <button
                     key={key}
@@ -195,14 +217,15 @@ export default function NotificationCalendar({ accessToken, onOpenPO, onClose }:
                     ]
                       .filter(Boolean)
                       .join(" ")}
-                    disabled={entries.length === 0}
+                    disabled={entries.length === 0 && !hasScheduled}
                     onClick={() => setSelectedDayKey((k) => (k === key ? null : key))}
                   >
                     <span className="cal-day-num">{d.getDate()}</span>
-                    {(hasExpected || hasReceived) && (
+                    {(hasExpected || hasReceived || hasScheduled) && (
                       <span className="cal-day-dots">
                         {hasExpected && <span className="cal-dot cal-dot-expected" />}
                         {hasReceived && <span className="cal-dot cal-dot-received" />}
+                        {hasScheduled && <span className="cal-dot cal-dot-scheduled" />}
                       </span>
                     )}
                   </button>
@@ -217,12 +240,15 @@ export default function NotificationCalendar({ accessToken, onOpenPO, onClose }:
               <span>
                 <span className="cal-dot cal-dot-received" /> Received
               </span>
+              <span>
+                <span className="cal-dot cal-dot-scheduled" /> Supplier's regular delivery day
+              </span>
             </div>
 
             {selectedDayKey && (
               <div className="cal-day-detail">
                 <b>{fmtDay(selectedDayKey)}</b>
-                {selectedEntries.length === 0 ? (
+                {selectedEntries.length === 0 && selectedScheduled.length === 0 ? (
                   <p className="muted">No deliveries.</p>
                 ) : (
                   <div className="cal-day-detail-list">
@@ -242,6 +268,20 @@ export default function NotificationCalendar({ accessToken, onOpenPO, onClose }:
                         </span>
                         <span className="muted" style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
                           {entry.po.location_name}
+                        </span>
+                      </button>
+                    ))}
+                    {selectedScheduled.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        className="cal-day-detail-row"
+                        onClick={() => onOpenSupplier(s.id)}
+                      >
+                        <span className="cal-kind-tag cal-kind-scheduled">Scheduled</span>
+                        <span className="cal-day-detail-main">
+                          <b>{s.name}</b>
+                          <span className="muted"> · regular delivery day</span>
                         </span>
                       </button>
                     ))}

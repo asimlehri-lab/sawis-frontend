@@ -468,6 +468,10 @@ h1 {
 .cal-dot-expected { background: var(--brand); }
 .cal-dot-received { background: var(--good); }
 .cal-dot-data { background: var(--good); }
+/* Hollow, not filled -- a supplier's regular delivery day is a recurring
+   reminder, not a dated event like the two dots above, so it's related
+   (same blue) but deliberately reads as a different kind of marker. */
+.cal-dot-scheduled { background: var(--surface); border: 1.5px solid var(--brand); box-sizing: border-box; }
 
 /* PeriodPicker.tsx: the day-grid's hover preview of a "week" selection
    (the 7 days ending on the hovered day) -- a lighter touch than
@@ -543,6 +547,7 @@ h1 {
 }
 .cal-kind-expected { background: var(--brand-soft); color: var(--brand); }
 .cal-kind-received { background: var(--good-soft); color: var(--good); }
+.cal-kind-scheduled { background: var(--surface); color: var(--brand); border: 1px solid var(--brand); }
 
 .cal-day-detail-main { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
