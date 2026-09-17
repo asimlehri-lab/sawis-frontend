@@ -10,6 +10,12 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+# Stray build-output backups from local rebuilds/verifications (dist_old_*,
+# dist_stale_*) -- these aren't meant to be tracked; one (dist_old_1788888720)
+# had slipped in via an old `git add -A` and was removed in a dedicated
+# cleanup, this stops it (and its siblings) recurring.
+dist_old_*
+dist_stale_*
 *.local
 
 # Editor directories and files
