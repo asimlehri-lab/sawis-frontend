@@ -1119,6 +1119,22 @@ export async function fetchItemSuppliers(accessToken: string): Promise<ItemSuppl
   return authedFetchAllPages<ItemSupplierRow>("/api/catalog/item-suppliers/", accessToken);
 }
 
+// A remembered "this OCR line means this Item" match from a past Scan
+// receipt (see apps/catalog/models.py ItemReceiptAlias) -- read-only,
+// only ever written server-side by PurchaseOrderViewSet.receive.
+// Consulted client-side in handleScanFileSelected (findKnownItemAlias)
+// the same way ItemSupplierRow above is for pack/unit memory, since
+// ScanReceiptView itself never touches the database.
+export interface ItemReceiptAliasRow {
+  id: string;
+  description_key: string;
+  item: string;
+}
+
+export async function fetchItemReceiptAliases(accessToken: string): Promise<ItemReceiptAliasRow[]> {
+  return authedFetchAllPages<ItemReceiptAliasRow>("/api/catalog/item-receipt-aliases/", accessToken);
+}
+
 export interface NewItemSupplierInput {
   item: string;
   supplier: string;
@@ -1445,6 +1461,16 @@ export interface ReceiveLineOverride {
   // receiving against an already-existing PO line. Omit to leave
   // whatever's already on the line alone (see PurchaseOrderViewSet.receive).
   vat_rate?: string;
+  // The OCR'd line text this override's item was matched to, straight
+  // from ScanRow.description -- lets receive() teach ItemReceiptAlias
+  // ("this description means this item") so the same product matches
+  // automatically on the next scan, even when the supplier's printed
+  // wording never text-matches the item by name (e.g. a German product
+  // name against an English catalogue entry). Purely a teaching signal,
+  // never stored on the POLine itself -- omit for anything that isn't a
+  // Scan receipt line (a plain manual receive has no OCR text to learn
+  // from).
+  raw_description?: string;
 }
 
 export async function receivePurchaseOrder(

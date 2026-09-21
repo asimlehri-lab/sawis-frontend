@@ -23,6 +23,7 @@ import {
   receivePurchaseOrder,
   scanReceipt,
   fetchItemSuppliers,
+  fetchItemReceiptAliases,
   fetchWasteEvents,
   fetchStockMovements,
   fetchSections,
@@ -44,6 +45,7 @@ import type {
   SupplierItemRow,
   PurchaseOrder,
   ItemSupplierRow,
+  ItemReceiptAliasRow,
   WasteEventRow,
   StockMovementRow,
   Section,
@@ -236,6 +238,31 @@ function findKnownSupplierUnit(
   const factor = supplierUnitPriceNum / unitPriceNum;
   if (!Number.isFinite(factor) || factor <= 0) return null;
   return { supplierUnit: link.supplier_unit, packQty: String(factor) };
+}
+
+// Same normalisation as the backend's _normalize_description_key
+// (apps/procurement/viewsets.py, apps/ledger/viewsets.py) -- casefolded,
+// internal whitespace collapsed, trimmed. Must match exactly or a
+// remembered alias silently never fires; kept as one small function
+// rather than routed through matchScore's own normalize (that one strips
+// digits/punctuation entirely, which would collapse two genuinely
+// different product codes onto the same key).
+function normalizeDescriptionKey(text: string): string {
+  if (!text) return "";
+  return text.trim().split(/\s+/).join(" ").toLowerCase().slice(0, 200);
+}
+
+// "This OCR line means this Item" -- a match remembered from a past Scan
+// receipt (see apps/catalog/models.py ItemReceiptAlias), taught whenever
+// a scanned line is received regardless of how it got matched (auto
+// fuzzy match or a manual pick). Consulted before matchScore's own guess
+// in handleScanFileSelected -- an exact remembered match always wins,
+// same principle as ScanEndOfDaySalesView's ReceiptLineAlias lookup on
+// the sales side.
+function findKnownItemAlias(aliases: ItemReceiptAliasRow[], description: string): string | null {
+  const key = normalizeDescriptionKey(description);
+  if (!key) return null;
+  return aliases.find((a) => a.description_key === key)?.item ?? null;
 }
 
 // A ScanRow's vatPct starts out as the matched item's own effective_vat_rate
@@ -481,6 +508,7 @@ export default function App() {
   const [newPOError, setNewPOError] = useState<string | null>(null);
   const [poFilter, setPoFilter] = useState<"all" | "draft" | "sent" | "received">("all");
   const [itemSupplierLinks, setItemSupplierLinks] = useState<ItemSupplierRow[]>([]);
+  const [itemReceiptAliases, setItemReceiptAliases] = useState<ItemReceiptAliasRow[]>([]);
 
   // Scan receipt (OCR) -- upload a photo, review/correct what Textract read
   // back, then create a real PurchaseOrder + POLines from it. See the
@@ -624,6 +652,7 @@ export default function App() {
       fetchLocations(accessToken).then(setLocations).catch(() => {});
       fetchSuppliers(accessToken).then(setSuppliers).catch(() => {});
       fetchItemSuppliers(accessToken).then(setItemSupplierLinks).catch(() => {});
+      fetchItemReceiptAliases(accessToken).then(setItemReceiptAliases).catch(() => {});
     }
     if (activePage === "Waste log") {
       loadWasteEvents(accessToken);
@@ -1141,10 +1170,20 @@ export default function App() {
       }
 
       const rows: ScanRow[] = result.line_items.map((li) => {
-        const ranked = (items ?? [])
-          .map((it) => ({ it, score: matchScore(it.name, li.description) }))
-          .sort((a, b) => b.score - a.score);
-        const best = ranked[0] && ranked[0].score >= 0.5 ? ranked[0].it.id : "";
+        // A remembered ItemReceiptAlias always wins over a fresh fuzzy
+        // guess -- catches wording matchScore's plain token-overlap never
+        // will (e.g. a supplier's German product name against an English
+        // catalogue entry), the same way matchedRecipeId already gets
+        // pre-filled from ReceiptLineAlias on the Scan end-of-day sales
+        // side.
+        const aliasItemId = findKnownItemAlias(itemReceiptAliases, li.description);
+        let best = aliasItemId ?? "";
+        if (!best) {
+          const ranked = (items ?? [])
+            .map((it) => ({ it, score: matchScore(it.name, li.description) }))
+            .sort((a, b) => b.score - a.score);
+          best = ranked[0] && ranked[0].score >= 0.5 ? ranked[0].it.id : "";
+        }
         const known = findKnownSupplierUnit(itemSupplierLinks, best, resolvedSupplierId);
         const bestItem = (items ?? []).find((it) => it.id === best);
         return {
@@ -1244,6 +1283,7 @@ export default function App() {
     // now exists on the server. Refetched here, right after the write
     // that changes it, so the very next scan sees it.
     fetchItemSuppliers(accessToken as string).then(setItemSupplierLinks).catch(() => {});
+    fetchItemReceiptAliases(accessToken as string).then(setItemReceiptAliases).catch(() => {});
   }
 
   async function handleCreatePOFromScan() {
@@ -1295,6 +1335,12 @@ export default function App() {
               // empty -- JSON.stringify drops it, so receive() leaves
               // whatever's already on the line alone instead of zeroing it.
               vat_rate: vatFractionFromPct(row.vatPct),
+              // Lets receive() teach ItemReceiptAlias ("this OCR text
+              // means this item") so the same product auto-matches next
+              // time -- sent for every row, not just ones needing a unit
+              // override, since the match itself is worth remembering
+              // either way.
+              raw_description: row.description,
               ...(item && row.supplierUnit && row.supplierUnit !== item.base_unit
                 ? {
                     supplier_unit: row.supplierUnit,
@@ -1350,22 +1396,26 @@ export default function App() {
           unit_price: conv.unitPrice.toFixed(4),
           vat_rate: vatFractionFromPct(row.vatPct),
         });
-        // Only carried through as an override when the supplier's unit
-        // actually differs -- receive() below already defaults every
-        // line's received qty/price to the (already-converted) POLine
-        // values on its own; this just adds the raw supplier-side
-        // unit/price onto ItemSupplier for display and "remember next
-        // time", same as the matched-existing-PO branch above.
-        if (item && row.supplierUnit && row.supplierUnit !== item.base_unit) {
-          overrides.push({
-            id: createdLine.id,
-            received_qty: conv.qty.toFixed(3),
-            received_unit_price: conv.unitPrice.toFixed(4),
-            supplier_unit: row.supplierUnit,
-            supplier_unit_price: row.unitPrice || "0",
-            supplier_qty: row.qty || "0",
-          });
-        }
+        // Pushed for every row (not just ones needing a unit override)
+        // so receive() always gets raw_description to teach
+        // ItemReceiptAlias from -- the supplier-unit fields below stay
+        // conditional, added on top only when the supplier's unit
+        // actually differs, same reasoning as the matched-existing-PO
+        // branch above (receive() already defaults qty/price to the
+        // already-converted POLine values on its own).
+        overrides.push({
+          id: createdLine.id,
+          received_qty: conv.qty.toFixed(3),
+          received_unit_price: conv.unitPrice.toFixed(4),
+          raw_description: row.description,
+          ...(item && row.supplierUnit && row.supplierUnit !== item.base_unit
+            ? {
+                supplier_unit: row.supplierUnit,
+                supplier_unit_price: row.unitPrice || "0",
+                supplier_qty: row.qty || "0",
+              }
+            : {}),
+        });
       }
       // From this point on the PO and its lines are real, saved data --
       // record that immediately so a failure below can never lead to a
