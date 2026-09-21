@@ -1777,6 +1777,28 @@ input[type="file"] {
 .scan-row-nums { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
 @media (max-width: 420px) { .scan-row-nums { grid-template-columns: 1fr; } }
 
+/* Collapsed category-total group (Scan end-of-day sales only) -- a
+   plain button styled as a summary row rather than a scan-row-card, so
+   it reads clearly as "not a dish" at a glance. .scan-category-children
+   reuses .scan-rows' own gap so nested rows line up with top-level ones. */
+.scan-category-group { border: 1px dashed var(--border); border-radius: 10px; overflow: hidden; }
+.scan-category-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg);
+  border: none;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+.scan-category-header:hover { background: var(--brand-soft); }
+.scan-category-children { display: flex; flex-direction: column; gap: 8px; padding: 8px; border-top: 1px dashed var(--border); }
+
 .rtabs {
   display: inline-flex;
   gap: 3px;

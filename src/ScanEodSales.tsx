@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { fetchAlreadyImportedRecipes, importSales, scanEndOfDaySales } from "./api";
 import type { Recipe } from "./api";
 import SearchSelect from "./SearchSelect";
@@ -27,7 +27,21 @@ interface ScanEodRow {
   amount: string;
   confidence: number | null; // Textract's own confidence for this row, 0-100
   skip: boolean;
+  // True for a detected bold category-total row from the receipt (e.g.
+  // "Kaffee  23  80,10" on a "Tagessaldo" till summary) -- see
+  // detectCategoryGroups below. Always skip: true (never a real sale
+  // line, never matched/imported); rendered as a collapsible group
+  // header instead of a normal review row.
+  isCategoryTotal?: boolean;
 }
+
+// Filters what's visible in the review list below -- never what's
+// importable, which is always driven by matchedRecipeId/skip/
+// alreadyImportedRecipeIds regardless of the active filter. Replaces the
+// old "jump to next unmatched" button, which only ever let you step
+// through one row at a time; showing/hiding whole groups at once turned
+// out to be what people actually wanted when re-reviewing a big scan.
+type RowFilter = "all" | "needs-match" | "matched-new" | "already-imported" | "skipped";
 
 // Lightweight fuzzy match: token overlap between a recipe's own name and
 // a piece of OCR'd receipt text. A deliberate copy of App.tsx's own
@@ -78,6 +92,58 @@ function extractSizeLiters(raw: string): number | null {
   if (chosen[2] === "ml") return value / 1000;
   if (chosen[2] === "cl") return value / 100;
   return value;
+}
+
+// A "Tagessaldo"-style till summary (see the sample receipt this was
+// built against) prints a bold category-total row -- e.g.
+// "Kaffee  23  80,10" -- immediately followed by the individual drinks/
+// dishes that make it up. Textract's AnalyzeExpense has no concept of
+// bold text or hierarchy, so every one of those rows comes back as just
+// another flat line item, cluttering the review list with entries that
+// can never match a recipe by name (and would just get auto-skipped on
+// import anyway). This reconstructs the grouping after the fact: a row
+// is treated as a category total when the amounts of two or more rows
+// immediately following it add up to its own amount (within a cent of
+// rounding). Requiring at least two children is deliberate -- a single
+// matching row is too easy to hit by coincidence (two genuinely
+// different drinks priced the same). Returns a map of category row
+// index -> its child row indices, in receipt order. When the heuristic
+// gets a row wrong either way, nothing is lost: an undetected category
+// just shows up as an ordinary no-match row, and a detected group can
+// always be expanded to review its rows individually.
+function detectCategoryGroups(built: { amount: string }[]): Map<number, number[]> {
+  const groups = new Map<number, number[]>();
+  let i = 0;
+  while (i < built.length) {
+    const target = Number(built[i].amount);
+    if (!Number.isFinite(target) || target <= 0) {
+      i++;
+      continue;
+    }
+    let sum = 0;
+    const children: number[] = [];
+    let j = i + 1;
+    let matched = false;
+    while (j < built.length) {
+      const childAmt = Number(built[j].amount);
+      if (!Number.isFinite(childAmt)) break;
+      sum += childAmt;
+      children.push(j);
+      if (children.length >= 2 && Math.abs(sum - target) < 0.02) {
+        matched = true;
+        break;
+      }
+      if (sum > target + 0.02) break;
+      j++;
+    }
+    if (matched) {
+      groups.set(i, children);
+      i = j + 1;
+    } else {
+      i++;
+    }
+  }
+  return groups;
 }
 
 // Textract sometimes returns a price/qty with a currency symbol, thousands
@@ -149,6 +215,24 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
   // fetch-on-dependency-change effects.
   const [alreadyImportedRecipeIds, setAlreadyImportedRecipeIds] = useState<Set<string>>(new Set());
 
+  // categoryGroups: detected category-total row index -> its child row
+  // indices (see detectCategoryGroups). collapsedGroups: which of those
+  // groups are currently showing just the summary line rather than their
+  // individual rows -- every detected group starts collapsed, since the
+  // whole point is to get category clutter out of the way by default.
+  const [categoryGroups, setCategoryGroups] = useState<Map<number, number[]>>(new Map());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<number>>(new Set());
+  const [rowFilter, setRowFilter] = useState<RowFilter>("all");
+
+  function toggleCategory(headIndex: number) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(headIndex)) next.delete(headIndex);
+      else next.add(headIndex);
+      return next;
+    });
+  }
+
   useEffect(() => {
     if (!location || !saleDate) {
       setAlreadyImportedRecipeIds(new Set());
@@ -170,24 +254,8 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
     };
   }, [accessToken, location, saleDate]);
 
-  // Row DOM nodes, keyed by index -- used only by "Jump to next
-  // unmatched" to scroll a row into view inside the modal's own internal
-  // scroll (see "wide" on the modal itself). cursorRef tracks which row
-  // the last jump landed on, so repeated clicks step through them in
-  // order instead of always landing back on the first one.
-  const rowRefs = useRef<Record<number, HTMLDivElement | null>>({});
-  const jumpCursorRef = useRef(-1);
-
   function updateRow(i: number, patch: Partial<ScanEodRow>) {
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
-  }
-
-  function jumpToNextUnmatched() {
-    const unmatchedIdx = rows.map((r, i) => (!r.skip && !r.matchedRecipeId ? i : -1)).filter((i) => i !== -1);
-    if (unmatchedIdx.length === 0) return;
-    const next = unmatchedIdx.find((i) => i > jumpCursorRef.current) ?? unmatchedIdx[0];
-    jumpCursorRef.current = next;
-    rowRefs.current[next]?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
   async function handleFile(file: File) {
@@ -237,9 +305,22 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
           skip: false,
         });
       }
+      // Detect category-total rows (e.g. "Kaffee  23  80,10") among the
+      // rows Textract read, mark them so they render as a collapsed
+      // group summary instead of a normal (permanently no-match) row --
+      // see detectCategoryGroups. skip: true on the head keeps it out of
+      // unmatchedCount/importableRows/alreadyImportedCount the same way
+      // any other skipped row is, with no changes needed to that logic.
+      const groups = detectCategoryGroups(built);
+      groups.forEach((_children, headIndex) => {
+        built[headIndex] = { ...built[headIndex], isCategoryTotal: true, skip: true };
+      });
       setRawCount(scanned.line_items.length);
       setSaleDate(normalizeReceiptDate(scanned.receipt_date));
       setRows(built);
+      setCategoryGroups(groups);
+      setCollapsedGroups(new Set(groups.keys()));
+      setRowFilter("all");
       if (built.length === 0) {
         setError("Textract didn't find any usable line items on this photo.");
       }
@@ -256,6 +337,13 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
     if (file) handleFile(file);
   }
 
+  // Detected category-total rows aren't dishes -- excluded from every
+  // count below (they're always skip: true, so most of these already
+  // exclude them for free; realRowCount/skippedCount need an explicit
+  // check since a plain skip count would otherwise conflate "category
+  // row" with "a dish the user chose to skip").
+  const realRowCount = rows.filter((r) => !r.isCategoryTotal).length;
+  const skippedCount = rows.filter((r) => r.skip && !r.isCategoryTotal).length;
   const unmatchedCount = rows.filter((r) => !r.skip && !r.matchedRecipeId).length;
   // A matched row whose recipe already has a sale recorded for this
   // location on saleDate is a duplicate of data already in the ledger --
@@ -323,6 +411,124 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
     }
   }
 
+  // Whether a normal (non-category-header) row should be visible under
+  // the active filter chip -- category headers themselves are always
+  // rendered (see the block-building logic in the JSX below); only
+  // their children, and any standalone row, go through this.
+  function rowPassesFilter(row: ScanEodRow): boolean {
+    const isAlreadyImported = !row.skip && !!row.matchedRecipeId && alreadyImportedRecipeIds.has(row.matchedRecipeId);
+    switch (rowFilter) {
+      case "needs-match":
+        return !row.skip && !row.matchedRecipeId;
+      case "matched-new":
+        return !row.skip && !!row.matchedRecipeId && !isAlreadyImported;
+      case "already-imported":
+        return isAlreadyImported;
+      case "skipped":
+        return row.skip;
+      case "all":
+      default:
+        return true;
+    }
+  }
+
+  // One review row's whole card -- pulled out of the list-building JSX
+  // below so it can be rendered either standalone or nested inside a
+  // collapsed category group's expanded children, without duplicating
+  // the markup.
+  function renderRow(i: number) {
+    const row = rows[i];
+    const alreadyImported =
+      !row.skip && !!row.matchedRecipeId && alreadyImportedRecipeIds.has(row.matchedRecipeId);
+    return (
+      <div
+        key={i}
+        className={`scan-row-card${
+          row.skip
+            ? ""
+            : alreadyImported
+            ? " scan-already-imported"
+            : row.matchedRecipeId
+            ? " scan-matched"
+            : " scan-unmatched"
+        }`}
+        style={row.skip ? { opacity: 0.45 } : undefined}
+      >
+        <div className="scan-row-top">
+          <span className="muted">{row.description}</span>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+            {!row.skip && (
+              <span className={`badge ${alreadyImported ? "b-muted" : row.matchedRecipeId ? "b-ok" : "warn"}`}>
+                {alreadyImported ? "Already imported" : row.matchedRecipeId ? "Matched" : "No match"}
+              </span>
+            )}
+            <span className={`badge ${row.confidence !== null && row.confidence >= 80 ? "b-ok" : "warn"}`}>
+              {row.confidence !== null ? `${row.confidence.toFixed(0)}%` : "—"}
+            </span>
+            <button type="button" className="btn-ghost small" onClick={() => updateRow(i, { skip: !row.skip })}>
+              {row.skip ? "Include" : "Skip"}
+            </button>
+          </div>
+        </div>
+
+        <div className="field" style={{ marginTop: 6 }}>
+          <label>Matched dish</label>
+          <SearchSelect
+            value={row.matchedRecipeId}
+            onChange={(val) => updateRow(i, { matchedRecipeId: val })}
+            disabled={row.skip}
+            placeholder="Pick a dish…"
+            aria-label="Matched dish"
+            style={{ width: "100%" }}
+            options={dishRecipes.map((d) => ({ value: d.id, label: d.name }))}
+          />
+        </div>
+
+        <div className="scan-row-nums">
+          <div className="field">
+            <label>Qty</label>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              value={row.qty}
+              onChange={(e) => updateRow(i, { qty: e.target.value })}
+              disabled={row.skip}
+            />
+          </div>
+          <div className="field">
+            <label>Amount</label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={row.amount}
+              onChange={(e) => updateRow(i, { amount: e.target.value })}
+              disabled={row.skip}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Builds the ordered list of things to render: a detected category
+  // becomes one block (its head + child indices), everything else is a
+  // standalone row. Children are consumed into their category's block so
+  // they're never also rendered at the top level.
+  const childToHead = new Map<number, number>();
+  categoryGroups.forEach((children, head) => children.forEach((c) => childToHead.set(c, head)));
+  const displayBlocks: Array<
+    { kind: "category"; headIndex: number; childIndices: number[] } | { kind: "row"; index: number }
+  > = [];
+  for (let i = 0; i < rows.length; i++) {
+    if (categoryGroups.has(i)) {
+      displayBlocks.push({ kind: "category", headIndex: i, childIndices: categoryGroups.get(i)! });
+    } else if (!childToHead.has(i)) {
+      displayBlocks.push({ kind: "row", index: i });
+    }
+  }
+
   return (
     // Same reasoning as Scan receipt's modal (App.tsx): once a scan has
     // been read into rows, there's real reviewed/matched work an
@@ -384,8 +590,12 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
             <div className="im-note">
               ✓ Scanned {fileName}. Found{" "}
               <b>
-                {rows.length} dish{rows.length === 1 ? "" : "es"}
+                {realRowCount} dish{realRowCount === 1 ? "" : "es"}
               </b>
+              {categoryGroups.size > 0 &&
+                ` (plus ${categoryGroups.size} category total${
+                  categoryGroups.size === 1 ? "" : "s"
+                } grouped below — these aren't dishes and are never imported)`}
               {rawCount > rows.length
                 ? ` (of ${rawCount} line${rawCount === 1 ? "" : "s"} Textract read; ${
                     rawCount - rows.length
@@ -396,16 +606,6 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
                 ` ${alreadyImportedCount} ${
                   alreadyImportedCount === 1 ? "is" : "are"
                 } already recorded for this date and won't be re-added — see the "Already imported" rows below.`}
-              {unmatchedCount > 0 && (
-                <button
-                  type="button"
-                  className="btn-ghost small"
-                  style={{ marginLeft: 8, marginTop: 0 }}
-                  onClick={jumpToNextUnmatched}
-                >
-                  ↓ Jump to next unmatched ({unmatchedCount})
-                </button>
-              )}
             </div>
 
             <div className="field" style={{ marginBottom: 12 }}>
@@ -413,82 +613,56 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
               <input type="date" value={saleDate} onChange={(e) => setSaleDate(e.target.value)} />
             </div>
 
-            <div className="scan-rows">
-              {rows.map((row, i) => {
-                const alreadyImported =
-                  !row.skip && !!row.matchedRecipeId && alreadyImportedRecipeIds.has(row.matchedRecipeId);
-                return (
-                <div
-                  key={i}
-                  ref={(el) => {
-                    rowRefs.current[i] = el;
-                  }}
-                  className={`scan-row-card${
-                    row.skip
-                      ? ""
-                      : alreadyImported
-                      ? " scan-already-imported"
-                      : row.matchedRecipeId
-                      ? " scan-matched"
-                      : " scan-unmatched"
-                  }`}
-                  style={row.skip ? { opacity: 0.45 } : undefined}
+            <div className="chip-row">
+              {(
+                [
+                  { key: "all", label: `All (${realRowCount})` },
+                  { key: "needs-match", label: `Needs match (${unmatchedCount})` },
+                  { key: "matched-new", label: `Matched, new (${importableRows.length})` },
+                  { key: "already-imported", label: `Already imported (${alreadyImportedCount})` },
+                  { key: "skipped", label: `Skipped (${skippedCount})` },
+                ] as { key: RowFilter; label: string }[]
+              ).map((f) => (
+                <button
+                  key={f.key}
+                  type="button"
+                  className={`chip ${rowFilter === f.key ? "active" : ""}`}
+                  onClick={() => setRowFilter(f.key)}
                 >
-                  <div className="scan-row-top">
-                    <span className="muted">{row.description}</span>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                      {!row.skip && (
-                        <span className={`badge ${alreadyImported ? "b-muted" : row.matchedRecipeId ? "b-ok" : "warn"}`}>
-                          {alreadyImported ? "Already imported" : row.matchedRecipeId ? "Matched" : "No match"}
-                        </span>
-                      )}
-                      <span className={`badge ${row.confidence !== null && row.confidence >= 80 ? "b-ok" : "warn"}`}>
-                        {row.confidence !== null ? `${row.confidence.toFixed(0)}%` : "—"}
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="scan-rows">
+              {displayBlocks.map((block) => {
+                if (block.kind === "row") {
+                  if (!rowPassesFilter(rows[block.index])) return null;
+                  return renderRow(block.index);
+                }
+                const head = rows[block.headIndex];
+                const visibleChildren = block.childIndices.filter((idx) => rowPassesFilter(rows[idx]));
+                if (rowFilter !== "all" && visibleChildren.length === 0) return null;
+                const collapsed = collapsedGroups.has(block.headIndex);
+                return (
+                  <div key={`cat-${block.headIndex}`} className="scan-category-group">
+                    <button
+                      type="button"
+                      className="scan-category-header"
+                      onClick={() => toggleCategory(block.headIndex)}
+                    >
+                      <span>
+                        {head.description} — {block.childIndices.length} item
+                        {block.childIndices.length === 1 ? "" : "s"}, €{Number(head.amount).toFixed(2)}
                       </span>
-                      <button type="button" className="btn-ghost small" onClick={() => updateRow(i, { skip: !row.skip })}>
-                        {row.skip ? "Include" : "Skip"}
-                      </button>
-                    </div>
+                      <span className="btn-ghost small">{collapsed ? "Show items" : "Hide items"}</span>
+                    </button>
+                    {!collapsed && (
+                      <div className="scan-category-children">
+                        {visibleChildren.map((idx) => renderRow(idx))}
+                      </div>
+                    )}
                   </div>
-
-                  <div className="field" style={{ marginTop: 6 }}>
-                    <label>Matched dish</label>
-                    <SearchSelect
-                      value={row.matchedRecipeId}
-                      onChange={(val) => updateRow(i, { matchedRecipeId: val })}
-                      disabled={row.skip}
-                      placeholder="Pick a dish…"
-                      aria-label="Matched dish"
-                      style={{ width: "100%" }}
-                      options={dishRecipes.map((d) => ({ value: d.id, label: d.name }))}
-                    />
-                  </div>
-
-                  <div className="scan-row-nums">
-                    <div className="field">
-                      <label>Qty</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        value={row.qty}
-                        onChange={(e) => updateRow(i, { qty: e.target.value })}
-                        disabled={row.skip}
-                      />
-                    </div>
-                    <div className="field">
-                      <label>Amount</label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={row.amount}
-                        onChange={(e) => updateRow(i, { amount: e.target.value })}
-                        disabled={row.skip}
-                      />
-                    </div>
-                  </div>
-                </div>
                 );
               })}
             </div>
