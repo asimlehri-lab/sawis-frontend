@@ -14,6 +14,18 @@
 //
 // `keywords` gives topic search something to match beyond the topic's own
 // title (e.g. "PO" and "purchase order" both finding Procurement).
+//
+// Writing rule for every answer below: name the exact page, then the exact
+// button/label text and where on that page it sits, in that order --
+// "Go to Procurement, then click 🏬 Suppliers at the top of the page", not
+// just "Click Suppliers". A user reading this while lost on a different
+// screen should be able to follow it with zero guessing. Every navigation
+// claim here has been checked against the actual component it describes,
+// not written from memory -- when the UI changes, re-check the answer
+// against the code before touching the wording, so this file doesn't drift
+// back into the vague/wrong state it was fixed from (see git history on
+// this file for the "How do I see all my suppliers?" example -- it used to
+// say the sidebar, and Suppliers has never been a sidebar item).
 
 export interface HelpQuestion {
   q: string;
@@ -38,19 +50,19 @@ export const HELP_TOPICS: HelpTopic[] = [
     questions: [
       {
         q: "How do I add a new item?",
-        a: "Go to Items and click + New item. Give it a name, a base unit (like kg or each), and a category. You can set a par level per location from the item's own page.",
+        a: "Go to Items in the sidebar and click + New item, top right. Give it a name, a base unit (like kg or each), and a category, then save.",
       },
       {
         q: "What's a par level?",
-        a: "The minimum stock you want on hand for an item at a location. When on-hand drops below it, the item shows up in Reorder and in the notification bell's \"Below par\" list.",
+        a: "The minimum stock you want on hand for an item at a location. When on-hand drops below it, the item shows up in Reorder (End of day → Reorder tab) and in the notification bell's \"Below par\" list. Set or change it from the item's own page — open the item from the Items list, find it in the per-location table, and edit the Par level field directly (it saves as you type).",
       },
       {
         q: "How do I set a default supplier for an item?",
-        a: "Open the item and pick a supplier from the Default supplier field. Reorder uses this to suggest who to order from.",
+        a: "An item needs at least two suppliers already linked to it before you can pick a default — open the item, scroll to its linked-suppliers list, and click Set as default next to the one you want (it only appears once there's more than one). The chosen one gets a ★ default tag. Reorder uses this to suggest who to order from — it doesn't change costing, which always uses whichever linked price is cheapest regardless of which supplier is marked default.",
       },
       {
         q: "Can I bulk-import items or recipes?",
-        a: "Yes — Settings → Import Items or Import Recipes accepts a CSV or Excel file. Download the template first; it has the full column guide and a worked example built in.",
+        a: "Yes — go to Settings in the sidebar. Near the top of that page are two separate cards, Import items and Import recipes, each with its own CSV/Excel template download above the upload box, with the full column guide and a worked example built in. Import items first, then recipes, since recipe ingredients match against whatever items already exist. This is different from the ⇪ Import supplier list button on the Items page — see \"What's the difference between Import items/recipes and Import supplier list?\" under Settings if that's what you're looking for instead.",
       },
       {
         q: "How is a recipe's cost worked out?",
@@ -67,16 +79,21 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "Suppliers",
     keywords: [
       "supplier", "suppliers", "archive", "contact", "delivery day",
-      "min order", "minimum order",
+      "min order", "minimum order", "catalogue", "catalog", "price list",
+      "import supplier list", "recommended", "suggested", "match", "matching",
     ],
     questions: [
       {
         q: "How do I see all my suppliers?",
-        a: "Click 🏬 Suppliers in the sidebar for a searchable list of every supplier.",
+        a: "Suppliers isn't its own item in the sidebar — it lives inside Procurement. Click Procurement in the sidebar first, then click the 🏬 Suppliers button at the top of that page (it sits next to 📷 Scan receipt and + New purchase order). That opens a searchable list of every supplier you have.",
+      },
+      {
+        q: "How do I import a supplier's product catalogue?",
+        a: "This one's on the Items page, not Suppliers — go to Items and click ⇪ Import supplier list at the top, then pick which supplier the file is from and upload their CSV or Excel product list. SAWIS stores the whole thing in the background; nothing on your items changes yet. It then matches each line in that catalogue against your existing item names. To see what it found, open any item's page and scroll to \"Other suppliers that may stock this\" — each match shows a confidence %, the supplier's own line text, and their price. Nothing is linked automatically: you review each suggestion and click Link yourself, which is also what records that supplier's price against the item.",
       },
       {
         q: "How do I add a new supplier?",
-        a: "From the Suppliers list, click + New supplier. Only the name is required — email, phone, delivery day, minimum order value and notes are all optional and can be filled in later.",
+        a: "From the Suppliers list (Procurement → 🏬 Suppliers), click + New supplier. Only the name is required — email, phone, delivery day, minimum order value and notes are all optional and can be filled in later.",
       },
       {
         q: "Can I delete a supplier?",
@@ -84,7 +101,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I archive a supplier I no longer use?",
-        a: "Open the supplier's page and use Archive, under Contact & terms.",
+        a: "Open the supplier's page (Procurement → 🏬 Suppliers, then click their name) and scroll down to the Archive card near the bottom — click Archive supplier there. It's its own card, separate from Contact & terms further up the page.",
       },
       {
         q: "What does a supplier's delivery day do?",
@@ -92,7 +109,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "Where do I update a supplier's phone number or notes?",
-        a: "Open the supplier from the Suppliers list and edit the Contact & terms card directly — changes save as you go.",
+        a: "Open the supplier from the Suppliers list (Procurement → 🏬 Suppliers) and edit the Contact & terms card directly — phone, email, delivery day, minimum order value and notes are all there, and changes save as you go (no separate Save button).",
       },
     ],
   },
@@ -106,11 +123,11 @@ export const HELP_TOPICS: HelpTopic[] = [
     questions: [
       {
         q: "How do I create a purchase order?",
-        a: "Go to Procurement, pick a supplier, and add lines for the items you're ordering. It starts as a draft until you send it.",
+        a: "Go to Procurement in the sidebar and click + New purchase order, top right. Pick a supplier and add lines for the items you're ordering — it starts as a draft, and stays one until you click Mark as Sent.",
       },
       {
         q: "How do I mark a PO as received?",
-        a: "Open the PO and use Receive. This records the stock coming in and, if a price differs from what's on file, updates that supplier's price for the item.",
+        a: "Open the PO from Procurement and click Mark as Received (it needs to already be Sent first — the button label follows the PO's status, so it reads Mark as Sent until then). Receiving records the stock coming in and, if a price differs from what's on file, updates that supplier's price for the item.",
       },
       {
         q: "Can I delete a purchase order?",
@@ -118,7 +135,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I scan a receipt to create a PO?",
-        a: "Use Scan receipt, take or choose a photo of the invoice, and review the matched items and quantities before confirming — nothing is saved until you confirm.",
+        a: "From Procurement, click 📷 Scan receipt (next to 🏬 Suppliers, top of the page), take or choose a photo of the invoice, and review the matched items and quantities before confirming — nothing is saved until you confirm.",
       },
       {
         q: "Why is the unit price showing as 0.00 when I add a line?",
@@ -126,7 +143,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "Can I order in a different unit than the item's base unit?",
-        a: "Yes — use the pack/unit conversion option on the line (for example, ordering by the litre when the item's base unit is ml) and it converts automatically.",
+        a: "Yes — on the line you're adding, click \"Different pack or unit?\" (for example, ordering by the litre when the item's base unit is ml) and enter the conversion; it applies automatically from then on.",
       },
     ],
   },
@@ -135,24 +152,24 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "Inventory",
     keywords: [
       "inventory", "stock", "count", "live stock", "count sheet",
-      "on hand", "stocktake",
+      "on hand", "stocktake", "sections", "department",
     ],
     questions: [
       {
         q: "How do I see current stock levels?",
-        a: "Inventory → Live stock shows on-hand quantities by department, calculated from every stock movement recorded so far.",
+        a: "Go to Inventory in the sidebar — it opens on the Live stock tab, showing on-hand quantities by department, calculated from every stock movement recorded so far. (The other two tabs on that page are Count sheets and Manage sections.)",
       },
       {
         q: "How do I do a stock count?",
-        a: "Inventory → Count sheets — print a sheet, count physically, then enter or scan the results back in.",
+        a: "Go to Inventory, then click the Count sheets tab — print a sheet, count physically, then enter or scan the results back in.",
       },
       {
         q: "Can I scan a filled-in count sheet instead of typing it in?",
-        a: "Yes — print the sheet, fill it in by hand, then use Scan filled sheet to photograph it. Review the read-back numbers before submitting.",
+        a: "Yes — from Inventory → Count sheets, print the sheet, fill it in by hand, then use \"Scan filled sheet\" to photograph it. Review the read-back numbers before submitting.",
       },
       {
         q: "How do I print a stock report?",
-        a: "From Live stock, click 🖨 Print stock report for a per-department sheet with totals, below-par items, and the last count date.",
+        a: "From Inventory → Live stock, click 🖨 Print stock report for a per-department sheet with totals, below-par items, and the last count date.",
       },
       {
         q: "Why does a below-par item still show up after I've received stock?",
@@ -165,16 +182,16 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "End of day & Reports",
     keywords: [
       "end of day", "eod", "sales", "reports", "cogs", "food cost",
-      "overhead", "margin",
+      "overhead", "margin", "scan receipt", "daily receipt",
     ],
     questions: [
       {
         q: "How do I import today's sales?",
-        a: "End of day has a drag-and-drop CSV import. It also shows the date of your last import, so you can spot a gap.",
+        a: "Go to End of day in the sidebar. Two ways in: drag and drop a CSV export from your POS onto the dropzone, or click 📷 Scan a printed daily receipt just below it to photograph the till's printed end-of-day summary instead and review the read-back items before confirming. The page also shows the date of your last import, so you can spot a gap.",
       },
       {
         q: "What does the End of day Overview show?",
-        a: "Real sales, food cost, and margin for the period you pick, plus a comparison against a previous period, a rolling average, or another period you choose.",
+        a: "End of day opens on the Overview tab: real sales, food cost, and margin for the period you pick, plus a comparison against a previous period, a rolling average, or another period you choose.",
       },
       {
         q: "How is food cost worked out?",
@@ -186,7 +203,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "Where do I see menu-item performance?",
-        a: "Reports has a full menu-performance table, with a trend chart and a CSV export.",
+        a: "Go to Reports in the sidebar — it has a full menu-performance table, with a trend chart and a CSV export.",
       },
       {
         q: "Does linking a new supplier price change past reports?",
@@ -204,11 +221,11 @@ export const HELP_TOPICS: HelpTopic[] = [
     questions: [
       {
         q: "What does the notification bell show?",
-        a: "Items currently below par, plus any upcoming delivery reminders or inventory-check-due alerts for your locations.",
+        a: "Items currently below par, plus any upcoming delivery reminders or inventory-check-due alerts for your locations. It sits top-right on every page, next to the ? help button.",
       },
       {
         q: "How do I open the delivery calendar?",
-        a: "Click the date shown next to the notification bell.",
+        a: "Click the date shown next to the notification bell, top-right of any page.",
       },
       {
         q: "What do the different dots on the calendar mean?",
@@ -216,11 +233,11 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I set reminder timing for deliveries?",
-        a: "In Settings, an Admin can set how many days ahead of an expected delivery the reminder should appear, per location.",
+        a: "Go to Settings and scroll to the \"Delivery reminders & inventory checks\" card — an Admin can set how many days ahead of an expected delivery the reminder should appear, per location.",
       },
       {
         q: "Can I get a notification on my phone or desktop, not just in the app?",
-        a: "Yes, if you've turned on browser push notifications in Settings.",
+        a: "Yes — turn on browser push notifications from that same \"Delivery reminders & inventory checks\" card in Settings.",
       },
     ],
   },
@@ -238,7 +255,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I add a team member?",
-        a: "Go to Team and add their email, role, and location — they can sign in once their account is set up.",
+        a: "Go to Team in the sidebar and click + Add team member, top right. Enter their email, role, and location — they can sign in once their account is set up.",
       },
       {
         q: "Where do I see who's actively using the app?",
@@ -255,19 +272,24 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "Settings",
     keywords: [
       "settings", "currency", "overhead", "import", "template", "category",
+      "import supplier list",
     ],
     questions: [
       {
         q: "How do I change the currency for a location?",
-        a: "Settings → the per-location panel lets an Admin set currency and monthly overhead.",
+        a: "Go to Settings and scroll to the Locations card — an Admin can set each location's currency and monthly overhead there.",
       },
       {
         q: "Where do I download the import template?",
-        a: "Settings → Import Items or Import Recipes — the template download is at the top, above the file upload, with the full column guide built in.",
+        a: "Go to Settings — the Import items and Import recipes cards near the top each have their own template download link, above the file upload, with the full column guide built in.",
       },
       {
         q: "What's the difference between the template import and \"Import menu list\"?",
-        a: "The template import is the primary way to bring in your items or recipes in bulk. \"Import menu list\" (under Advanced) instead prefills the template from your POS export, if you have one.",
+        a: "The template import (the Import items / Import recipes cards) is the primary way to bring in your items or recipes in bulk. \"Import menu list\", inside the Import recipes card under Advanced, instead prefills the template from your POS export, if you have one.",
+      },
+      {
+        q: "What's the difference between Import items/recipes and Import supplier list?",
+        a: "They're easy to mix up but do opposite things. Settings → Import items / Import recipes (this page) creates new Item or Recipe records for your own menu and stock list from a spreadsheet. Items page → ⇪ Import supplier list instead uploads one supplier's product catalogue so SAWIS can suggest which of your existing items they stock — it never creates new items on its own, only suggested links you confirm.",
       },
       {
         q: "How do I add a new item category?",
