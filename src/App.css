@@ -2203,7 +2203,7 @@ input[type="file"] {
 /* The "Test: scan a printed daily receipt" diagnostic link -- see
    ScanEodSalesTest.tsx. Deliberately styled small/quiet (not a prominent
    button) while it's a feasibility test, not a finished feature. */
-.eod-scan-test-btn { display: block; margin-top: 8px; width: auto; font-size: 11px; }
+.eod-scan-btn { display: block; margin-top: 8px; width: auto; font-size: 11px; }
 
 /* Small hover-and-hold info tooltip — currently only used for the CSV
    format hint above, but generic enough to reuse anywhere a control needs

@@ -2009,19 +2009,25 @@ export interface ScannedEodSalesLine {
 
 export interface ScannedEodSales {
   line_items: ScannedEodSalesLine[];
+  // Textract's own read of the receipt's printed date, in whatever format
+  // the till happened to print it -- not normalised server-side. null if
+  // Textract didn't tag an INVOICE_RECEIPT_DATE field at all, in which
+  // case the caller falls back to today's date. See ScanEodSales.tsx's
+  // own normalisation of this.
+  receipt_date: string | null;
+  date_confidence: number | null;
 }
 
-// Diagnostic-only for now -- see ScanEodSalesTest.tsx's own header
-// comment and the "scan a printed end-of-day receipt" phase-plan entry in
-// sawis-handoff-summary.md. Uploads a photo of the till's printed daily
-// summary receipt and runs it through AWS Textract's AnalyzeExpense (the
-// same API Scan receipt uses, since this is also a receipt-shaped
-// printout -- an itemized list under a store name/date, not a bordered
-// grid the way a count sheet is). Returns Textract's raw read of each
-// line it found, with no matching to a Recipe and no Sale/SaleLine
-// created -- purely to let a human judge whether Textract reads this
-// specific nested category/item layout well enough to build the real
-// scan-review-import flow on top of, before that flow gets built.
+// Uploads a photo of the till's printed daily summary receipt and runs it
+// through AWS Textract's AnalyzeExpense (the same API Scan receipt uses,
+// since this is also a receipt-shaped printout -- an itemized list under
+// a store name/date, not a bordered grid the way a count sheet is).
+// Returns Textract's raw read of each line plus the receipt's date, with
+// no matching to a Recipe and no Sale/SaleLine created -- matching,
+// review, and the actual import all happen client-side in
+// ScanEodSales.tsx, mirroring Scan receipt's own pattern. Confirmed
+// against a real Peggy's Coffee and Tea (Vienna) receipt to read every
+// line correctly.
 export async function scanEndOfDaySales(accessToken: string, file: File): Promise<ScannedEodSales> {
   const formData = new FormData();
   formData.append("image", file);

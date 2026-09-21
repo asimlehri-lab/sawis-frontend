@@ -5,7 +5,7 @@ import type { CatalogItem, ItemSupplierRow, Location, Recipe } from "./api";
 import Reorder from "./Reorder";
 import EodReport from "./EodReport";
 import SearchSelect from "./SearchSelect";
-import ScanEodSalesTest from "./ScanEodSalesTest";
+import ScanEodSales from "./ScanEodSales";
 
 interface Props {
   accessToken: string;
@@ -600,18 +600,21 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
             <span className="eod-source">Source: manual CSV upload</span>
           </div>
 
-          {/* Diagnostic-only, not a real import path yet — see
-              ScanEodSalesTest.tsx's own header comment. Deliberately kept
-              small/low-key (a plain text-style link, not a prominent
-              button) while it's still a feasibility test rather than a
-              finished feature. */}
-          <button type="button" className="btn-ghost small eod-scan-test-btn" onClick={() => setShowScanTest(true)}>
-            🔬 Test: scan a printed daily receipt
+          <button type="button" className="btn-ghost small eod-scan-btn" onClick={() => setShowScanTest(true)}>
+            📷 Scan a printed daily receipt
           </button>
         </div>
       </div>
 
-      {showScanTest && <ScanEodSalesTest accessToken={accessToken} onClose={() => setShowScanTest(false)} />}
+      {showScanTest && (
+        <ScanEodSales
+          accessToken={accessToken}
+          location={location}
+          dishRecipes={dishRecipes}
+          onImported={() => refreshLastImport(location)}
+          onClose={() => setShowScanTest(false)}
+        />
+      )}
 
       <div className="rtabs" style={{ marginBottom: 16 }}>
         <button className={`rtab ${tab === "overview" ? "on" : ""}`} onClick={() => setTab("overview")}>
