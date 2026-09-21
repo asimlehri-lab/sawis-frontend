@@ -156,6 +156,27 @@ export default function EndOfDay({
 }: Props) {
   const [tab, setTab] = useState<"overview" | "reorder">(initialTab ?? "overview");
   const [location, setLocation] = useState(locations[0]?.id ?? "");
+  // locations loads asynchronously (App.tsx only fetches it once activePage
+  // becomes "End of day" -- see the effect keyed on activePage there) -- if
+  // this component's first render happens before that resolves, the
+  // useState initializer above bakes in "" for good, since it only ever
+  // runs once. With a single location the picker below doesn't even render
+  // (only shown when locations.length > 1), so there's no way to fix
+  // `location` by hand either -- every import (CSV or scan) just fails with
+  // "No location selected" and no way to recover short of a lucky reload.
+  // Confirmed live: a single-location org (Vienna) hit exactly this.
+  // Fill it in as soon as locations actually arrives. Deliberately not a
+  // useEffect: React's "adjust state while rendering" pattern (comparing
+  // against a snapshot of the last-seen prop, right here in the render
+  // body) applies the fix in the same render pass instead of one tick
+  // later, and this project's lint config (react-hooks/set-state-in-effect)
+  // flags setState-in-effect outright. Same fix already proven in
+  // Settings.tsx's ItemsImportPanel for the identical race.
+  const [locationsSeen, setLocationsSeen] = useState(locations);
+  if (locations !== locationsSeen) {
+    setLocationsSeen(locations);
+    if (!location && locations[0]?.id) setLocation(locations[0].id);
+  }
   const [fileName, setFileName] = useState("");
   const [rows, setRows] = useState<ParsedRow[]>([]);
   const [parseError, setParseError] = useState<string | null>(null);
