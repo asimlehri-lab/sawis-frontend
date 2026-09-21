@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import { importSales, scanEndOfDaySales } from "./api";
+import { useEffect, useRef, useState } from "react";
+import { fetchAlreadyImportedRecipes, importSales, scanEndOfDaySales } from "./api";
 import type { Recipe } from "./api";
 import SearchSelect from "./SearchSelect";
 import Loader from "./Loader";
@@ -112,7 +112,38 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
     revenue: number;
     skipped: number;
     undepletedIngredients: string[];
+    duplicateRecipes: string[];
   } | null>(null);
+
+  // Recipe ids already recorded for this location on saleDate -- a row
+  // matching one of these is excluded from import (see importableRows)
+  // and shown as "Already imported" rather than silently disappearing,
+  // so re-scanning/re-importing a day that's already been (partly)
+  // imported only offers what's actually new. Re-fetched whenever the
+  // date or location changes, same pattern as EodReport.tsx's own
+  // fetch-on-dependency-change effects.
+  const [alreadyImportedRecipeIds, setAlreadyImportedRecipeIds] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!location || !saleDate) {
+      setAlreadyImportedRecipeIds(new Set());
+      return;
+    }
+    let cancelled = false;
+    fetchAlreadyImportedRecipes(accessToken, location, saleDate)
+      .then((ids) => {
+        if (!cancelled) setAlreadyImportedRecipeIds(new Set(ids));
+      })
+      .catch(() => {
+        // Non-fatal -- worst case the "Already imported" hint doesn't
+        // show and import_sales' own server-side duplicate check still
+        // catches it, same safety net as always.
+        if (!cancelled) setAlreadyImportedRecipeIds(new Set());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, location, saleDate]);
 
   // Row DOM nodes, keyed by index -- used only by "Jump to next
   // unmatched" to scroll a row into view inside the modal's own internal
@@ -144,10 +175,22 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
       for (const li of scanned.line_items) {
         const description = (li.description ?? "").trim();
         if (!description) continue;
-        const ranked = dishRecipes
-          .map((r) => ({ id: r.id, score: matchScore(r.name, description) }))
-          .sort((a, b) => b.score - a.score);
-        const best = ranked[0] && ranked[0].score >= 0.5 ? ranked[0].id : "";
+        // A remembered exact match (this same till description matched
+        // by hand on some earlier scan -- see ReceiptLineAlias) always
+        // wins over a fresh fuzzy guess. Still validated against this
+        // org's current dish list in case the recipe was since removed
+        // from the menu, so a stale alias can't point a row at a dish
+        // that's no longer selectable here.
+        const remembered = li.matched_recipe_id;
+        let best = "";
+        if (remembered && dishRecipes.some((r) => r.id === remembered)) {
+          best = remembered;
+        } else {
+          const ranked = dishRecipes
+            .map((r) => ({ id: r.id, score: matchScore(r.name, description) }))
+            .sort((a, b) => b.score - a.score);
+          best = ranked[0] && ranked[0].score >= 0.5 ? ranked[0].id : "";
+        }
         built.push({
           description,
           matchedRecipeId: best,
@@ -177,7 +220,18 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
   }
 
   const unmatchedCount = rows.filter((r) => !r.skip && !r.matchedRecipeId).length;
-  const importableRows = rows.filter((r) => !r.skip && r.matchedRecipeId);
+  // A matched row whose recipe already has a sale recorded for this
+  // location on saleDate is a duplicate of data already in the ledger --
+  // excluded from what gets imported (see the "Already imported" badge
+  // below), never silently re-sent. Recomputed from alreadyImportedRecipeIds
+  // rather than baked into row state, so changing a row's matched dish
+  // (or the date) re-evaluates it immediately.
+  const alreadyImportedCount = rows.filter(
+    (r) => !r.skip && r.matchedRecipeId && alreadyImportedRecipeIds.has(r.matchedRecipeId)
+  ).length;
+  const importableRows = rows.filter(
+    (r) => !r.skip && r.matchedRecipeId && !alreadyImportedRecipeIds.has(r.matchedRecipeId)
+  );
 
   // Every one of these guards used to just `return` -- clicking Import
   // while any of them were true looked like the button was simply broken
@@ -194,7 +248,11 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
       return;
     }
     if (importableRows.length === 0) {
-      setImportError("Nothing to import — match at least one row to a dish first, or skip rows you don't want.");
+      setImportError(
+        alreadyImportedCount > 0
+          ? "Nothing new to import — every matched row is already recorded for this date."
+          : "Nothing to import — match at least one row to a dish first, or skip rows you don't want."
+      );
       return;
     }
     setImporting(true);
@@ -207,13 +265,18 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
           recipe: r.matchedRecipeId,
           qty: Math.max(1, Math.round(Number(r.qty) || 0)),
           gross_amount: (Number(r.amount) || 0).toFixed(2),
+          // Lets the backend remember "this till description means this
+          // dish" (ReceiptLineAlias) so the same description auto-matches
+          // on the next scan instead of asking again.
+          raw_description: r.description,
         })),
       });
       setResult({
         dishes: importableRows.reduce((sum, r) => sum + (Math.round(Number(r.qty)) || 0), 0),
         revenue: importableRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0),
-        skipped: rows.length - importableRows.length,
+        skipped: rows.length - importableRows.length - alreadyImportedCount,
         undepletedIngredients: sale.skipped_depletion_items || [],
+        duplicateRecipes: sale.skipped_duplicate_recipes || [],
       });
       onImported();
     } catch (err) {
@@ -289,6 +352,10 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
                   } couldn't be read cleanly and ${rawCount - rows.length === 1 ? "was" : "were"} skipped)`
                 : ""}
               .{unmatchedCount > 0 && ` ${unmatchedCount} need${unmatchedCount === 1 ? "s" : ""} a dish picked below before they can be imported. Not on the menu list yet? Skip it and add the dish properly under Recipes, then re-scan.`}
+              {alreadyImportedCount > 0 &&
+                ` ${alreadyImportedCount} ${
+                  alreadyImportedCount === 1 ? "is" : "are"
+                } already recorded for this date and won't be re-added — see the "Already imported" rows below.`}
               {unmatchedCount > 0 && (
                 <button
                   type="button"
@@ -307,14 +374,23 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
             </div>
 
             <div className="scan-rows">
-              {rows.map((row, i) => (
+              {rows.map((row, i) => {
+                const alreadyImported =
+                  !row.skip && !!row.matchedRecipeId && alreadyImportedRecipeIds.has(row.matchedRecipeId);
+                return (
                 <div
                   key={i}
                   ref={(el) => {
                     rowRefs.current[i] = el;
                   }}
                   className={`scan-row-card${
-                    row.skip ? "" : row.matchedRecipeId ? " scan-matched" : " scan-unmatched"
+                    row.skip
+                      ? ""
+                      : alreadyImported
+                      ? " scan-already-imported"
+                      : row.matchedRecipeId
+                      ? " scan-matched"
+                      : " scan-unmatched"
                   }`}
                   style={row.skip ? { opacity: 0.45 } : undefined}
                 >
@@ -322,8 +398,8 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
                     <span className="muted">{row.description}</span>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
                       {!row.skip && (
-                        <span className={`badge ${row.matchedRecipeId ? "b-ok" : "warn"}`}>
-                          {row.matchedRecipeId ? "Matched" : "No match"}
+                        <span className={`badge ${alreadyImported ? "b-muted" : row.matchedRecipeId ? "b-ok" : "warn"}`}>
+                          {alreadyImported ? "Already imported" : row.matchedRecipeId ? "Matched" : "No match"}
                         </span>
                       )}
                       <span className={`badge ${row.confidence !== null && row.confidence >= 80 ? "b-ok" : "warn"}`}>
@@ -373,7 +449,8 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {importError && (
@@ -389,6 +466,10 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
             ✓ Imported — {result.dishes} dish{result.dishes === 1 ? "" : "es"}, £{result.revenue.toFixed(2)}{" "}
             revenue.
             {result.skipped > 0 && ` ${result.skipped} row${result.skipped === 1 ? "" : "s"} skipped.`}{" "}
+            {result.duplicateRecipes.length > 0 &&
+              ` ${result.duplicateRecipes.length} already had a sale recorded for this date and ${
+                result.duplicateRecipes.length === 1 ? "wasn't" : "weren't"
+              } re-added: ${result.duplicateRecipes.join(", ")}.`}{" "}
             {result.undepletedIngredients.length === 0
               ? "Stock has been depleted for every matched ingredient."
               : `Stock was depleted for every ingredient that has a stock holding at this location. ${

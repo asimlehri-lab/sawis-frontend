@@ -1385,6 +1385,10 @@ select:focus {
 .badge { display: inline-block; font-size: 10.5px; font-weight: 700; padding: 3px 9px; border-radius: 20px; }
 .b-low { background: #F7E9DC; color: #C2611D; }
 .b-ok { background: #E4F0EA; color: #1D6B4F; }
+/* Neutral/informational, not a warning -- Scan end-of-day sales'
+   "Already imported" badge/row: catching a duplicate is expected,
+   working behaviour, not a problem the user needs to act on. */
+.b-muted { background: var(--border); color: var(--muted); }
 .b-archived { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
 
 .addbtn {
@@ -1760,9 +1764,13 @@ input[type="file"] {
    these) -- a left-edge accent so a long list of scanned rows can be
    scanned by eye for which still need a dish picked, not just read one
    row at a time. Skipped rows get neither (handled by the opacity dim
-   above instead) since they're already excluded from import. */
+   above instead) since they're already excluded from import -- same
+   reasoning covers an already-imported row, which is also excluded from
+   import but stays visible (not dimmed) since it's informational, not a
+   user choice like Skip. */
 .scan-row-card.scan-matched { border-left: 4px solid var(--good); }
 .scan-row-card.scan-unmatched { border-left: 4px solid #C2611D; }
+.scan-row-card.scan-already-imported { border-left: 4px solid var(--muted); }
 .scan-row-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .scan-row-card .field { margin-bottom: 0; }
 .scan-row-card .field label { margin-bottom: 3px; }

@@ -1528,12 +1528,27 @@ export interface SaleRow {
   // ItemHolding at this sale's location — not an error, just an honest
   // "this part didn't happen" flag instead of silently overclaiming.
   skipped_depletion_items: string[];
+  // Recipe names whose line was silently skipped because this location
+  // already had a SaleLine for that recipe on this same calendar date
+  // (a re-import of an already-recorded day) — see import_sales' own
+  // same-date duplicate check. Also not an error; ScanEodSales.tsx
+  // should already have excluded these from what it sent, so seeing one
+  // here means something recorded the same recipe for the same day in
+  // between the review screen loading and Import being clicked.
+  skipped_duplicate_recipes: string[];
 }
 
 export interface ImportSaleLineInput {
   recipe: string;
   qty: number;
   gross_amount: string;
+  // The OCR text this line was matched from, when the line came off a
+  // scan (Scan end-of-day sales) rather than a CSV row. Optional --
+  // omitted entirely for a CSV-sourced line, which has no OCR text to
+  // remember a match against. When present, the backend upserts a
+  // ReceiptLineAlias so the same till description auto-matches `recipe`
+  // on the next scan instead of asking the user to redo the match.
+  raw_description?: string;
 }
 
 export interface ImportSalesInput {
@@ -1589,6 +1604,26 @@ export async function fetchSaleDates(accessToken: string, location: string): Pro
     accessToken
   );
   return data.dates;
+}
+
+// Recipe ids already recorded (via any SaleLine) for this location on
+// this calendar date -- powers Scan end-of-day sales' "Already imported"
+// row state, so re-scanning/re-importing a day that's already been
+// (partly) imported doesn't re-offer recipes that would just duplicate
+// what's already in the ledger. See SaleViewSet.already_imported_recipes
+// in apps/ledger/viewsets.py, and import_sales' own same-date duplicate
+// check, which this is a client-side preview of.
+export async function fetchAlreadyImportedRecipes(
+  accessToken: string,
+  location: string,
+  date: string
+): Promise<string[]> {
+  const params = new URLSearchParams({ location, date });
+  const data: { recipe_ids: string[] } = await authedFetch(
+    `/api/ledger/sales/already_imported_recipes/?${params.toString()}`,
+    accessToken
+  );
+  return data.recipe_ids;
 }
 
 // ---------------------------------------------------------------------------
@@ -2005,6 +2040,14 @@ export interface ScannedEodSalesLine {
   quantity: string | null;
   price: string | null;
   confidence: number | null;
+  // Set server-side when this line's (normalised) description exactly
+  // matches a ReceiptLineAlias already on file for this org -- i.e. a
+  // user has manually matched this exact till description to a recipe
+  // on some earlier scan. null when there's no remembered match, in
+  // which case ScanEodSales.tsx falls back to its own client-side fuzzy
+  // match same as before. An exact remembered match always wins over a
+  // fresh fuzzy guess.
+  matched_recipe_id: string | null;
 }
 
 export interface ScannedEodSales {
