@@ -1222,6 +1222,11 @@ export interface PurchaseOrder {
   created_by: string;
   lines: POLineRow[];
   total: string;
+  // Sum of every line's line_total with its own effective_vat_rate
+  // applied -- see PurchaseOrderSerializer.get_total_with_vat. total
+  // above stays ex-VAT (qty * unit_price only), matching every
+  // POLine.line_total.
+  total_with_vat: string;
 }
 
 export async function fetchPurchaseOrders(accessToken: string): Promise<PurchaseOrder[]> {

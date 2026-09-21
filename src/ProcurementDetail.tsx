@@ -678,7 +678,7 @@ export default function ProcurementDetail({
               <th>Item</th>
               <th>Qty</th>
               <th>Unit price</th>
-              <th>Line total</th>
+              <th>Line total (ex VAT)</th>
             </tr>
           </thead>
           <tbody>
@@ -693,7 +693,9 @@ export default function ProcurementDetail({
           </tbody>
         </table>
         <p>
-          <b>Total: {formatMoney(Number(po.total), currency)}</b>
+          <b>Total (ex VAT): {formatMoney(Number(po.total), currency)}</b>
+          <br />
+          <b>Total (incl. VAT): {formatMoney(Number(po.total_with_vat), currency)}</b>
         </p>
       </div>
 
@@ -831,8 +833,12 @@ export default function ProcurementDetail({
             />
           </div>
           <div className="field">
-            <label>Total</label>
+            <label>Total (ex VAT)</label>
             <div className="ro">{formatMoney(Number(po.total), currency)}</div>
+          </div>
+          <div className="field">
+            <label>Total (incl. VAT)</label>
+            <div className="ro">{formatMoney(Number(po.total_with_vat), currency)}</div>
           </div>
         </div>
       </div>
@@ -846,7 +852,7 @@ export default function ProcurementDetail({
               <th className="num">Qty</th>
               <th className="num">Unit price</th>
               <th className="num">VAT %</th>
-              <th className="num">Line total</th>
+              <th className="num">Line total (ex VAT)</th>
               <th></th>
             </tr>
           </thead>

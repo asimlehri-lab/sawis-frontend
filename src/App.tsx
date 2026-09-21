@@ -1193,6 +1193,27 @@ export default function App() {
     setScanRows((rows) => rows.map((r, i) => (i === index ? { ...r, ...patch } : r)));
   }
 
+  // handleScanFileSelected's own findKnownSupplierUnit lookup only ever
+  // runs once, synchronously, against whatever supplier the OCR'd vendor
+  // name matched (often nothing -- "Peggy's Coffee & Tea" on the receipt
+  // vs. "Pan Asia" on file, for instance). When that auto-match misses,
+  // every row is built with supplierUnit/packQty blank even if this
+  // supplier's pack size for this item was already taught. Re-running the
+  // lookup here, whenever the user picks/corrects the supplier by hand,
+  // catches that case -- only rows that don't already carry a
+  // supplierUnit are touched, so nothing the user has since typed in
+  // themselves gets overwritten.
+  function handleScanSupplierChange(newSupplierId: string) {
+    setScanSupplierId(newSupplierId);
+    setScanRows((rows) =>
+      rows.map((r) => {
+        if (r.supplierUnit || !r.matchedItemId) return r;
+        const known = findKnownSupplierUnit(itemSupplierLinks, r.matchedItemId, newSupplierId);
+        return known ? { ...r, supplierUnit: known.supplierUnit, packQty: known.packQty } : r;
+      })
+    );
+  }
+
   const scanUnmatchedCount = scanRows.filter((r) => !r.skip && !r.matchedItemId).length;
   const scanIncludedRows = scanRows.filter((r) => !r.skip && r.matchedItemId);
 
@@ -2449,7 +2470,7 @@ export default function App() {
 
                 <div className="field" style={{ marginBottom: 12, display: scanUseMatchedPO ? "none" : undefined }}>
                   <label>Supplier</label>
-                  <select value={scanSupplierId} onChange={(e) => setScanSupplierId(e.target.value)} required>
+                  <select value={scanSupplierId} onChange={(e) => handleScanSupplierChange(e.target.value)} required>
                     <option value="">Choose a supplier…</option>
                     {suppliers.filter((s) => !s.archived).map((s) => (
                       <option key={s.id} value={s.id}>
