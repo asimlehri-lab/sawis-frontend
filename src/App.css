@@ -2197,13 +2197,21 @@ input[type="file"] {
 }
 .eod-dropzone input[type="file"]:disabled { cursor: not-allowed; }
 
+/* Sits directly under the Import sales dropzone as a second, equal-weight
+   way to get today's sales in -- same width and font-size as the
+   dropzone label so the two read as a pair of options, not a primary
+   action with a quiet link tacked on below it. */
+.eod-scan-btn {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px 10px;
+  font-size: 12.5px;
+  text-align: center;
+}
+
 .eod-import-meta { margin-top: 8px; font-size: 11px; color: var(--muted); text-align: right; }
 .eod-import-meta .eod-source { display: block; margin-top: 2px; }
-
-/* The "Test: scan a printed daily receipt" diagnostic link -- see
-   ScanEodSalesTest.tsx. Deliberately styled small/quiet (not a prominent
-   button) while it's a feasibility test, not a finished feature. */
-.eod-scan-btn { display: block; margin-top: 8px; width: auto; font-size: 11px; }
 
 /* Small hover-and-hold info tooltip — currently only used for the CSV
    format hint above, but generic enough to reuse anywhere a control needs

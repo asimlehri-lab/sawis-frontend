@@ -586,6 +586,10 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
             </p>
           )}
 
+          <button type="button" className="btn-ghost eod-scan-btn" onClick={() => setShowScanTest(true)}>
+            📷 Scan a printed daily receipt
+          </button>
+
           <div className="eod-import-meta">
             {!locations.length
               ? "No locations yet"
@@ -599,10 +603,6 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
                 light (green/amber/red) will replace "Manual CSV upload". */}
             <span className="eod-source">Source: manual CSV upload</span>
           </div>
-
-          <button type="button" className="btn-ghost small eod-scan-btn" onClick={() => setShowScanTest(true)}>
-            📷 Scan a printed daily receipt
-          </button>
         </div>
       </div>
 
