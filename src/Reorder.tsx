@@ -35,6 +35,19 @@ interface ReorderLine {
 // sitting right there.
 export default function Reorder({ accessToken, items, locations, itemSupplierLinks }: Props) {
   const [location, setLocation] = useState(locations[0]?.id ?? "");
+  // locations loads asynchronously -- if this component's first render
+  // happens before that resolves, the useState initializer above bakes in ""
+  // permanently, since it only ever runs once. Fill it in as soon as the real
+  // locations array arrives, in the same render pass rather than a useEffect
+  // (this project's lint config flags setState-in-effect outright). Same race
+  // already confirmed live in EndOfDay.tsx (a single-location org's every
+  // import silently failing with "No location selected") -- see that file's
+  // own comment on this exact pattern for the full writeup.
+  const [locationsSeen, setLocationsSeen] = useState(locations);
+  if (locations !== locationsSeen) {
+    setLocationsSeen(locations);
+    if (!location && locations[0]?.id) setLocation(locations[0].id);
+  }
   const currency = locations.find((l) => l.id === location)?.currency;
   const gbp = (n: number) => formatMoney(n, currency);
   const [onHand, setOnHand] = useState<Record<string, number>>({});
