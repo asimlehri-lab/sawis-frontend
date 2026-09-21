@@ -1193,6 +1193,13 @@ export interface POLineRow {
   // conversion feature.
   supplier_unit: string;
   supplier_qty: string | null;
+  // Optional per-line override of the matched item's own VAT rate (same
+  // shape as CatalogItem.vat_rate vs. effective_vat_rate) -- null means
+  // "use the item's own effective_vat_rate", which effective_vat_rate
+  // below already resolves server-side so the frontend never has to
+  // duplicate that fallback.
+  vat_rate: string | null;
+  effective_vat_rate: string | null;
   line_total: string;
 }
 
@@ -1297,6 +1304,23 @@ export async function deletePurchaseOrder(accessToken: string, id: string): Prom
   }
 }
 
+// Admin-only, and only for a Received order (PurchaseOrderViewSet.reopen)
+// -- reverses the stock movements the original receive posted, clears
+// each line's received data, and drops the PO back to Draft so lines
+// unlock for editing and it can be corrected and re-received.
+export async function reopenPurchaseOrder(accessToken: string, id: string): Promise<PurchaseOrder> {
+  const res = await fetch(`${API_URL}/api/procurement/purchase-orders/${id}/reopen/`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const msg = (body && (body.detail || body.error || body.message)) || "Could not reopen this purchase order.";
+    throw new Error(Array.isArray(msg) ? msg.join(" ") : msg);
+  }
+  return res.json();
+}
+
 export interface NewPOLineInput {
   po: string;
   item: string;
@@ -1313,6 +1337,10 @@ export interface NewPOLineInput {
   // or unit?" control.
   supplier_unit?: string;
   supplier_qty?: string;
+  // Omit to fall back to the matched item's own effective_vat_rate --
+  // only sent when the user has actually typed a VAT % on the add-line
+  // form or the Scan receipt review row (see ScanRow.vatPct in App.tsx).
+  vat_rate?: string | null;
 }
 
 export async function createPOLine(accessToken: string, input: NewPOLineInput): Promise<POLineRow> {
@@ -1406,6 +1434,12 @@ export interface ReceiveLineOverride {
   // received order always shows the unit/qty its own invoice actually
   // used, letting the user cross-check the two side by side.
   supplier_qty?: string;
+  // Optional per-line VAT override, as a fraction (e.g. "0.1000" for
+  // 10%) -- only sent when the Scan receipt review row's VAT % differs
+  // from blank, letting a correction made there apply even when
+  // receiving against an already-existing PO line. Omit to leave
+  // whatever's already on the line alone (see PurchaseOrderViewSet.receive).
+  vat_rate?: string;
 }
 
 export async function receivePurchaseOrder(
@@ -1442,6 +1476,7 @@ export interface POLinePatch {
   qty?: string;
   unit_price?: string;
   department?: "kitchen" | "bar" | "foh";
+  vat_rate?: string | null;
 }
 export async function updatePOLine(accessToken: string, id: string, patch: POLinePatch): Promise<POLineRow> {
   const res = await fetch(`${API_URL}/api/procurement/po-lines/${id}/`, {

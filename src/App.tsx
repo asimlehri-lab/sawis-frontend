@@ -184,6 +184,13 @@ interface ScanRow {
   // when supplierUnit is set and isn't auto-convertible via autoFactor
   // (i.e. a pack/case, or a genuine unit-family mismatch). Defaults to "1".
   packQty: string;
+  // VAT rate for this line, as a percentage string for editing (e.g.
+  // "10" for 10%) -- prefilled from the matched item's own
+  // effective_vat_rate but freely editable per line, since a given
+  // supplier's invoice can legitimately carry a different rate for the
+  // same item than this org's own default (see POLine.vat_rate). ""
+  // means "use the matched item's own rate" -- sent as vat_rate: null.
+  vatPct: string;
 }
 
 // Resolves a ScanRow's qty/unitPrice into the matched item's own
@@ -229,6 +236,29 @@ function findKnownSupplierUnit(
   const factor = supplierUnitPriceNum / unitPriceNum;
   if (!Number.isFinite(factor) || factor <= 0) return null;
   return { supplierUnit: link.supplier_unit, packQty: String(factor) };
+}
+
+// A ScanRow's vatPct starts out as the matched item's own effective_vat_rate
+// (CatalogItem.effective_vat_rate is already a fraction, e.g. "0.2000" --
+// same field ItemDetail.tsx's own VAT % input converts to/from) so the
+// review row shows this org's usual rate for that item, ready to correct
+// against the invoice if the supplier actually charged something else.
+// "" (no item matched, or the item has no rate set at all) means "use
+// whatever the item resolves to server-side" -- see POLine.vat_rate.
+function vatPctFromItem(item: CatalogItem | undefined): string {
+  if (!item || !item.effective_vat_rate) return "";
+  const pct = Number(item.effective_vat_rate) * 100;
+  return Number.isFinite(pct) ? String(Math.round(pct * 100) / 100) : "";
+}
+
+// The inverse of vatPctFromItem, for sending a ScanRow's vatPct back to
+// the API -- undefined (not sent) when blank, so the backend falls back
+// to the matched item's own effective_vat_rate rather than being told
+// "0%".
+function vatFractionFromPct(pct: string): string | undefined {
+  if (pct.trim() === "") return undefined;
+  const n = Number(pct);
+  return Number.isFinite(n) ? (n / 100).toFixed(4) : undefined;
 }
 
 // Textract sometimes returns a price/qty with a currency symbol, thousands
@@ -1059,7 +1089,7 @@ export default function App() {
         vat_rate: null,
       });
       setItems((prev) => (prev ? [...prev, created] : [created]));
-      updateScanRow(rowIndex, { matchedItemId: created.id });
+      updateScanRow(rowIndex, { matchedItemId: created.id, vatPct: "" }); // a brand-new item always has vat_rate: null (see createItem above)
       setScanNewItemRow(null);
       setScanNewItemName("");
     } catch (err) {
@@ -1116,6 +1146,7 @@ export default function App() {
           .sort((a, b) => b.score - a.score);
         const best = ranked[0] && ranked[0].score >= 0.5 ? ranked[0].it.id : "";
         const known = findKnownSupplierUnit(itemSupplierLinks, best, resolvedSupplierId);
+        const bestItem = (items ?? []).find((it) => it.id === best);
         return {
           description: li.description,
           matchedItemId: best,
@@ -1125,6 +1156,7 @@ export default function App() {
           skip: false,
           supplierUnit: known?.supplierUnit ?? "",
           packQty: known?.packQty ?? "1",
+          vatPct: vatPctFromItem(bestItem),
         };
       });
       setScanRows(rows);
@@ -1238,6 +1270,10 @@ export default function App() {
               id: line.id,
               received_qty: conv.qty.toFixed(3),
               received_unit_price: conv.unitPrice.toFixed(4),
+              // undefined (not blank/"0") when the row's VAT % field is
+              // empty -- JSON.stringify drops it, so receive() leaves
+              // whatever's already on the line alone instead of zeroing it.
+              vat_rate: vatFractionFromPct(row.vatPct),
               ...(item && row.supplierUnit && row.supplierUnit !== item.base_unit
                 ? {
                     supplier_unit: row.supplierUnit,
@@ -1291,6 +1327,7 @@ export default function App() {
           department: "kitchen",
           qty: conv.qty.toFixed(3),
           unit_price: conv.unitPrice.toFixed(4),
+          vat_rate: vatFractionFromPct(row.vatPct),
         });
         // Only carried through as an override when the supplier's unit
         // actually differs -- receive() below already defaults every
@@ -2569,10 +2606,12 @@ export default function App() {
                                     setScanNewItemError(null);
                                   } else {
                                     const known = findKnownSupplierUnit(itemSupplierLinks, val, scanSupplierId);
+                                    const newItem = (items ?? []).find((it) => it.id === val);
                                     updateScanRow(i, {
                                       matchedItemId: val,
                                       supplierUnit: known?.supplierUnit ?? "",
                                       packQty: known?.packQty ?? "1",
+                                      vatPct: vatPctFromItem(newItem),
                                     });
                                   }
                                 }}
@@ -2702,6 +2741,23 @@ export default function App() {
                                   step="0.01"
                                   value={row.unitPrice}
                                   onChange={(e) => updateScanRow(i, { unitPrice: e.target.value })}
+                                  disabled={row.skip}
+                                />
+                              </div>
+                              <div className="field">
+                                <label>VAT %</label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  step="0.01"
+                                  placeholder={
+                                    items?.find((it) => it.id === row.matchedItemId)?.effective_vat_rate
+                                      ? undefined
+                                      : "—"
+                                  }
+                                  value={row.vatPct}
+                                  onChange={(e) => updateScanRow(i, { vatPct: e.target.value })}
                                   disabled={row.skip}
                                 />
                               </div>

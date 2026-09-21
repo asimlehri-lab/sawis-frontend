@@ -6,6 +6,7 @@ import {
   updatePOLine,
   deletePOLine,
   deletePurchaseOrder,
+  reopenPurchaseOrder,
   receivePurchaseOrder,
   createPurchaseOrder,
   fetchOnHand,
@@ -86,6 +87,12 @@ export default function ProcurementDetail({
   // POLine.qty/unit_price must always be true base_unit figures.
   const [addSupplierUnit, setAddSupplierUnit] = useState("");
   const [addPackQty, setAddPackQty] = useState("1");
+  // Defaults from the selected item's own effective_vat_rate (see
+  // handleAddItemSelect) but freely editable -- same reasoning as
+  // ScanRow.vatPct in App.tsx's Scan receipt: a supplier's invoice can
+  // legitimately carry a different rate than this org's own default for
+  // the same item. "" means "use the item's own rate" (vat_rate: null).
+  const [addVatPct, setAddVatPct] = useState("");
   const [addPackExpanded, setAddPackExpanded] = useState(false);
   const [savingLine, setSavingLine] = useState(false);
   const [lineError, setLineError] = useState<string | null>(null);
@@ -114,6 +121,10 @@ export default function ProcurementDetail({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const [showReopenConfirm, setShowReopenConfirm] = useState(false);
+  const [reopening, setReopening] = useState(false);
+  const [reopenError, setReopenError] = useState<string | null>(null);
 
   function reload() {
     setError(null);
@@ -155,6 +166,21 @@ export default function ProcurementDetail({
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : "Could not delete this purchase order.");
       setDeleting(false);
+    }
+  }
+
+  async function handleReopen() {
+    setReopenError(null);
+    setReopening(true);
+    try {
+      const updated = await reopenPurchaseOrder(accessToken, poId);
+      setPo(updated);
+      setShowReopenConfirm(false);
+      onChanged();
+    } catch (err) {
+      setReopenError(err instanceof Error ? err.message : "Could not reopen this purchase order.");
+    } finally {
+      setReopening(false);
     }
   }
 
@@ -439,6 +465,10 @@ export default function ProcurementDetail({
 
   function handleAddItemSelect(itemId: string) {
     setAddItemId(itemId);
+    const selectedItem = items.find((it) => it.id === itemId);
+    setAddVatPct(
+      selectedItem?.effective_vat_rate ? String(Math.round(Number(selectedItem.effective_vat_rate) * 10000) / 100) : ""
+    );
     const link = po && itemSupplierLinks.find((l) => l.item === itemId && l.supplier === po.supplier);
     const known = po ? findKnownSupplierUnit(itemId, po.supplier) : null;
     if (known) {
@@ -501,6 +531,7 @@ export default function ProcurementDetail({
         department: addDept,
         qty: resolved.qty.toFixed(3),
         unit_price: resolved.unitPrice.toFixed(4),
+        vat_rate: addVatPct.trim() === "" ? undefined : (Number(addVatPct) / 100).toFixed(4),
         // Freeze the as-invoiced unit/qty onto the line itself when a
         // conversion is in play, same as a receive-via-Scan-receipt line
         // already does -- lets a manually-created line show its own
@@ -545,6 +576,30 @@ export default function ProcurementDetail({
       onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not update quantity.");
+    } finally {
+      setSavingLineId(null);
+    }
+  }
+
+  // Blank means "use the matched item's own effective_vat_rate" (see
+  // POLine.vat_rate) -- sent as vat_rate: null rather than skipped
+  // entirely, since clearing the field back to blank after it had an
+  // override must actually clear the override, not leave the old one on
+  // file untouched.
+  async function handleUpdateLineVat(lineId: string, rawPct: string) {
+    const trimmed = rawPct.trim();
+    const fraction = trimmed === "" ? null : (Number(trimmed) / 100).toFixed(4);
+    if (trimmed !== "" && !Number.isFinite(Number(trimmed))) {
+      setError("VAT % must be a number.");
+      return;
+    }
+    setSavingLineId(lineId);
+    try {
+      await updatePOLine(accessToken, lineId, { vat_rate: fraction });
+      reload();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update VAT rate.");
     } finally {
       setSavingLineId(null);
     }
@@ -696,6 +751,38 @@ export default function ProcurementDetail({
             )}
           </div>
         )}
+        {po.status === "received" && isAdmin && (
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px dashed var(--border)" }}>
+            {!showReopenConfirm ? (
+              <button className="btn-ghost" onClick={() => setShowReopenConfirm(true)}>
+                Reopen to draft
+              </button>
+            ) : (
+              <div className="dz-confirm">
+                <p className="hint" style={{ margin: "0 0 8px" }}>
+                  Reverses the stock this order's receipt posted (with an offsetting entry, not a
+                  delete — the record stays in the ledger) and puts it back in Draft so the lines can
+                  be corrected and received again.
+                </p>
+                <div className="dz-confirm-row">
+                  <button className="btn-danger" onClick={handleReopen} disabled={reopening}>
+                    {reopening ? "Reopening…" : "Confirm & reopen"}
+                  </button>
+                  <button
+                    className="btn-ghost"
+                    onClick={() => {
+                      setShowReopenConfirm(false);
+                      setReopenError(null);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+                {reopenError && <p className="error">{reopenError}</p>}
+              </div>
+            )}
+          </div>
+        )}
         {po.status === "received" && po.received_date && (
           <p className="hint" style={{ marginTop: 10 }}>
             Received {po.received_date}.{" "}
@@ -758,6 +845,7 @@ export default function ProcurementDetail({
               <th>Item</th>
               <th className="num">Qty</th>
               <th className="num">Unit price</th>
+              <th className="num">VAT %</th>
               <th className="num">Line total</th>
               <th></th>
             </tr>
@@ -765,7 +853,7 @@ export default function ProcurementDetail({
           <tbody>
             {po.lines.length === 0 && (
               <tr>
-                <td colSpan={5} className="muted empty-row">
+                <td colSpan={6} className="muted empty-row">
                   No lines yet — add items below.
                 </td>
               </tr>
@@ -808,6 +896,29 @@ export default function ProcurementDetail({
                   )}
                 </td>
                 <td className="num">{formatMoney(Number(l.unit_price), currency)}</td>
+                <td className="num">
+                  {editable ? (
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      key={`${l.id}-${l.vat_rate ?? "inherit"}`}
+                      defaultValue={l.effective_vat_rate ? (Number(l.effective_vat_rate) * 100).toFixed(2) : ""}
+                      placeholder={lineItem?.effective_vat_rate ? undefined : "—"}
+                      disabled={savingLineId === l.id}
+                      style={{ width: 64, textAlign: "right" }}
+                      onBlur={(e) => handleUpdateLineVat(l.id, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                      }}
+                    />
+                  ) : l.effective_vat_rate ? (
+                    `${(Number(l.effective_vat_rate) * 100).toFixed(2)}%`
+                  ) : (
+                    "—"
+                  )}
+                </td>
                 <td className="num">{formatMoney(Number(l.line_total), currency)}</td>
                 <td>
                   {editable && (
@@ -862,6 +973,18 @@ export default function ProcurementDetail({
                   step="0.01"
                   value={addPrice}
                   onChange={(e) => setAddPrice(e.target.value)}
+                />
+              </div>
+              <div className="field">
+                <label>VAT %</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  placeholder="—"
+                  value={addVatPct}
+                  onChange={(e) => setAddVatPct(e.target.value)}
                 />
               </div>
             </div>
