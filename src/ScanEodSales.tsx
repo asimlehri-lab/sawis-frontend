@@ -17,7 +17,7 @@ interface Props {
   onClose: () => void;
 }
 
-// One row per Textract-detected line on the printed daily receipt,
+// One row per Textract-detected line on the printed end-of-day sales receipt,
 // pre-filled with a best-guess dish match the user confirms or corrects.
 // Nothing is saved until "Import".
 interface ScanEodRow {
@@ -226,7 +226,7 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
   return (
     <div className="modal-backdrop" onClick={() => !scanning && !importing && onClose()}>
       <div className="modal wide xwide" onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ marginTop: 0 }}>Scan a printed daily receipt</h2>
+        <h2 style={{ marginTop: 0 }}>Scan end-of-day sales</h2>
 
         {rows.length === 0 && !result && (
           <>

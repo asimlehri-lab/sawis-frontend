@@ -196,7 +196,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     questions: [
       {
         q: "How do I import today's sales?",
-        a: "Go to End of day in the sidebar. Two ways in: drag and drop a CSV export from your POS onto the dropzone, or click 📷 Scan a printed daily receipt just below it to photograph the till's printed end-of-day summary instead and review the read-back items before confirming. The page also shows the date of your last import, so you can spot a gap.",
+        a: "Go to End of day in the sidebar. Two ways in: drag and drop a CSV export from your POS onto the dropzone, or click 📷 Scan end-of-day sales just below it to photograph the till's printed end-of-day summary instead and review the read-back items before confirming. The page also shows the date of your last import, so you can spot a gap.",
         fact: "💡 Scanning a photo also reads the sale date straight off the till printout and fills it in for you — it's still an editable field on the review screen, so it's worth a glance before you import in case the printout's date format threw it off.",
       },
       {

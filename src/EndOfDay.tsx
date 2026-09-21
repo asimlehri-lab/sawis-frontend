@@ -594,7 +594,7 @@ export default function EndOfDay({
           )}
 
           <button type="button" className="btn-ghost eod-scan-btn" onClick={() => setShowScanTest(true)}>
-            📷 Scan a printed daily receipt
+            📷 Scan end-of-day sales
           </button>
 
           <div className="eod-import-meta">
