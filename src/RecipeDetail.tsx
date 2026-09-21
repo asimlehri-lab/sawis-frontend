@@ -4,6 +4,8 @@ import {
   updateRecipe,
   createRecipeLine,
   deleteRecipeLine,
+  createItem,
+  BASE_UNITS,
   YIELD_UNITS,
   formatMoney,
   defaultCurrency,
@@ -22,6 +24,10 @@ interface Props {
   onBack: () => void;
   onChanged: () => void;
   onOpenRecipe: (id: string) => void;
+  // Lets App.tsx refetch its own item list after a "+ Add new item…"
+  // quick-add below, same as ItemDetail's own onChanged -- items is a
+  // prop here, so this component can't refresh it on its own.
+  onItemsChanged: () => void;
 }
 
 export default function RecipeDetail({
@@ -33,6 +39,7 @@ export default function RecipeDetail({
   onBack,
   onChanged,
   onOpenRecipe,
+  onItemsChanged,
 }: Props) {
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +53,19 @@ export default function RecipeDetail({
   const [addSubId, setAddSubId] = useState("");
   const [addSubQty, setAddSubQty] = useState("1");
   const [savingLine, setSavingLine] = useState(false);
+
+  // A quick-add "+ Add new item..." inside the ingredient picker below,
+  // same pattern as Import menu list's own inline item creation
+  // (MenuListImportModal.tsx) and Scan receipt's before it. localItems
+  // overlays a just-created item onto the picker immediately -- `items`
+  // is a prop, and won't include it until onItemsChanged()'s refetch
+  // round-trips back down from App.tsx.
+  const [localItems, setLocalItems] = useState<CatalogItem[]>(items);
+  const [newItemOpen, setNewItemOpen] = useState(false);
+  const [newItemName, setNewItemName] = useState("");
+  const [newItemUnit, setNewItemUnit] = useState(BASE_UNITS[0]);
+  const [newItemSaving, setNewItemSaving] = useState(false);
+  const [newItemError, setNewItemError] = useState<string | null>(null);
 
   function reload() {
     setError(null);
@@ -84,7 +104,7 @@ export default function RecipeDetail({
 
   async function handleAddItem() {
     if (!recipe || !addItemId) return;
-    const item = items.find((i) => i.id === addItemId);
+    const item = localItems.find((i) => i.id === addItemId);
     if (!item) return;
     setSavingLine(true);
     setError(null);
@@ -102,6 +122,35 @@ export default function RecipeDetail({
       setError(err instanceof Error ? err.message : "Could not add item.");
     } finally {
       setSavingLine(false);
+    }
+  }
+
+  // "+ Add new item..." picked from the ingredient dropdown below --
+  // same quick-add shape (no sku/vat_rate) as Import menu list's and
+  // Scan receipt's own inline item creation, so the user isn't dropped
+  // out to the Items page mid-recipe just to add something missing from
+  // inventory. Selects the new item right after creating it, so the qty
+  // field next to the picker is immediately ready for "+ Add".
+  async function handleCreateNewItem() {
+    if (!newItemName.trim()) return;
+    setNewItemSaving(true);
+    setNewItemError(null);
+    try {
+      const created = await createItem(accessToken, {
+        name: newItemName.trim(),
+        sku: "",
+        base_unit: newItemUnit,
+        vat_rate: null,
+      });
+      setLocalItems((prev) => [...prev, created]);
+      setAddItemId(created.id);
+      setNewItemOpen(false);
+      setNewItemName("");
+      onItemsChanged();
+    } catch (err) {
+      setNewItemError(err instanceof Error ? err.message : "Could not create item.");
+    } finally {
+      setNewItemSaving(false);
     }
   }
 
@@ -240,9 +289,19 @@ export default function RecipeDetail({
               <div className="addrow">
                 <SearchSelect
                   value={addItemId}
-                  onChange={setAddItemId}
                   aria-label="Add an inventory item"
-                  options={items.map((it) => ({ value: it.id, label: `${it.name} (${it.base_unit})` }))}
+                  pinnedOptions={[{ value: "__new__", label: "+ Add new item…" }]}
+                  options={localItems.map((it) => ({ value: it.id, label: `${it.name} (${it.base_unit})` }))}
+                  onChange={(val) => {
+                    if (val === "__new__") {
+                      setNewItemOpen(true);
+                      setNewItemName("");
+                      setNewItemUnit(BASE_UNITS[0]);
+                      setNewItemError(null);
+                    } else {
+                      setAddItemId(val);
+                    }
+                  }}
                 />
                 <div className="addrow-bottom">
                   <input
@@ -252,11 +311,42 @@ export default function RecipeDetail({
                     value={addItemQty}
                     onChange={(e) => setAddItemQty(e.target.value)}
                   />
-                  <button className="add-btn" disabled={savingLine || !items.length} onClick={handleAddItem}>
+                  <button className="add-btn" disabled={savingLine || !localItems.length} onClick={handleAddItem}>
                     + Add
                   </button>
                 </div>
               </div>
+
+              {newItemOpen && (
+                <div className="scan-new-item">
+                  <input
+                    value={newItemName}
+                    onChange={(e) => setNewItemName(e.target.value)}
+                    placeholder="Item name"
+                  />
+                  <select value={newItemUnit} onChange={(e) => setNewItemUnit(e.target.value)}>
+                    {BASE_UNITS.map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button type="button" className="btn-ghost small" onClick={() => setNewItemOpen(false)}>
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="mini"
+                      onClick={handleCreateNewItem}
+                      disabled={newItemSaving || !newItemName.trim()}
+                    >
+                      {newItemSaving ? "Adding…" : "Add item"}
+                    </button>
+                  </div>
+                  {newItemError && <p className="error">{newItemError}</p>}
+                </div>
+              )}
             </div>
 
             <div className="add-col sub-col">

@@ -1479,6 +1479,7 @@ export default function App() {
             onBack={() => setSelectedRecipeId(null)}
             onChanged={() => loadRecipes(accessToken)}
             onOpenRecipe={(id) => setSelectedRecipeId(id)}
+            onItemsChanged={() => loadItems(accessToken)}
           />
         ) : activePage === "Items" && selectedItemId && accessToken ? (
           <ItemDetail
