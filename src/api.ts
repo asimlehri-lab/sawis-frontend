@@ -1999,3 +1999,43 @@ export async function scanCountSheet(accessToken: string, file: File): Promise<{
   }
   return res.json();
 }
+
+export interface ScannedEodSalesLine {
+  description: string | null;
+  quantity: string | null;
+  price: string | null;
+  confidence: number | null;
+}
+
+export interface ScannedEodSales {
+  line_items: ScannedEodSalesLine[];
+}
+
+// Diagnostic-only for now -- see ScanEodSalesTest.tsx's own header
+// comment and the "scan a printed end-of-day receipt" phase-plan entry in
+// sawis-handoff-summary.md. Uploads a photo of the till's printed daily
+// summary receipt and runs it through AWS Textract's AnalyzeExpense (the
+// same API Scan receipt uses, since this is also a receipt-shaped
+// printout -- an itemized list under a store name/date, not a bordered
+// grid the way a count sheet is). Returns Textract's raw read of each
+// line it found, with no matching to a Recipe and no Sale/SaleLine
+// created -- purely to let a human judge whether Textract reads this
+// specific nested category/item layout well enough to build the real
+// scan-review-import flow on top of, before that flow gets built.
+export async function scanEndOfDaySales(accessToken: string, file: File): Promise<ScannedEodSales> {
+  const formData = new FormData();
+  formData.append("image", file);
+  // No Content-Type header here on purpose -- the browser sets the
+  // multipart boundary itself when the body is a FormData; setting it
+  // by hand breaks the upload.
+  const res = await fetch(`${API_URL}/api/ledger/scan-eod-sales/`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: formData,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error((body && typeof body === "object" && body.detail) || "Could not scan that receipt.");
+  }
+  return res.json();
+}

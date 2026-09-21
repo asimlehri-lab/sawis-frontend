@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import * as XLSX from "xlsx";
 import { fetchLastImportDate, importSales } from "./api";
 import type { CatalogItem, ItemSupplierRow, Location, Recipe } from "./api";
 import Reorder from "./Reorder";
 import EodReport from "./EodReport";
 import SearchSelect from "./SearchSelect";
+import ScanEodSalesTest from "./ScanEodSalesTest";
 
 interface Props {
   accessToken: string;
@@ -156,9 +158,10 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
   // raw lines that came from — purely so the review modal can say
   // "aggregated from N lines" instead of leaving the row-count drop
   // unexplained. null/0 before anything's been parsed yet.
-  const [sourceFormat, setSourceFormat] = useState<"simple" | "pos" | null>(null);
+  const [sourceFormat, setSourceFormat] = useState<"simple" | "pos" | "excel" | null>(null);
   const [rawLineCount, setRawLineCount] = useState(0);
   const [dragOver, setDragOver] = useState(false);
+  const [showScanTest, setShowScanTest] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [result, setResult] = useState<{
@@ -250,11 +253,61 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
   // this screen actually needs). Aggregated by (date, ArtikelID or, if
   // that's blank, the lowercased name) before matching, so the review
   // table shows one row per dish per day exactly like format 1 does.
-  // Returns null if the header doesn't look like this format at all.
+  //
+  // The actual row-walking/aggregation logic lives in aggregatePosRows
+  // below, shared with the .xlsx path (Format 3) — the same columns, the
+  // same aggregation, just read from a workbook sheet instead of a
+  // semicolon-delimited text file. Returns null if the header doesn't
+  // look like this format at all.
   function parsePosExport(text: string): ParsedRow[] | null {
-    const table = parseCsv(text, ";");
+    return aggregatePosRows(parseCsv(text, ";"));
+  }
+
+  // A raw table cell, from either source: a CSV cell is always a string;
+  // an Excel cell SheetJS hands back can be a genuine JS number (most POS
+  // exports store Menge/Gesamt as real numeric cells, not formatted
+  // text) or a Date (when the workbook is read with cellDates: true, as
+  // parsePosExcelTable below does). Keeping the aggregation logic
+  // cell-type-aware here, rather than coercing everything to a string up
+  // front, avoids a real bug: parseGermanNumber assumes a comma decimal
+  // ("83,50"), and blindly stringifying a genuine number 83.5 first would
+  // feed it "83.5" — read as "8350" by parseGermanNumber's dot-stripping,
+  // silently 100x too large.
+  type PosCell = string | number | Date | undefined;
+
+  function cellToText(v: PosCell): string {
+    if (v === undefined || v === null) return "";
+    if (v instanceof Date) return v.toISOString();
+    return typeof v === "number" ? String(v) : v.trim();
+  }
+
+  function cellToNumber(v: PosCell): number {
+    if (typeof v === "number") return v;
+    return parseGermanNumber(cellToText(v));
+  }
+
+  function cellToDateKey(v: PosCell): string {
+    if (v instanceof Date) {
+      return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, "0")}-${String(v.getDate()).padStart(2, "0")}`;
+    }
+    return normalizePosDate(cellToText(v).split(" ")[0]);
+  }
+
+  // Shared by both the CSV POS export (Format 2) and the .xlsx POS export
+  // (Format 3, see parsePosExcelTable) — same expected columns
+  // (Datum/Uhrzeit, optional ArtikelID, Artikelbezeichnung, Menge,
+  // Gesamt), matched case-insensitively, same aggregation by (date,
+  // ArtikelID-or-name). This is a first pass built from the till's known
+  // CSV column layout — the .xlsx path hasn't been tried yet against a
+  // real item-level Excel export from this till, only against the plain
+  // Datum/Uhrzeit;ArtikelID;Artikelbezeichnung;Menge;Gesamt shape already
+  // proven via CSV. If a real export turns out to use different column
+  // names, this returns null (same "unrecognised format" message as any
+  // other unmatched file) rather than silently importing anything wrong
+  // — safe to try, worth revisiting once a real file is in hand.
+  function aggregatePosRows(table: PosCell[][]): ParsedRow[] | null {
     if (table.length < 1) return null;
-    const header = table[0].map((h) => h.trim());
+    const header = table[0].map((h) => cellToText(h));
     const idx = (name: string) => header.findIndex((h) => h.toLowerCase() === name.toLowerCase());
     const dateIdx = idx("Datum/Uhrzeit");
     const artikelIdIdx = idx("ArtikelID");
@@ -266,12 +319,12 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
     const agg = new Map<string, { date: string; posId: string; name: string; qty: number; revenue: number }>();
     let rawLines = 0;
     for (const r of table.slice(1)) {
-      const date = normalizePosDate((r[dateIdx] || "").split(" ")[0]);
-      const name = (r[nameIdx] || "").trim();
+      const date = cellToDateKey(r[dateIdx]);
+      const name = cellToText(r[nameIdx]);
       if (!date || !name) continue;
-      const posId = artikelIdIdx > -1 ? (r[artikelIdIdx] || "").trim() : "";
-      const qty = parseGermanNumber(r[qtyIdx] || "0");
-      const revenue = parseGermanNumber(r[totalIdx] || "0");
+      const posId = artikelIdIdx > -1 ? cellToText(r[artikelIdIdx]) : "";
+      const qty = cellToNumber(r[qtyIdx]);
+      const revenue = cellToNumber(r[totalIdx]);
       if (qty <= 0) continue;
       rawLines++;
       const key = `${date}|${posId || name.toLowerCase()}`;
@@ -299,36 +352,87 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
     return parsed;
   }
 
+  // Format 3 — the same POS export, as an .xlsx/.xls workbook instead of
+  // a semicolon CSV (most POS/till software offers both from the same
+  // export screen). Reads the first sheet as a plain array-of-arrays
+  // (header: 1, so row 0 is the header row exactly like the CSV path) —
+  // cellDates: true so a date column comes back as a real JS Date rather
+  // than an Excel day-serial number, which cellToDateKey above already
+  // knows how to handle directly.
+  function parsePosExcelTable(file: File): Promise<PosCell[][]> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const wb = XLSX.read(reader.result, { type: "array", cellDates: true });
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          const table = XLSX.utils.sheet_to_json<PosCell[]>(sheet, { header: 1, blankrows: false });
+          resolve(table);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  // Applies a parse result (or a null "didn't recognise this") the same
+  // way regardless of which of the three formats/readers produced it —
+  // shared by processFile's text branch (Formats 1/2) and its .xlsx
+  // branch (Format 3) below so the outcome handling can't drift between
+  // them.
+  function applyParseResult(parsed: ParsedRow[] | null, format: "simple" | "pos" | "excel" | null) {
+    if (parsed === null) {
+      setParseError(
+        'Unrecognised file — expected either "date,dish,qty,revenue" columns, a POS export with ' +
+          '"Datum/Uhrzeit;ArtikelID;Artikelbezeichnung;Menge;Gesamt" columns, or that same POS export as ' +
+          "an Excel file."
+      );
+      setRows([]);
+      setSourceFormat(null);
+      return;
+    }
+    setSourceFormat(format);
+    setRows(parsed);
+    if (parsed.length === 0) {
+      setParseError(
+        format === "simple"
+          ? "No valid rows found — check the date/dish/qty/revenue columns."
+          : "No valid sales lines found in this POS export."
+      );
+    } else {
+      setShowImportModal(true);
+    }
+  }
+
   function processFile(file: File) {
     setFileName(file.name);
     setParseError(null);
     setImportError(null);
     setResult(null);
+
+    const isExcel = /\.xlsx?$/i.test(file.name);
+    if (isExcel) {
+      parsePosExcelTable(file)
+        .then((table) => {
+          const parsed = aggregatePosRows(table);
+          applyParseResult(parsed, parsed !== null ? "excel" : null);
+        })
+        .catch(() => {
+          setParseError("Could not read this Excel file.");
+          setRows([]);
+          setSourceFormat(null);
+        });
+      return;
+    }
+
     readFileSmart(file)
       .then((text) => {
         const simple = parseSimpleCsv(text);
         const parsed = simple !== null ? simple : parsePosExport(text);
         const format: "simple" | "pos" | null = simple !== null ? "simple" : parsed !== null ? "pos" : null;
-        if (parsed === null) {
-          setParseError(
-            'Unrecognised file — expected either "date,dish,qty,revenue" columns, or a POS export with ' +
-              '"Datum/Uhrzeit;ArtikelID;Artikelbezeichnung;Menge;Gesamt" columns.'
-          );
-          setRows([]);
-          setSourceFormat(null);
-          return;
-        }
-        setSourceFormat(format);
-        setRows(parsed);
-        if (parsed.length === 0) {
-          setParseError(
-            format === "pos"
-              ? "No valid sales lines found in this POS export."
-              : "No valid rows found — check the date/dish/qty/revenue columns."
-          );
-        } else {
-          setShowImportModal(true);
-        }
+        applyParseResult(parsed, format);
       })
       .catch(() => {
         setParseError("Could not read this file.");
@@ -449,7 +553,7 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
               <span className="info-tooltip">
                 ⇪ Import sales
                 <span className="info-tooltip-body">
-                  Two file types accepted — detected automatically from the header row.
+                  Three file shapes accepted — detected automatically from the header row.
                   <br />
                   <br />
                   <b>Simple CSV</b> — header <code>date,dish,qty,revenue</code>, e.g. "2026-08-15,
@@ -459,19 +563,20 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
                   same value on every row for that date.
                   <br />
                   <br />
-                  <b>Raw POS export</b> — the till's own semicolon-separated report (columns include{" "}
-                  <code>Datum/Uhrzeit</code>, <code>ArtikelID</code>, <code>Artikelbezeichnung</code>,{" "}
-                  <code>Menge</code>, <code>Gesamt</code>). Its many rows per sale are added up automatically into
-                  one line per dish per day. Matches by the recipe's POS ID first, then by name.
+                  <b>Raw POS export</b> — the till's own semicolon-separated report, as a CSV or as an Excel file
+                  (columns include <code>Datum/Uhrzeit</code>, <code>ArtikelID</code>,{" "}
+                  <code>Artikelbezeichnung</code>, <code>Menge</code>, <code>Gesamt</code>). Its many rows per sale
+                  are added up automatically into one line per dish per day. Matches by the recipe's POS ID first,
+                  then by name.
                 </span>
               </span>
             </div>
             <input
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               onChange={handleFileInput}
               disabled={!locations.length}
-              aria-label="Import sales CSV"
+              aria-label="Import sales file"
             />
           </div>
 
@@ -494,8 +599,19 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
                 light (green/amber/red) will replace "Manual CSV upload". */}
             <span className="eod-source">Source: manual CSV upload</span>
           </div>
+
+          {/* Diagnostic-only, not a real import path yet — see
+              ScanEodSalesTest.tsx's own header comment. Deliberately kept
+              small/low-key (a plain text-style link, not a prominent
+              button) while it's still a feasibility test rather than a
+              finished feature. */}
+          <button type="button" className="btn-ghost small eod-scan-test-btn" onClick={() => setShowScanTest(true)}>
+            🔬 Test: scan a printed daily receipt
+          </button>
         </div>
       </div>
+
+      {showScanTest && <ScanEodSalesTest accessToken={accessToken} onClose={() => setShowScanTest(false)} />}
 
       <div className="rtabs" style={{ marginBottom: 16 }}>
         <button className={`rtab ${tab === "overview" ? "on" : ""}`} onClick={() => setTab("overview")}>
@@ -525,9 +641,9 @@ export default function EndOfDay({ accessToken, locations, recipes, items, itemS
                   <div className="im-note">
                     ✓{" "}
                     <b>
-                      {rows.length} {sourceFormat === "pos" ? "dishes" : "rows"}
+                      {rows.length} {sourceFormat === "pos" || sourceFormat === "excel" ? "dishes" : "rows"}
                     </b>{" "}
-                    {sourceFormat === "pos"
+                    {sourceFormat === "pos" || sourceFormat === "excel"
                       ? `added up from ${rawLineCount} transaction line${rawLineCount === 1 ? "" : "s"} in ${fileName}.`
                       : `read from ${fileName}.`}
                     {unmatchedCount > 0 && ` ${unmatchedCount} need matching below before they can be imported.`}
