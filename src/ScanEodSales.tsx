@@ -55,6 +55,31 @@ function matchScore(ours: string, raw: string): number {
   return hit / a.size;
 }
 
+// matchScore above only compares letters -- it strips every digit and
+// unit, so "Pink Lychee Iced Tea (0.3L)" and "...(0.7L)" score identically
+// on name alone. That's fine when there's only one size on the menu, but
+// when the same drink exists in multiple sizes as separate recipes, a tied
+// score used to fall back to whatever order the dish list happened to be
+// in -- not the size actually printed on the receipt. This extracts a
+// size in liters from either a recipe name or an OCR'd receipt line, so
+// the ranking below can tell those recipes apart instead of guessing.
+// Handles the parenthetical "(0.3L)" recipe-name convention, plain
+// "0.7L"/"700ml", and Textract's tendency to OCR an Austrian decimal
+// comma as a space -- "0, 7" -- which normalizes to "0.7" here. Returns
+// null when no size-looking number is present, so unsized dishes (most
+// food items) are unaffected and fall back to name-only matching.
+function extractSizeLiters(raw: string): number | null {
+  const s = raw.toLowerCase().replace(/(\d)\s*,\s*(\d)/g, "$1.$2");
+  const matches = [...s.matchAll(/(\d+(?:\.\d+)?)\s?(ml|cl|l)?\b/g)];
+  if (!matches.length) return null;
+  const chosen = matches.find((m) => m[2]) ?? matches[matches.length - 1];
+  const value = parseFloat(chosen[1]);
+  if (Number.isNaN(value)) return null;
+  if (chosen[2] === "ml") return value / 1000;
+  if (chosen[2] === "cl") return value / 100;
+  return value;
+}
+
 // Textract sometimes returns a price/qty with a currency symbol, thousands
 // separator, or stray whitespace -- strip everything but digits and
 // separators, then figure out which separator (if any) is the real
@@ -186,8 +211,20 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
         if (remembered && dishRecipes.some((r) => r.id === remembered)) {
           best = remembered;
         } else {
+          const rawSize = extractSizeLiters(description);
           const ranked = dishRecipes
-            .map((r) => ({ id: r.id, score: matchScore(r.name, description) }))
+            .map((r) => {
+              let score = matchScore(r.name, description);
+              // A recipe whose own name carries a size that actively
+              // disagrees with the receipt line's size can't be the right
+              // match, even if the words tie -- disqualify it outright
+              // rather than let list order settle the tie.
+              const nameSize = extractSizeLiters(r.name);
+              if (rawSize !== null && nameSize !== null && Math.abs(rawSize - nameSize) > 0.01) {
+                score = 0;
+              }
+              return { id: r.id, score };
+            })
             .sort((a, b) => b.score - a.score);
           best = ranked[0] && ranked[0].score >= 0.5 ? ranked[0].id : "";
         }
