@@ -1782,6 +1782,9 @@ input[type="file"] {
    it reads clearly as "not a dish" at a glance. .scan-category-children
    reuses .scan-rows' own gap so nested rows line up with top-level ones. */
 .scan-category-group { border: 1px dashed var(--border); border-radius: 10px; overflow: hidden; }
+/* Now a plain div, not a button -- it hosts two separate buttons (the
+   expand/collapse toggle, and "Not a category" to undo a wrong
+   detection), so it can no longer be a single click target itself. */
 .scan-category-header {
   width: 100%;
   display: flex;
@@ -1790,13 +1793,23 @@ input[type="file"] {
   gap: 10px;
   padding: 8px 12px;
   background: var(--bg);
+}
+.scan-category-header:hover { background: var(--brand-soft); }
+.scan-category-header-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  background: none;
   border: none;
   font: inherit;
   color: var(--ink);
   cursor: pointer;
   text-align: left;
+  padding: 0;
 }
-.scan-category-header:hover { background: var(--brand-soft); }
 .scan-category-children { display: flex; flex-direction: column; gap: 8px; padding: 8px; border-top: 1px dashed var(--border); }
 
 .rtabs {

@@ -110,7 +110,10 @@ function extractSizeLiters(raw: string): number | null {
 // index -> its child row indices, in receipt order. When the heuristic
 // gets a row wrong either way, nothing is lost: an undetected category
 // just shows up as an ordinary no-match row, and a detected group can
-// always be expanded to review its rows individually.
+// always be expanded to review its rows individually -- or, if the
+// detection itself was wrong, dissolved entirely with the "Not a
+// category" control (see dissolveCategory below), which reverts the
+// head row to a normal row and lets its children stand on their own.
 function detectCategoryGroups(built: { amount: string }[]): Map<number, number[]> {
   const groups = new Map<number, number[]>();
   let i = 0;
@@ -231,6 +234,29 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
       else next.add(headIndex);
       return next;
     });
+  }
+
+  // Undoes a wrong auto-detection: the heuristic in detectCategoryGroups
+  // is a best guess (two-or-more rows happening to sum to a prior row's
+  // amount), so it can occasionally misfire -- either flagging a real
+  // dish as a category total, or grouping the wrong rows under one.
+  // Removing the map entry is enough to fix both: the head row falls out
+  // of categoryGroups/isCategoryTotal and renders as an ordinary row
+  // again (un-skipped, so it's immediately matchable/importable like any
+  // other), and its former children stop being excluded by childToHead
+  // and render as standalone rows too -- no per-child bookkeeping needed.
+  function dissolveCategory(headIndex: number) {
+    setCategoryGroups((prev) => {
+      const next = new Map(prev);
+      next.delete(headIndex);
+      return next;
+    });
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      next.delete(headIndex);
+      return next;
+    });
+    updateRow(headIndex, { isCategoryTotal: false, skip: false });
   }
 
   useEffect(() => {
@@ -646,17 +672,27 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
                 const collapsed = collapsedGroups.has(block.headIndex);
                 return (
                   <div key={`cat-${block.headIndex}`} className="scan-category-group">
-                    <button
-                      type="button"
-                      className="scan-category-header"
-                      onClick={() => toggleCategory(block.headIndex)}
-                    >
-                      <span>
-                        {head.description} — {block.childIndices.length} item
-                        {block.childIndices.length === 1 ? "" : "s"}, €{Number(head.amount).toFixed(2)}
-                      </span>
-                      <span className="btn-ghost small">{collapsed ? "Show items" : "Hide items"}</span>
-                    </button>
+                    <div className="scan-category-header">
+                      <button
+                        type="button"
+                        className="scan-category-header-toggle"
+                        onClick={() => toggleCategory(block.headIndex)}
+                      >
+                        <span>
+                          {head.description} — {block.childIndices.length} item
+                          {block.childIndices.length === 1 ? "" : "s"}, €{Number(head.amount).toFixed(2)}
+                        </span>
+                        <span className="btn-ghost small">{collapsed ? "Show items" : "Hide items"}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ghost small"
+                        title="If this was wrongly detected as a category total, undo it -- it becomes a normal row you can match or skip, and its items stand on their own."
+                        onClick={() => dissolveCategory(block.headIndex)}
+                      >
+                        Not a category
+                      </button>
+                    </div>
                     {!collapsed && (
                       <div className="scan-category-children">
                         {visibleChildren.map((idx) => renderRow(idx))}
