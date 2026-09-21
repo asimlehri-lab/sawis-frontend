@@ -1742,6 +1742,13 @@ input[type="file"] {
    at any modal/viewport size, phone included, with no horizontal scroll. */
 .scan-rows { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
 .scan-row-card { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; background: var(--surface); }
+/* Scan EOD sales only (App.tsx's own Scan receipt review doesn't use
+   these) -- a left-edge accent so a long list of scanned rows can be
+   scanned by eye for which still need a dish picked, not just read one
+   row at a time. Skipped rows get neither (handled by the opacity dim
+   above instead) since they're already excluded from import. */
+.scan-row-card.scan-matched { border-left: 4px solid var(--good); }
+.scan-row-card.scan-unmatched { border-left: 4px solid #C2611D; }
 .scan-row-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .scan-row-card .field { margin-bottom: 0; }
 .scan-row-card .field label { margin-bottom: 3px; }

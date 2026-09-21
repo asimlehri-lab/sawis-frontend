@@ -1856,6 +1856,7 @@ export default function App() {
                 items={items ?? []}
                 itemSupplierLinks={itemSupplierLinks}
                 initialTab={eodInitialTab}
+                onRecipesChanged={() => loadRecipes(accessToken)}
               />
             )}
 
