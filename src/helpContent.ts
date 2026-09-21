@@ -187,6 +187,41 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
   },
   {
+    id: "waste-log",
+    title: "Waste log",
+    keywords: [
+      "waste", "wastage", "spoilage", "breakage", "spill", "log waste",
+      "theft", "over-portioning", "miscount",
+    ],
+    questions: [
+      {
+        q: "How do I log waste?",
+        a: "Go to Waste log in the sidebar. Pick the item, a reason, the location and department, and a quantity, then click Log waste.",
+        fact: "💡 Picking an item that already has stock on hand somewhere auto-fills the location and department from wherever it's held, so you usually only need to correct those if the waste happened somewhere else.",
+      },
+      {
+        q: "Does logging waste affect my stock count?",
+        a: "Yes — logging waste immediately deducts that quantity from on-hand stock at the location and department you picked, the same as it would if the item had genuinely gone out the door. There's no separate step needed to update stock afterward.",
+      },
+      {
+        q: "How is a waste event's value worked out?",
+        a: "From the item's cheapest linked supplier price at the moment you log it — shown next to the item picker as soon as you choose one. If the item has no supplier price on file yet, it logs at £0 until one is linked; a price you link afterward doesn't retroactively update entries already logged.",
+      },
+      {
+        q: "What reasons can I pick when logging waste?",
+        a: "Spoilage, Breakage/spill, Over-portioning, Miscount, Theft suspected, Delivery short, Used in special, or Other.",
+      },
+      {
+        q: "How do I see waste broken down by reason?",
+        a: "Waste log's own \"By reason\" card (next to Recent waste) breaks down all-time waste value by reason. The Recent waste table beside it can also be filtered to one reason at a time using the chips above it.",
+      },
+      {
+        q: "What do the numbers at the top of Waste log show?",
+        a: "Three cards: total waste value and number of events logged over the last 7 days, and the costliest reason over that same period. Waste as a percentage of sales isn't tracked yet — there's no sales figure wired into this page currently.",
+      },
+    ],
+  },
+  {
     id: "eod-reports",
     title: "End of day & Reports",
     keywords: [
