@@ -19,12 +19,6 @@ interface Props {
   // App.tsx's activePage === "End of day" (conditional render), so a fresh
   // read of this prop on every mount is enough -- no sync effect needed.
   initialTab?: "overview" | "reorder";
-  // Refetches App.tsx's own recipes list after ScanEodSales quick-adds a
-  // dish, so it's there app-wide (Recipes, Items, another End of day
-  // visit) rather than only visible for the rest of this scan session.
-  // Optional -- App.tsx is the only real caller and always passes it;
-  // left optional so nothing else that renders EndOfDay is forced to.
-  onRecipesChanged?: () => void;
 }
 
 interface ParsedRow {
@@ -159,7 +153,6 @@ export default function EndOfDay({
   items,
   itemSupplierLinks,
   initialTab,
-  onRecipesChanged,
 }: Props) {
   const [tab, setTab] = useState<"overview" | "reorder">(initialTab ?? "overview");
   const [location, setLocation] = useState(locations[0]?.id ?? "");
@@ -626,7 +619,6 @@ export default function EndOfDay({
           location={location}
           dishRecipes={dishRecipes}
           onImported={() => refreshLastImport(location)}
-          onRecipesChanged={onRecipesChanged}
           onClose={() => setShowScanTest(false)}
         />
       )}

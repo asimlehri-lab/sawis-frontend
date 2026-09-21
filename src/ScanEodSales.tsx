@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { createRecipe, importSales, scanEndOfDaySales, YIELD_UNITS } from "./api";
+import { importSales, scanEndOfDaySales } from "./api";
 import type { Recipe } from "./api";
 import SearchSelect from "./SearchSelect";
 import Loader from "./Loader";
@@ -14,13 +14,6 @@ interface Props {
   // Lets EndOfDay refresh its "Last imported" line after a successful
   // import here, same as its own handleImport does.
   onImported: () => void;
-  // Lets App.tsx refetch the canonical recipe list after a dish is
-  // quick-added from this modal, same as Settings' own onRecipesChanged.
-  // Optional so this still compiles for any caller that doesn't wire it
-  // up -- a missed refresh just means the new dish shows up on the next
-  // unrelated reload rather than immediately elsewhere in the app; it's
-  // still usable right away within this modal (see newDishRows below).
-  onRecipesChanged?: () => void;
   onClose: () => void;
 }
 
@@ -105,14 +98,7 @@ function normalizeReceiptDate(raw: string | null): string {
   return today;
 }
 
-export default function ScanEodSales({
-  accessToken,
-  location,
-  dishRecipes,
-  onImported,
-  onRecipesChanged,
-  onClose,
-}: Props) {
+export default function ScanEodSales({ accessToken, location, dishRecipes, onImported, onClose }: Props) {
   const [scanning, setScanning] = useState(false);
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -127,21 +113,6 @@ export default function ScanEodSales({
     skipped: number;
     undepletedIngredients: string[];
   } | null>(null);
-
-  // Dishes created right here via "+ Add new dish…" -- kept alongside the
-  // dishRecipes prop (not waiting on onRecipesChanged's refetch) so a
-  // just-created dish is immediately pickable for every other row in this
-  // same scan, not just the row that created it.
-  const [newDishRows, setNewDishRows] = useState<Recipe[]>([]);
-  const allDishRecipes = dishRecipes.concat(newDishRows);
-
-  // Which row's "+ Add new dish…" mini-form is open, if any -- only one
-  // at a time, same pattern as App.tsx's scanNewItemRow for Scan receipt.
-  const [newDishRowIndex, setNewDishRowIndex] = useState<number | null>(null);
-  const [newDishName, setNewDishName] = useState("");
-  const [newDishPrice, setNewDishPrice] = useState("");
-  const [creatingDish, setCreatingDish] = useState(false);
-  const [newDishError, setNewDishError] = useState<string | null>(null);
 
   // Row DOM nodes, keyed by index -- used only by "Jump to next
   // unmatched" to scroll a row into view inside the modal's own internal
@@ -161,36 +132,6 @@ export default function ScanEodSales({
     const next = unmatchedIdx.find((i) => i > jumpCursorRef.current) ?? unmatchedIdx[0];
     jumpCursorRef.current = next;
     rowRefs.current[next]?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }
-
-  function openNewDishForm(i: number, prefillName: string) {
-    setNewDishRowIndex(i);
-    setNewDishName(prefillName);
-    setNewDishPrice("");
-    setNewDishError(null);
-  }
-
-  async function handleCreateDish(i: number) {
-    if (!newDishName.trim()) return;
-    setCreatingDish(true);
-    setNewDishError(null);
-    try {
-      const created = await createRecipe(accessToken, {
-        kind: "dish",
-        name: newDishName.trim(),
-        yield_qty: "1",
-        yield_unit: YIELD_UNITS[0],
-        ...(newDishPrice.trim() ? { menu_price: newDishPrice.trim() } : {}),
-      });
-      setNewDishRows((prev) => [...prev, created]);
-      updateRow(i, { matchedRecipeId: created.id });
-      setNewDishRowIndex(null);
-      onRecipesChanged?.();
-    } catch (err) {
-      setNewDishError(err instanceof Error ? err.message : "Could not create dish.");
-    } finally {
-      setCreatingDish(false);
-    }
   }
 
   async function handleFile(file: File) {
@@ -347,7 +288,7 @@ export default function ScanEodSales({
                     rawCount - rows.length
                   } couldn't be read cleanly and ${rawCount - rows.length === 1 ? "was" : "were"} skipped)`
                 : ""}
-              .{unmatchedCount > 0 && ` ${unmatchedCount} need${unmatchedCount === 1 ? "s" : ""} a dish picked below before they can be imported.`}
+              .{unmatchedCount > 0 && ` ${unmatchedCount} need${unmatchedCount === 1 ? "s" : ""} a dish picked below before they can be imported. Not on the menu list yet? Skip it and add the dish properly under Recipes, then re-scan.`}
               {unmatchedCount > 0 && (
                 <button
                   type="button"
@@ -398,51 +339,13 @@ export default function ScanEodSales({
                     <label>Matched dish</label>
                     <SearchSelect
                       value={row.matchedRecipeId}
-                      onChange={(val) => {
-                        if (val === "__new__") {
-                          openNewDishForm(i, row.description);
-                        } else {
-                          updateRow(i, { matchedRecipeId: val });
-                        }
-                      }}
+                      onChange={(val) => updateRow(i, { matchedRecipeId: val })}
                       disabled={row.skip}
                       placeholder="Pick a dish…"
                       aria-label="Matched dish"
                       style={{ width: "100%" }}
-                      pinnedOptions={[{ value: "__new__", label: "+ Add new dish…" }]}
-                      options={allDishRecipes.map((d) => ({ value: d.id, label: d.name }))}
+                      options={dishRecipes.map((d) => ({ value: d.id, label: d.name }))}
                     />
-                    {newDishRowIndex === i && (
-                      <div className="scan-new-item">
-                        <input
-                          value={newDishName}
-                          onChange={(e) => setNewDishName(e.target.value)}
-                          placeholder="Dish name"
-                        />
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={newDishPrice}
-                          onChange={(e) => setNewDishPrice(e.target.value)}
-                          placeholder="Menu price (optional)"
-                        />
-                        <div style={{ display: "flex", gap: 6 }}>
-                          <button type="button" className="btn-ghost small" onClick={() => setNewDishRowIndex(null)}>
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            className="mini"
-                            onClick={() => handleCreateDish(i)}
-                            disabled={creatingDish || !newDishName.trim()}
-                          >
-                            {creatingDish ? "Adding…" : "Add dish"}
-                          </button>
-                        </div>
-                        {newDishError && <p className="error">{newDishError}</p>}
-                      </div>
-                    )}
                   </div>
 
                   <div className="scan-row-nums">
