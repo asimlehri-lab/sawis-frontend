@@ -66,6 +66,7 @@ import Settings from "./Settings";
 import Reports from "./Reports";
 import SearchSelect from "./SearchSelect";
 import NotificationBell from "./NotificationBell";
+import HelpChat from "./HelpChat";
 import "./App.css";
 
 const NAV_ITEMS = [
@@ -441,6 +442,7 @@ export default function App() {
   const [selectedPOId, setSelectedPOId] = useState<string | null>(null);
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
   const [showSupplierList, setShowSupplierList] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [showNewPO, setShowNewPO] = useState(false);
   const [newPOSupplier, setNewPOSupplier] = useState("");
   const [newPOLocation, setNewPOLocation] = useState("");
@@ -1438,24 +1440,35 @@ export default function App() {
       <main className="content">
         <div className="content-header">
           {accessToken && (
-            <NotificationBell
-              items={items ?? []}
-              locations={locations}
-              stockMovements={stockMovements}
-              suppliers={suppliers}
-              accessToken={accessToken}
-              onViewReorder={() => goToNav("End of day", { eodTab: "reorder" })}
-              onOpenPO={(id) => {
-                goToNav("Procurement");
-                setSelectedPOId(id);
-              }}
-              onOpenSupplier={(id) => {
-                goToNav("Procurement");
-                setSelectedSupplierId(id);
-              }}
-            />
+            <>
+              <button
+                type="button"
+                className="help-btn"
+                onClick={() => setShowHelp(true)}
+                aria-label="Help"
+              >
+                ?
+              </button>
+              <NotificationBell
+                items={items ?? []}
+                locations={locations}
+                stockMovements={stockMovements}
+                suppliers={suppliers}
+                accessToken={accessToken}
+                onViewReorder={() => goToNav("End of day", { eodTab: "reorder" })}
+                onOpenPO={(id) => {
+                  goToNav("Procurement");
+                  setSelectedPOId(id);
+                }}
+                onOpenSupplier={(id) => {
+                  goToNav("Procurement");
+                  setSelectedSupplierId(id);
+                }}
+              />
+            </>
           )}
         </div>
+        {showHelp && <HelpChat onClose={() => setShowHelp(false)} />}
         {activePage === "Recipes" && selectedRecipeId && accessToken ? (
           <RecipeDetail
             recipeId={selectedRecipeId}

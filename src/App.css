@@ -239,6 +239,27 @@ h1 {
 }
 .notif-bell:hover { background: var(--bg); }
 
+/* Same look/sizing as .notif-bell -- a plain icon-button in the content
+   header, opening HelpChat.tsx instead of the notification dropdown. Kept
+   as its own class rather than reusing .notif-bell directly since it has
+   no badge/has-alerts state of its own. */
+.help-btn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: 700;
+  font-family: inherit;
+}
+.help-btn:hover { background: var(--bg); color: var(--ink); }
+
 .cloche-mark { width: 24px; height: 24px; overflow: visible; transform-origin: 50% 28%; }
 .cloche-mark-body { fill: none; stroke: currentColor; stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; }
 .cloche-mark-knob { fill: currentColor; }
@@ -333,6 +354,102 @@ h1 {
   display: block;
   width: calc(100% - 20px);
   margin: 10px;
+}
+
+/* HelpChat.tsx -- the in-app help chatbot (Phase A of the help-chatbot
+   phase plan). Built as a centered .modal.wide, matching
+   NotificationCalendar's own modal pattern, rather than a small anchored
+   .notif-panel dropdown -- this needs room for a topic list plus a running
+   Q&A transcript. */
+.help-modal { text-align: left; max-height: 82vh; overflow: auto; }
+
+.help-search {
+  width: 100%;
+  margin-bottom: 14px;
+}
+
+.help-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.help-topic-chip {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: inherit;
+}
+.help-topic-chip:hover { border-color: var(--brand); }
+.help-topic-chip.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+
+.help-questions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px;
+  margin-bottom: 14px;
+  background: var(--brand-soft);
+  border-radius: 10px;
+}
+
+.help-question-chip {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+.help-question-chip:hover { border-color: var(--brand); background: var(--bg); }
+
+.help-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 2px;
+  margin-bottom: 12px;
+}
+
+.help-empty {
+  margin: 10px 2px;
+  font-size: 12.5px;
+}
+
+.help-exchange { display: flex; flex-direction: column; gap: 6px; }
+
+.help-bubble {
+  padding: 9px 13px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.4;
+  max-width: 88%;
+}
+
+.help-bubble-q {
+  align-self: flex-end;
+  background: var(--brand);
+  color: #fff;
+  border-bottom-right-radius: 3px;
+  font-weight: 500;
+}
+
+.help-bubble-a {
+  align-self: flex-start;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 3px;
 }
 
 @keyframes cloche-ring {
