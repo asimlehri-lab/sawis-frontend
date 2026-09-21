@@ -452,6 +452,20 @@ h1 {
   border-bottom-left-radius: 3px;
 }
 
+/* A "did you know" tip, shown under some answers when helpContent.ts's own
+   HelpQuestion.fact is set -- deliberately not every answer has one (see
+   that file's own comment), so this needs to read as a bonus rather than a
+   repeat of the answer bubble above it. --good-soft/--good reuse the same
+   pairing NotificationCalendar's "received" dot uses, repurposed here for
+   "worth knowing" rather than "done". */
+.help-bubble-fact {
+  align-self: flex-start;
+  background: var(--good-soft);
+  border: 1px solid var(--good);
+  border-bottom-left-radius: 3px;
+  font-size: 12.5px;
+}
+
 @keyframes cloche-ring {
   0%, 62%, 100% { transform: rotate(0deg); }
   4%  { transform: rotate(-13deg); }

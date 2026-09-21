@@ -10,6 +10,7 @@ interface TranscriptEntry {
   topicTitle: string;
   q: string;
   a: string;
+  fact?: string;
 }
 
 // Lightweight local fuzzy match for topic search -- token overlap between
@@ -55,8 +56,8 @@ export default function HelpChat({ onClose }: Props) {
 
   const activeTopic = HELP_TOPICS.find((t) => t.id === activeTopicId) ?? null;
 
-  function askQuestion(topic: HelpTopic, q: string, a: string) {
-    setTranscript((prev) => [...prev, { topicTitle: topic.title, q, a }]);
+  function askQuestion(topic: HelpTopic, q: string, a: string, fact?: string) {
+    setTranscript((prev) => [...prev, { topicTitle: topic.title, q, a, fact }]);
   }
 
   return (
@@ -105,7 +106,7 @@ export default function HelpChat({ onClose }: Props) {
                 key={qa.q}
                 type="button"
                 className="help-question-chip"
-                onClick={() => askQuestion(activeTopic, qa.q, qa.a)}
+                onClick={() => askQuestion(activeTopic, qa.q, qa.a, qa.fact)}
               >
                 {qa.q}
               </button>
@@ -121,6 +122,7 @@ export default function HelpChat({ onClose }: Props) {
               <div key={i} className="help-exchange">
                 <div className="help-bubble help-bubble-q">{entry.q}</div>
                 <div className="help-bubble help-bubble-a">{entry.a}</div>
+                {entry.fact && <div className="help-bubble help-bubble-fact">{entry.fact}</div>}
               </div>
             ))
           )}

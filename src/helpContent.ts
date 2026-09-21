@@ -30,6 +30,11 @@
 export interface HelpQuestion {
   q: string;
   a: string;
+  // Optional "did you know" tip shown as a second bubble under the answer --
+  // deliberately used sparingly, only where there's a genuine cross-feature
+  // connection worth surfacing (e.g. a shortcut elsewhere in the app), not
+  // added to every question just to fill the slot.
+  fact?: string;
 }
 
 export interface HelpTopic {
@@ -51,6 +56,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         q: "How do I add a new item?",
         a: "Go to Items in the sidebar and click + New item, top right. Give it a name, a base unit (like kg or each), and a category, then save.",
+        fact: "💡 If you've already imported a supplier's catalogue (Items → ⇪ Import supplier list), open your new item's page afterward — SAWIS automatically checks it against every catalogue you've uploaded and suggests matching suppliers and prices under \"Other suppliers that may stock this.\"",
       },
       {
         q: "What's a par level?",
@@ -90,10 +96,12 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         q: "How do I import a supplier's product catalogue?",
         a: "This one's on the Items page, not Suppliers — go to Items and click ⇪ Import supplier list at the top, then pick which supplier the file is from and upload their CSV or Excel product list. SAWIS stores the whole thing in the background; nothing on your items changes yet. It then matches each line in that catalogue against your existing item names. To see what it found, open any item's page and scroll to \"Other suppliers that may stock this\" — each match shows a confidence %, the supplier's own line text, and their price. Nothing is linked automatically: you review each suggestion and click Link yourself, which is also what records that supplier's price against the item.",
+        fact: "💡 This isn't a one-time match at upload — a catalogue you import today keeps working for items you add next month too, since the matching runs whenever you open an item's page, not just once at import time.",
       },
       {
         q: "How do I add a new supplier?",
         a: "From the Suppliers list (Procurement → 🏬 Suppliers), click + New supplier. Only the name is required — email, phone, delivery day, minimum order value and notes are all optional and can be filled in later.",
+        fact: "💡 Two shortcuts worth knowing: if you're logging a delivery invoice, Scan receipt has its own + New supplier right on the scan screen, so you never have to leave that flow. And if you'd rather not add suppliers one at a time at all, upload their whole product list instead via Items → ⇪ Import supplier list — SAWIS matches it against your items in the background.",
       },
       {
         q: "Can I delete a supplier?",
@@ -136,6 +144,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         q: "How do I scan a receipt to create a PO?",
         a: "From Procurement, click 📷 Scan receipt (next to 🏬 Suppliers, top of the page), take or choose a photo of the invoice, and review the matched items and quantities before confirming — nothing is saved until you confirm.",
+        fact: "💡 If the invoice matches a purchase order you've already got open with that supplier, SAWIS spots it and offers to receive against that existing PO instead of creating a duplicate one.",
       },
       {
         q: "Why is the unit price showing as 0.00 when I add a line?",
@@ -188,6 +197,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         q: "How do I import today's sales?",
         a: "Go to End of day in the sidebar. Two ways in: drag and drop a CSV export from your POS onto the dropzone, or click 📷 Scan a printed daily receipt just below it to photograph the till's printed end-of-day summary instead and review the read-back items before confirming. The page also shows the date of your last import, so you can spot a gap.",
+        fact: "💡 Scanning a photo also reads the sale date straight off the till printout and fills it in for you — it's still an editable field on the review screen, so it's worth a glance before you import in case the printout's date format threw it off.",
       },
       {
         q: "What does the End of day Overview show?",
