@@ -238,8 +238,24 @@ export default function ScanEodSales({
   const unmatchedCount = rows.filter((r) => !r.skip && !r.matchedRecipeId).length;
   const importableRows = rows.filter((r) => !r.skip && r.matchedRecipeId);
 
+  // Every one of these guards used to just `return` -- clicking Import
+  // while any of them were true looked like the button was simply broken
+  // (no spinner, no message, nothing) instead of saying what was actually
+  // wrong. Each one now sets importError so a click always produces
+  // visible feedback.
   async function handleImport() {
-    if (!location || importableRows.length === 0) return;
+    if (!location) {
+      setImportError("No location selected — pick one at the top of End of day, then try importing again.");
+      return;
+    }
+    if (!saleDate) {
+      setImportError("Set a sale date above before importing.");
+      return;
+    }
+    if (importableRows.length === 0) {
+      setImportError("Nothing to import — match at least one row to a dish first, or skip rows you don't want.");
+      return;
+    }
     setImporting(true);
     setImportError(null);
     try {
@@ -485,11 +501,14 @@ export default function ScanEodSales({
             {result !== null ? "Close" : "Cancel"}
           </button>
           {rows.length > 0 && result === null && (
-            <button
-              className="btn-primary"
-              onClick={handleImport}
-              disabled={importing || !location || importableRows.length === 0}
-            >
+            // Only "importing" disables this -- the location/date/
+            // zero-rows cases used to disable it too, which meant a click
+            // in any of those states did nothing at all (a disabled
+            // button never fires onClick), with no way to tell the user
+            // why. Leaving it clickable lets handleImport's own guards
+            // explain what's missing instead of the button just looking
+            // broken.
+            <button type="button" className="btn-primary" onClick={handleImport} disabled={importing}>
               {importing ? "Importing…" : `Import ${importableRows.length} sale${importableRows.length === 1 ? "" : "s"}`}
             </button>
           )}
