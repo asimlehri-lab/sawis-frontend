@@ -324,7 +324,10 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
   }
 
   return (
-    <div className="modal-backdrop" onClick={() => !scanning && !importing && onClose()}>
+    // Same reasoning as Scan receipt's modal (App.tsx): once a scan has
+    // been read into rows, there's real reviewed/matched work an
+    // accidental outside click shouldn't be able to wipe out.
+    <div className="modal-backdrop" onClick={() => !scanning && !importing && rows.length === 0 && onClose()}>
       <div className="modal wide xwide" onClick={(e) => e.stopPropagation()}>
         <h2 style={{ marginTop: 0 }}>Scan end-of-day sales</h2>
 

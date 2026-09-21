@@ -1182,6 +1182,15 @@ export default function App() {
   ) {
     await updatePurchaseOrder(accessToken as string, po.id, { status: "sent" });
     await receivePurchaseOrder(accessToken as string, po.id, overrides, invoiceNumber);
+    // receive() above teaches ItemSupplier the supplier's unit/pack for
+    // every overridden line (see PurchaseOrderViewSet.receive), but
+    // itemSupplierLinks in state is only ever (re)fetched on page-load --
+    // without this, scanning a second receipt from the same supplier in
+    // the same session couldn't find what was just taught, and
+    // findKnownSupplierUnit would come back empty even though the link
+    // now exists on the server. Refetched here, right after the write
+    // that changes it, so the very next scan sees it.
+    fetchItemSuppliers(accessToken as string).then(setItemSupplierLinks).catch(() => {});
   }
 
   async function handleCreatePOFromScan() {
@@ -2287,7 +2296,13 @@ export default function App() {
       {showScanReceipt && (
         <div
           className="modal-backdrop"
-          onClick={() => !scanning && !creatingPOFromScan && !retryingReceive && closeScanModal()}
+          // Once a scan's been read (scanResult set), there's real
+          // reviewed/edited work sitting in scanRows that an accidental
+          // outside click shouldn't be able to throw away -- so only
+          // click-outside-to-close before that point, same as the
+          // existing scanning/creatingPOFromScan/retryingReceive guards.
+          // Cancel (below) still always works.
+          onClick={() => !scanning && !creatingPOFromScan && !retryingReceive && !scanResult && closeScanModal()}
         >
           {/* "wide" is what actually caps the modal's height at 88vh and
               turns on internal scrolling -- "xwide" only widens it. Same
