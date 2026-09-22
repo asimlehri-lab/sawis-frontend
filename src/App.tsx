@@ -278,6 +278,28 @@ function vatPctFromItem(item: CatalogItem | undefined): string {
   return Number.isFinite(pct) ? String(Math.round(pct * 100) / 100) : "";
 }
 
+// "This supplier charges this VAT for this item" -- remembered from the
+// last time this exact (item, supplier) pair was received with a VAT
+// rate on the line (see apps/catalog/models.py ItemSupplier.vat_rate,
+// taught by PurchaseOrderViewSet.receive). Takes priority over
+// vatPctFromItem's org-wide default: a supplier's own invoiced VAT for
+// an item can legitimately differ from what this org normally expects
+// (see the VAT % field's own reasoning -- suppliers "come from different
+// region of Europe"), and once corrected once for a supplier it should
+// stick for that supplier specifically, not just fall back to the
+// item/category default every time.
+function vatPctFromSupplierLink(
+  itemSupplierLinks: ItemSupplierRow[],
+  itemId: string,
+  supplierId: string
+): string {
+  if (!itemId || !supplierId) return "";
+  const link = itemSupplierLinks.find((l) => l.item === itemId && l.supplier === supplierId);
+  if (!link || !link.vat_rate) return "";
+  const pct = Number(link.vat_rate) * 100;
+  return Number.isFinite(pct) ? String(Math.round(pct * 100) / 100) : "";
+}
+
 // The inverse of vatPctFromItem, for sending a ScanRow's vatPct back to
 // the API -- undefined (not sent) when blank, so the backend falls back
 // to the matched item's own effective_vat_rate rather than being told
@@ -1195,7 +1217,7 @@ export default function App() {
           skip: false,
           supplierUnit: known?.supplierUnit ?? "",
           packQty: known?.packQty ?? "1",
-          vatPct: vatPctFromItem(bestItem),
+          vatPct: vatPctFromSupplierLink(itemSupplierLinks, best, resolvedSupplierId) || vatPctFromItem(bestItem),
         };
       });
       setScanRows(rows);
@@ -1246,9 +1268,16 @@ export default function App() {
     setScanSupplierId(newSupplierId);
     setScanRows((rows) =>
       rows.map((r) => {
-        if (r.supplierUnit || !r.matchedItemId) return r;
-        const known = findKnownSupplierUnit(itemSupplierLinks, r.matchedItemId, newSupplierId);
-        return known ? { ...r, supplierUnit: known.supplierUnit, packQty: known.packQty } : r;
+        let patch: Partial<ScanRow> = {};
+        if (!r.supplierUnit && r.matchedItemId) {
+          const known = findKnownSupplierUnit(itemSupplierLinks, r.matchedItemId, newSupplierId);
+          if (known) patch = { ...patch, supplierUnit: known.supplierUnit, packQty: known.packQty };
+        }
+        if (!r.vatPct && r.matchedItemId) {
+          const knownVat = vatPctFromSupplierLink(itemSupplierLinks, r.matchedItemId, newSupplierId);
+          if (knownVat) patch = { ...patch, vatPct: knownVat };
+        }
+        return Object.keys(patch).length ? { ...r, ...patch } : r;
       })
     );
   }
@@ -2682,7 +2711,7 @@ export default function App() {
                                       matchedItemId: val,
                                       supplierUnit: known?.supplierUnit ?? "",
                                       packQty: known?.packQty ?? "1",
-                                      vatPct: vatPctFromItem(newItem),
+                                      vatPct: vatPctFromSupplierLink(itemSupplierLinks, val, scanSupplierId) || vatPctFromItem(newItem),
                                     });
                                   }
                                 }}

@@ -1107,6 +1107,13 @@ export interface ItemSupplierRow {
   // supplier_unit is blank/unknown. Shown alongside unit_price so the user
   // sees their own supplier's price, not just our converted figure.
   supplier_unit_price: string | null;
+  // Remembered from the last time this item was received from this
+  // supplier with a VAT rate actually recorded on the line -- see
+  // apps/catalog/models.py ItemSupplier.vat_rate. Same fraction
+  // convention as POLine.vat_rate (e.g. "0.2000" for 20%). null means
+  // nothing's been taught yet for this pair; callers fall back to the
+  // item's own effective_vat_rate.
+  vat_rate: string | null;
   min_order_qty: string | null;
   last_ordered_at: string | null;
   matched_from: string | null;

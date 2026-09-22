@@ -469,10 +469,20 @@ export default function ProcurementDetail({
   function handleAddItemSelect(itemId: string) {
     setAddItemId(itemId);
     const selectedItem = items.find((it) => it.id === itemId);
-    setAddVatPct(
-      selectedItem?.effective_vat_rate ? String(Math.round(Number(selectedItem.effective_vat_rate) * 10000) / 100) : ""
-    );
     const link = po && itemSupplierLinks.find((l) => l.item === itemId && l.supplier === po.supplier);
+    // A VAT rate remembered specifically for this (item, supplier) pair
+    // (see apps/catalog/models.py ItemSupplier.vat_rate, taught by
+    // PurchaseOrderViewSet.receive) takes priority over the item's own
+    // org-wide default -- same reasoning as the pack/unit memory just
+    // below: this supplier's invoiced VAT for this item can legitimately
+    // differ from what the org normally expects.
+    const knownVatPct = link?.vat_rate ? String(Math.round(Number(link.vat_rate) * 10000) / 100) : "";
+    setAddVatPct(
+      knownVatPct ||
+        (selectedItem?.effective_vat_rate
+          ? String(Math.round(Number(selectedItem.effective_vat_rate) * 10000) / 100)
+          : "")
+    );
     const known = po ? findKnownSupplierUnit(itemId, po.supplier) : null;
     if (known) {
       // A pack/unit conversion is already on file for this exact
