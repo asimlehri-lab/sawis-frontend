@@ -139,6 +139,8 @@ interface FlatHolding {
   section: string | null;
   sectionName: string | null;
   parLevel: number;
+  category: string | null;
+  categoryName: string | null;
 }
 
 export default function Inventory({
@@ -180,6 +182,8 @@ export default function Inventory({
         section: h.section,
         sectionName: h.section_name,
         parLevel: Number(h.par_level),
+        category: it.category,
+        categoryName: it.category_name,
       }))
   );
 
@@ -586,6 +590,8 @@ function SectionsTab({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [itemSearch, setItemSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   function openCreate() {
     setEditing(null);
@@ -593,6 +599,8 @@ function SectionsTab({
     setModalChecked({});
     setErr(null);
     setConfirmDelete(false);
+    setItemSearch("");
+    setCategoryFilter("all");
     setModalOpen(true);
   }
 
@@ -602,6 +610,8 @@ function SectionsTab({
     setModalChecked(Object.fromEntries(holdings.filter((h) => h.section === s.id).map((h) => [h.id, true])));
     setErr(null);
     setConfirmDelete(false);
+    setItemSearch("");
+    setCategoryFilter("all");
     setModalOpen(true);
   }
 
@@ -641,6 +651,44 @@ function SectionsTab({
       setErr(e instanceof Error ? e.message : "Could not delete this section.");
       setSaving(false);
     }
+  }
+
+  // "Uncategorized" buckets items with no category so they're still
+  // findable via the filter rather than silently dropped from it.
+  const categoryOptions = Array.from(new Set(holdings.map((h) => h.categoryName ?? "Uncategorized"))).sort((a, b) =>
+    a.localeCompare(b)
+  );
+
+  const visibleHoldings = holdings.filter((h) => {
+    if (categoryFilter !== "all" && (h.categoryName ?? "Uncategorized") !== categoryFilter) return false;
+    if (itemSearch && !h.itemName.toLowerCase().includes(itemSearch.toLowerCase())) return false;
+    return true;
+  });
+
+  const selectedCount = Object.values(modalChecked).filter(Boolean).length;
+
+  // Bulk actions only ever touch what's currently visible under the
+  // search/category filter -- so narrowing the list, selecting, then
+  // clearing the filter never surprises the user by wiping a selection
+  // they made before filtering.
+  function selectAllVisible() {
+    setModalChecked((c) => {
+      const next = { ...c };
+      visibleHoldings.forEach((h) => {
+        next[h.id] = true;
+      });
+      return next;
+    });
+  }
+
+  function clearAllVisible() {
+    setModalChecked((c) => {
+      const next = { ...c };
+      visibleHoldings.forEach((h) => {
+        next[h.id] = false;
+      });
+      return next;
+    });
   }
 
   return (
@@ -697,20 +745,56 @@ function SectionsTab({
               <input value={modalName} onChange={(e) => setModalName(e.target.value)} placeholder="e.g. Freezer no. 2" autoFocus />
             </div>
             <div className="field">
-              <label>Items in this section</label>
-              {holdings.length === 0 && <p className="muted" style={{ fontSize: 12.5 }}>No items stocked at this location yet.</p>}
-              <div className="item-checklist">
-                {holdings.map((h) => (
-                  <label key={h.id} className="item-check">
-                    <input
-                      type="checkbox"
-                      checked={!!modalChecked[h.id]}
-                      onChange={(e) => setModalChecked((c) => ({ ...c, [h.id]: e.target.checked }))}
-                    />
-                    {h.itemName} <span className="muted">({deptLabel(h.department)})</span>
-                  </label>
-                ))}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 6 }}>
+                <label style={{ marginBottom: 0 }}>Items in this section</label>
+                <span className="muted" style={{ fontSize: 11.5 }}>{selectedCount} selected</span>
               </div>
+              {holdings.length === 0 && <p className="muted" style={{ fontSize: 12.5 }}>No items stocked at this location yet.</p>}
+              {holdings.length > 0 && (
+                <>
+                  <div className="item-checklist-toolbar">
+                    <input
+                      placeholder="Search items…"
+                      value={itemSearch}
+                      onChange={(e) => setItemSearch(e.target.value)}
+                      className="item-checklist-search"
+                    />
+                    {categoryOptions.length > 1 && (
+                      <select
+                        value={categoryFilter}
+                        onChange={(e) => setCategoryFilter(e.target.value)}
+                        className="item-checklist-category"
+                      >
+                        <option value="all">All categories</option>
+                        {categoryOptions.map((c) => (
+                          <option key={c} value={c}>
+                            {c}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <button type="button" className="btn-ghost small" onClick={selectAllVisible} disabled={visibleHoldings.length === 0}>
+                      Select shown
+                    </button>
+                    <button type="button" className="btn-ghost small" onClick={clearAllVisible} disabled={visibleHoldings.length === 0}>
+                      Clear shown
+                    </button>
+                  </div>
+                  {visibleHoldings.length === 0 && <p className="muted" style={{ fontSize: 12.5 }}>No items match.</p>}
+                  <div className="item-checklist">
+                    {visibleHoldings.map((h) => (
+                      <label key={h.id} className="item-check">
+                        <input
+                          type="checkbox"
+                          checked={!!modalChecked[h.id]}
+                          onChange={(e) => setModalChecked((c) => ({ ...c, [h.id]: e.target.checked }))}
+                        />
+                        {h.itemName} <span className="muted">({deptLabel(h.department)})</span>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
             {err && <p className="error">{err}</p>}
             <div className="modal-actions">
