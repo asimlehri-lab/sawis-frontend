@@ -45,12 +45,15 @@ const DEPARTMENTS = [
   { value: "foh", label: "Front of house" },
 ] as const;
 
-// Trims a quantity to at most 3 decimals without padding on trailing zeros
-// ("1" not "1.000", "0.75" not "0.750") -- used for the as-invoiced
+// Trims a quantity to at most 2 decimals without padding on trailing zeros
+// ("1" not "1.00", "0.75" not "0.750") -- used for the as-invoiced
 // supplier_qty display below, which is a whole "1 L"/"2 case" most of the
-// time and shouldn't look like a raw stored decimal.
+// time and shouldn't look like a raw stored decimal. Capped at 2, not 3+,
+// same as every other quantity/price shown to the user -- no payment or
+// purchase is ever displayed with more precision than that, even though
+// POLine/ItemSupplier keep more internally for accurate costing.
 function formatQty(n: number): string {
-  return parseFloat(n.toFixed(3)).toString();
+  return parseFloat(n.toFixed(2)).toString();
 }
 
 export default function ProcurementDetail({
@@ -1044,10 +1047,9 @@ export default function ProcurementDetail({
                         {addSupplierUnit && addSupplierUnit !== addItem.base_unit && (
                           <div className="muted">
                             {resolved
-                              ? `→ ${resolved.qty.toFixed(3)} ${addItem.base_unit} @ ${formatMoney(
+                              ? `→ ${resolved.qty.toFixed(2)} ${addItem.base_unit} @ ${formatMoney(
                                   resolved.unitPrice,
-                                  currency,
-                                  4
+                                  currency
                                 )}/${addItem.base_unit}`
                               : "enter a conversion to add this line"}
                           </div>

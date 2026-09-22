@@ -2273,7 +2273,7 @@ export default function App() {
                         {r.base_qty_per_unit && r.base_qty_per_unit !== "1" && (
                           <span className="muted" style={{ fontSize: 12 }}>
                             {" "}
-                            (1 = {r.base_qty_per_unit} of item's unit)
+                            (1 = {Number(r.base_qty_per_unit).toFixed(2)} of item's unit)
                           </span>
                         )}
                       </td>
@@ -2778,10 +2778,9 @@ export default function App() {
                                       {row.supplierUnit && row.supplierUnit !== matchedItem.base_unit && (
                                         <div>
                                           {converted
-                                            ? `→ ${converted.qty.toFixed(3)} ${matchedItem.base_unit} @ ${formatMoney(
+                                            ? `→ ${converted.qty.toFixed(2)} ${matchedItem.base_unit} @ ${formatMoney(
                                                 converted.unitPrice,
-                                                orgCurrency,
-                                                4
+                                                orgCurrency
                                               )}/${matchedItem.base_unit}`
                                             : "enter a conversion to include this row"}
                                         </div>

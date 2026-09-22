@@ -269,7 +269,7 @@ export default function RecipeDetail({
                     )}
                   </td>
                   <td className="num">
-                    {line.qty} {line.unit}
+                    {Number(line.qty).toFixed(2)} {line.unit}
                   </td>
                   <td className="num">{formatMoney(Number(line.unit_cost), currency)}</td>
                   <td className="num">{formatMoney(Number(line.line_cost), currency)}</td>

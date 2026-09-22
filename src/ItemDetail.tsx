@@ -795,7 +795,7 @@ export default function ItemDetail({
                     {sug.supplierItem.unit !== item.base_unit && (
                       <div className="sd">
                         {converted !== null
-                          ? `→ ${formatMoney(converted, currency, 4)}/${item.base_unit}`
+                          ? `→ ${formatMoney(converted, currency)}/${item.base_unit}`
                           : `enter a conversion to link`}
                       </div>
                     )}
@@ -972,7 +972,7 @@ export default function ItemDetail({
                     <div className="uprev-r" key={h.id}>
                       <span>{DEPARTMENTS.find((d) => d.value === h.department)?.label ?? h.department}</span>
                       <span>
-                        {h.par_level} {item.base_unit}
+                        {Number(h.par_level).toFixed(2)} {item.base_unit}
                       </span>
                       <span>→</span>
                       <b>
