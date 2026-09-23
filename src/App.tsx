@@ -540,12 +540,14 @@ export default function App() {
   const [recipeSearch, setRecipeSearch] = useState("");
   const [itemSearch, setItemSearch] = useState("");
   // Multi-select category filters for the Items/Recipes lists (CategoryFilter.tsx) --
-  // an empty array means "no filter, show every category" (the requested default),
-  // narrowed down from there. Items filters by Category.id (it.category); Recipes
-  // filters by the freeform r.menu_category string, since recipes aren't linked to
-  // the Category model at all -- see CatalogItem vs Recipe in api.ts.
-  const [itemCategoryFilter, setItemCategoryFilter] = useState<string[]>([]);
-  const [recipeCategoryFilter, setRecipeCategoryFilter] = useState<string[]>([]);
+  // null means "no filter, show every category" (the requested default); an actual
+  // array is an explicit selection, including an empty one (nothing checked, nothing
+  // shown) -- see CategoryFilter.tsx's own comment for why that tri-state exists.
+  // Items filters by Category.id (it.category); Recipes filters by the freeform
+  // r.menu_category string, since recipes aren't linked to the Category model at all
+  // -- see CatalogItem vs Recipe in api.ts.
+  const [itemCategoryFilter, setItemCategoryFilter] = useState<string[] | null>(null);
+  const [recipeCategoryFilter, setRecipeCategoryFilter] = useState<string[] | null>(null);
 
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[] | null>(null);
   const [poError, setPoError] = useState<string | null>(null);
@@ -1843,7 +1845,7 @@ export default function App() {
                       <tbody>
                         {items
                           .filter(
-                            (it) => itemCategoryFilter.length === 0 || itemCategoryFilter.includes(it.category ?? "")
+                            (it) => itemCategoryFilter === null || itemCategoryFilter.includes(it.category ?? "")
                           )
                           .filter((it) => {
                             const q = itemSearch.trim().toLowerCase();
@@ -1907,7 +1909,7 @@ export default function App() {
                         {recipes
                           .filter((r) => recipeFilter === "all" || r.kind === recipeFilter)
                           .filter(
-                            (r) => recipeCategoryFilter.length === 0 || recipeCategoryFilter.includes(r.menu_category)
+                            (r) => recipeCategoryFilter === null || recipeCategoryFilter.includes(r.menu_category)
                           )
                           .filter((r) => {
                             const q = recipeSearch.trim().toLowerCase();
