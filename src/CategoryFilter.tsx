@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 // A compact multi-select filter, used on the Items and Recipes list headers
 // so a long list can be narrowed down by category -- same anchored-popover
@@ -44,7 +44,13 @@ export default function CategoryFilter({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  // Horizontal correction applied to the panel once it's open and measured
+  // (see the layout effect below) -- keeps it on-screen when the trigger
+  // button sits close to either edge, e.g. a phone-width header where this
+  // button is often the last thing in a wrapped, right-leaning row.
+  const [panelShiftX, setPanelShiftX] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function onDocMouseDown(e: MouseEvent) {
@@ -53,6 +59,41 @@ export default function CategoryFilter({
     document.addEventListener("mousedown", onDocMouseDown);
     return () => document.removeEventListener("mousedown", onDocMouseDown);
   }, []);
+
+  // The panel is CSS-anchored to the trigger's left edge (see .cat-filter-panel),
+  // which is fine until that button sits close enough to the viewport's right
+  // edge that the panel's own width pushes it off-screen -- exactly what was
+  // reported on a phone, where reaching the dropdown meant scrolling the page
+  // sideways. Once open, measure the panel against the viewport and nudge it
+  // back in with a transform; runs again if the viewport itself resizes (e.g.
+  // a phone rotating) while the panel is open.
+  useLayoutEffect(() => {
+    if (!open) return;
+    // rect.left/right already include whatever shift was applied on the
+    // previous measurement (the transform below), so back that out first --
+    // otherwise a second reposition (e.g. on resize) would measure an
+    // already-corrected rect and compound the shift instead of replacing it.
+    function reposition() {
+      const panel = panelRef.current;
+      if (!panel) return;
+      const margin = 8;
+      const rect = panel.getBoundingClientRect();
+      setPanelShiftX((prevShift) => {
+        const naturalLeft = rect.left - prevShift;
+        const naturalRight = rect.right - prevShift;
+        const overflowRight = naturalRight + margin - window.innerWidth;
+        const overflowLeft = margin - naturalLeft;
+        if (overflowRight > 0) return -overflowRight;
+        if (overflowLeft > 0) return overflowLeft;
+        return 0;
+      });
+    }
+    reposition();
+    window.addEventListener("resize", reposition);
+    return () => window.removeEventListener("resize", reposition);
+    // Re-measure if the visible list's height changes (search narrows/widens
+    // it) or the viewport resizes while open, not just on the initial open.
+  }, [open, query]);
 
   // Nothing to filter by (e.g. no categories set up yet) -- don't show a
   // control with an empty, useless dropdown.
@@ -94,7 +135,11 @@ export default function CategoryFilter({
         <span className="cat-filter-caret">▾</span>
       </button>
       {open && (
-        <div className="cat-filter-panel">
+        <div
+          className="cat-filter-panel"
+          ref={panelRef}
+          style={panelShiftX ? { transform: `translateX(${panelShiftX}px)` } : undefined}
+        >
           <div className="cat-filter-panel-head">
             <span>{label}</span>
             <div className="cat-filter-bulk">
