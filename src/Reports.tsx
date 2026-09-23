@@ -137,7 +137,7 @@ function RptKpis({ report, currency }: { report: ReportsSummary; currency?: stri
             <div className="kv-empty">No sales yet</div>
           ) : (
             <>
-              <div className="kpi-value" style={{ color: hasZeroCostItems ? "#8A6410" : fcOver ? "#C2611D" : "#1D6B4F" }}>
+              <div className="kpi-value" style={{ color: hasZeroCostItems ? "var(--warn)" : fcOver ? "var(--caution)" : "var(--good)" }}>
                 {fc.toFixed(1)}%
               </div>
               <div className="kpi-sub">
@@ -154,7 +154,7 @@ function RptKpis({ report, currency }: { report: ReportsSummary; currency?: stri
 
         <div className="kpi-card">
           <div className="kpi-label">Gross profit</div>
-          <div className="kpi-value" style={{ color: gp !== null ? (hasZeroCostItems ? "#8A6410" : "#1D6B4F") : undefined }}>
+          <div className="kpi-value" style={{ color: gp !== null ? (hasZeroCostItems ? "var(--warn)" : "var(--good)") : undefined }}>
             {pct(gp)}
           </div>
           <div className="kpi-sub">{hasZeroCostItems ? "incomplete — see note below" : "of net sales"}</div>
@@ -168,7 +168,7 @@ function RptKpis({ report, currency }: { report: ReportsSummary; currency?: stri
 
         <div className="kpi-card">
           <div className="kpi-label">Stock variance</div>
-          <div className="kpi-value" style={{ color: variance < 0 ? "#A33636" : variance > 0 ? "#1D6B4F" : undefined }}>
+          <div className="kpi-value" style={{ color: variance < 0 ? "var(--brick)" : variance > 0 ? "var(--good)" : undefined }}>
             {formatMoney(variance, currency, 2)}
           </div>
           <div className="kpi-sub">

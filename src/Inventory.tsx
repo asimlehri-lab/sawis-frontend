@@ -1277,7 +1277,7 @@ function CountSheet({
       )}
       {scanError && <p className="error">{scanError}</p>}
       {unmatchedScanRows.length > 0 && (
-        <div className="im-note" style={{ background: "#F6EDD6", color: "#8A6410" }}>
+        <div className="im-note" style={{ background: "var(--warn-soft)", color: "var(--warn)" }}>
           The photo also had {unmatchedScanRows.length} row{unmatchedScanRows.length === 1 ? "" : "s"} that didn't
           match any item in this section — add these by hand if they're real counts:{" "}
           {unmatchedScanRows.map((r, i) => (

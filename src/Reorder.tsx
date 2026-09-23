@@ -432,7 +432,7 @@ export default function Reorder({ accessToken, items, locations, itemSupplierLin
             style={{
               fontSize: 13,
               fontWeight: 600,
-              color: totalSavings > 0.001 ? "var(--green)" : "var(--muted)",
+              color: totalSavings > 0.001 ? "var(--good)" : "var(--muted)",
             }}
           >
             {totalSavings > 0.001

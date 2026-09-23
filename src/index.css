@@ -32,17 +32,22 @@
 
 /*
  * No @media (prefers-color-scheme: dark) block here on purpose. This file
- * is a leftover Vite starter template; App.css's :root deliberately sets
- * `color-scheme: light` and hardcodes light-only design tokens (--bg,
- * --surface, --ink, etc.) — SAWIS has no real dark theme. The starter's
- * dark-mode block used to silently flip --text-h to a near-white color for
- * any user with their OS set to dark mode, while .card's background stayed
- * hardcoded white — making h1 text (e.g. the "sawis" wordmark on the sign-in
- * card) render nearly invisible, white-on-white. Removed rather than fixed
- * in place, since a half-supported dark mode via a stray leftover file is
- * worse than no dark mode — if SAWIS gets a real dark theme later, it
- * should be designed deliberately in App.css's token system, not revived
- * here.
+ * is a leftover Vite starter template with its own unrelated :root token
+ * set (--text, --text-h, --accent, etc. — none of these are read by the
+ * actual app). Its own dark-mode block used to silently flip --text-h to
+ * a near-white color for any user with their OS set to dark mode, while
+ * .card's background stayed hardcoded white — making h1 text (e.g. the
+ * "sawis" wordmark on the sign-in card) render nearly invisible,
+ * white-on-white. Removed rather than fixed in place, since a
+ * half-supported dark mode via a stray leftover file is worse than none.
+ *
+ * SAWIS does now have a real dark theme (added 2026-09-23) — it lives
+ * entirely in App.css's :root token system (--bg, --surface, --ink, etc.
+ * plus their @media (prefers-color-scheme: dark) overrides), loaded after
+ * this file so it always wins on any token both files happen to share.
+ * This file's own light-only color-scheme/tokens are otherwise dead
+ * weight from the starter template — left alone rather than risking
+ * this file's #root/typography rules, which the sign-in screen still uses.
  */
 
 #root {

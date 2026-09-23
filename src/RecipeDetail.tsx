@@ -502,7 +502,7 @@ export default function RecipeDetail({
                     className="fill"
                     style={{
                       width: `${Math.min(recipe.plate_food_cost_pct ?? 0, 100)}%`,
-                      background: fcOver ? "#C2611D" : "#1D6B4F",
+                      background: fcOver ? "var(--caution)" : "var(--good)",
                     }}
                   />
                   <div className="tgtm" />

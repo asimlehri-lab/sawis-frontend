@@ -250,7 +250,7 @@ function KpiHeader({ report, currency }: { report: EodReportData; currency?: str
                 className="kpi-meter-fill"
                 style={{
                   width: `${Math.min((fc / 50) * 100, 100)}%`,
-                  background: hasZeroCostItems ? "#8A6410" : over ? "#C2611D" : "#1D6B4F",
+                  background: hasZeroCostItems ? "var(--warn)" : over ? "var(--caution)" : "var(--good)",
                 }}
               />
               <div className="kpi-meter-tgt" style={{ left: `${(30 / 50) * 100}%` }} />
@@ -283,7 +283,7 @@ function KpiHeader({ report, currency }: { report: EodReportData; currency?: str
 
       <section className="card">
         <p className="kl">Gross margin</p>
-        <div className="kv" style={{ color: c.gross_margin_pct !== null ? (hasZeroCostItems ? "#8A6410" : "#1D6B4F") : undefined }}>
+        <div className="kv" style={{ color: c.gross_margin_pct !== null ? (hasZeroCostItems ? "var(--warn)" : "var(--good)") : undefined }}>
           {pct(c.gross_margin_pct)}
         </div>
         <div className="ks">{hasZeroCostItems ? "incomplete — see note above" : "after food cost"}</div>
