@@ -68,6 +68,7 @@ import Settings from "./Settings";
 import Reports from "./Reports";
 import SearchSelect from "./SearchSelect";
 import NotificationBell from "./NotificationBell";
+import CategoryFilter from "./CategoryFilter";
 import HelpChat from "./HelpChat";
 import "./App.css";
 
@@ -501,6 +502,15 @@ export default function App() {
   // receipt flow, further down, use each PO's own location's currency
   // instead, since a PO genuinely belongs to one location.
   const orgCurrency = defaultCurrency(locations);
+  // Distinct menu_category values actually present on the recipes list, sorted
+  // alphabetically -- fed into the Recipes CategoryFilter (see recipeCategoryFilter
+  // above). Recomputed on every render rather than memoized: this is a handful of
+  // short strings over at most a few hundred recipes, not worth the added complexity.
+  const recipeMenuCategoryOptions = Array.from(
+    new Set((recipes ?? []).map((r) => r.menu_category).filter((c): c is string => !!c))
+  )
+    .sort((a, b) => a.localeCompare(b))
+    .map((c) => ({ value: c, label: c }));
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [supplierItems, setSupplierItems] = useState<SupplierItemRow[]>([]);
 
@@ -529,6 +539,13 @@ export default function App() {
   // are already fully loaded, so there's no need for a backend query param.
   const [recipeSearch, setRecipeSearch] = useState("");
   const [itemSearch, setItemSearch] = useState("");
+  // Multi-select category filters for the Items/Recipes lists (CategoryFilter.tsx) --
+  // an empty array means "no filter, show every category" (the requested default),
+  // narrowed down from there. Items filters by Category.id (it.category); Recipes
+  // filters by the freeform r.menu_category string, since recipes aren't linked to
+  // the Category model at all -- see CatalogItem vs Recipe in api.ts.
+  const [itemCategoryFilter, setItemCategoryFilter] = useState<string[]>([]);
+  const [recipeCategoryFilter, setRecipeCategoryFilter] = useState<string[]>([]);
 
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[] | null>(null);
   const [poError, setPoError] = useState<string | null>(null);
@@ -1753,6 +1770,11 @@ export default function App() {
                     onChange={(e) => setItemSearch(e.target.value)}
                     placeholder="Search by name, SKU, or supplier code…"
                   />
+                  <CategoryFilter
+                    options={categories.map((c) => ({ value: c.id, label: c.name }))}
+                    selected={itemCategoryFilter}
+                    onChange={setItemCategoryFilter}
+                  />
                   <button className="btn-ghost small" onClick={() => setShowImport(true)}>
                     ⇪ Import supplier list
                   </button>
@@ -1768,6 +1790,11 @@ export default function App() {
                     value={recipeSearch}
                     onChange={(e) => setRecipeSearch(e.target.value)}
                     placeholder="Search by name or POS ID…"
+                  />
+                  <CategoryFilter
+                    options={recipeMenuCategoryOptions}
+                    selected={recipeCategoryFilter}
+                    onChange={setRecipeCategoryFilter}
                   />
                   <button className="btn-primary small" onClick={() => setShowNewRecipe(true)}>
                     + New recipe
@@ -1815,6 +1842,9 @@ export default function App() {
                       </thead>
                       <tbody>
                         {items
+                          .filter(
+                            (it) => itemCategoryFilter.length === 0 || itemCategoryFilter.includes(it.category ?? "")
+                          )
                           .filter((it) => {
                             const q = itemSearch.trim().toLowerCase();
                             if (!q) return true;
@@ -1876,6 +1906,9 @@ export default function App() {
                       <tbody>
                         {recipes
                           .filter((r) => recipeFilter === "all" || r.kind === recipeFilter)
+                          .filter(
+                            (r) => recipeCategoryFilter.length === 0 || recipeCategoryFilter.includes(r.menu_category)
+                          )
                           .filter((r) => {
                             const q = recipeSearch.trim().toLowerCase();
                             if (!q) return true;
