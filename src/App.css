@@ -971,6 +971,18 @@ nav {
   text-align: left;
 }
 
+/* Wraps every data table (.tbl, .htbl, .ing-tbl, .im-tbl, and the couple
+   of plain unstyled <table>s) so a table wider than its column can scroll
+   horizontally within its own box instead of forcing the whole page to
+   overflow sideways -- the bug on phone/tablet where Inventory/Items/
+   Procurement/Recipes tables ran off the edge of the screen. */
+.table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.table-scroll > table { min-width: 100%; }
+
 .tbl {
   width: 100%;
   border-collapse: collapse;

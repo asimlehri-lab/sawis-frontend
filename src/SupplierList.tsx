@@ -137,37 +137,39 @@ export default function SupplierList({
       ) : rows.length === 0 ? (
         <p className="muted">No suppliers match.</p>
       ) : (
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Contact email</th>
-              <th>Phone</th>
-              <th>Delivery day</th>
-              <th className="num">Min order</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((s) => (
-              <tr key={s.id} className="clickable" onClick={() => onOpenSupplier(s.id)}>
-                <td className="dish">
-                  {s.name}
-                  {s.archived && (
-                    <span className="badge b-archived" style={{ marginLeft: 8 }}>
-                      Archived
-                    </span>
-                  )}
-                </td>
-                <td className="muted">{s.contact_email || "—"}</td>
-                <td className="muted">{s.contact_phone || "—"}</td>
-                <td className="muted">{s.delivery_day !== null ? DAY_NAMES[s.delivery_day] : "—"}</td>
-                <td className="num">
-                  {s.min_order_value ? formatMoney(Number(s.min_order_value), defaultCurrency(locations), 0) : "—"}
-                </td>
+        <div className="table-scroll">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Contact email</th>
+                <th>Phone</th>
+                <th>Delivery day</th>
+                <th className="num">Min order</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((s) => (
+                <tr key={s.id} className="clickable" onClick={() => onOpenSupplier(s.id)}>
+                  <td className="dish">
+                    {s.name}
+                    {s.archived && (
+                      <span className="badge b-archived" style={{ marginLeft: 8 }}>
+                        Archived
+                      </span>
+                    )}
+                  </td>
+                  <td className="muted">{s.contact_email || "—"}</td>
+                  <td className="muted">{s.contact_phone || "—"}</td>
+                  <td className="muted">{s.delivery_day !== null ? DAY_NAMES[s.delivery_day] : "—"}</td>
+                  <td className="num">
+                    {s.min_order_value ? formatMoney(Number(s.min_order_value), defaultCurrency(locations), 0) : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {showNewSupplier && (

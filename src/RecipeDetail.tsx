@@ -233,55 +233,57 @@ export default function RecipeDetail({
           <h2>Batch recipe — makes {recipe.yield_qty} {recipe.yield_unit}{yieldNum > 1 ? "s" : ""}</h2>
           <p className="hint">Enter quantities for one full batch. Cost per {recipe.yield_unit} = batch ÷ yield.</p>
 
-          <table className="ing-tbl">
-            <thead>
-              <tr>
-                <th>Ingredient</th>
-                <th className="num">Qty</th>
-                <th className="num">Unit cost</th>
-                <th className="num">Line cost</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {recipe.lines.length === 0 && (
+          <div className="table-scroll">
+            <table className="ing-tbl">
+              <thead>
                 <tr>
-                  <td colSpan={5} className="muted empty-row">
-                    No ingredients yet — add items or a sub-recipe below.
-                  </td>
+                  <th>Ingredient</th>
+                  <th className="num">Qty</th>
+                  <th className="num">Unit cost</th>
+                  <th className="num">Line cost</th>
+                  <th></th>
                 </tr>
-              )}
-              {recipe.lines.map((line) => (
-                <tr key={line.id}>
-                  <td>
-                    {line.line_type === "recipe" ? (
-                      <>
-                        <span
-                          className="sub-link"
-                          onClick={() => line.sub_recipe && onOpenRecipe(line.sub_recipe)}
-                        >
-                          {line.sub_recipe_name}
-                        </span>
-                        <span className="sub-tag">sub-recipe</span>
-                      </>
-                    ) : (
-                      line.item_name
-                    )}
-                  </td>
-                  <td className="num">
-                    {Number(line.qty).toFixed(2)} {line.unit}
-                  </td>
-                  <td className="num">{formatMoney(Number(line.unit_cost), currency)}</td>
-                  <td className="num">{formatMoney(Number(line.line_cost), currency)}</td>
-                  <td>
-                    <button className="rm" onClick={() => handleRemoveLine(line.id)}>
-                      ×
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {recipe.lines.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="muted empty-row">
+                      No ingredients yet — add items or a sub-recipe below.
+                    </td>
+                  </tr>
+                )}
+                {recipe.lines.map((line) => (
+                  <tr key={line.id}>
+                    <td>
+                      {line.line_type === "recipe" ? (
+                        <>
+                          <span
+                            className="sub-link"
+                            onClick={() => line.sub_recipe && onOpenRecipe(line.sub_recipe)}
+                          >
+                            {line.sub_recipe_name}
+                          </span>
+                          <span className="sub-tag">sub-recipe</span>
+                        </>
+                      ) : (
+                        line.item_name
+                      )}
+                    </td>
+                    <td className="num">
+                      {Number(line.qty).toFixed(2)} {line.unit}
+                    </td>
+                    <td className="num">{formatMoney(Number(line.unit_cost), currency)}</td>
+                    <td className="num">{formatMoney(Number(line.line_cost), currency)}</td>
+                    <td>
+                      <button className="rm" onClick={() => handleRemoveLine(line.id)}>
+                        ×
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
           <div className="add-block">
             <div className="add-col">

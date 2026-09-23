@@ -565,63 +565,65 @@ export default function ItemDetail({
           The same product can be held in more than one place, each with its own par level.
           {multiDept && ` Shown in lists as "${item.name} — Department".`}
         </p>
-        <table className="htbl">
-          <thead>
-            <tr>
-              <th>Department</th>
-              <th>Section</th>
-              <th className="num">Par level</th>
-              <th className="num">On hand</th>
-              <th>Status</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {item.holdings.length === 0 && (
+        <div className="table-scroll">
+          <table className="htbl">
+            <thead>
               <tr>
-                <td colSpan={6} className="muted empty-row">
-                  Not stocked anywhere yet — add a department below.
-                </td>
+                <th>Department</th>
+                <th>Section</th>
+                <th className="num">Par level</th>
+                <th className="num">On hand</th>
+                <th>Status</th>
+                <th></th>
               </tr>
-            )}
-            {item.holdings.map((h) => {
-              const onHand = onHandMap[h.id] ?? 0;
-              const low = onHand < Number(h.par_level);
-              return (
-                <tr key={h.id}>
-                  <td className="dispname">
-                    {DEPARTMENTS.find((d) => d.value === h.department)?.label ?? h.department}
-                  </td>
-                  <td className="muted">{h.section_name ?? "Unassigned"}</td>
-                  <td className="num">
-                    <input
-                      className="par-in"
-                      type="number"
-                      min="0"
-                      step="any"
-                      defaultValue={h.par_level}
-                      onBlur={(e) => handleParChange(h.id, e.target.value)}
-                    />{" "}
-                    {item.base_unit}
-                  </td>
-                  <td className="num">
-                    {onHand} {item.base_unit}
-                  </td>
-                  <td>
-                    <span className={`badge ${low ? "b-low" : "b-ok"}`}>{low ? "Below par" : "In stock"}</span>
-                  </td>
-                  <td>
-                    {item.holdings.length > 1 && (
-                      <button className="rm" onClick={() => handleRemoveHolding(h.id)}>
-                        ×
-                      </button>
-                    )}
+            </thead>
+            <tbody>
+              {item.holdings.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="muted empty-row">
+                    Not stocked anywhere yet — add a department below.
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              )}
+              {item.holdings.map((h) => {
+                const onHand = onHandMap[h.id] ?? 0;
+                const low = onHand < Number(h.par_level);
+                return (
+                  <tr key={h.id}>
+                    <td className="dispname">
+                      {DEPARTMENTS.find((d) => d.value === h.department)?.label ?? h.department}
+                    </td>
+                    <td className="muted">{h.section_name ?? "Unassigned"}</td>
+                    <td className="num">
+                      <input
+                        className="par-in"
+                        type="number"
+                        min="0"
+                        step="any"
+                        defaultValue={h.par_level}
+                        onBlur={(e) => handleParChange(h.id, e.target.value)}
+                      />{" "}
+                      {item.base_unit}
+                    </td>
+                    <td className="num">
+                      {onHand} {item.base_unit}
+                    </td>
+                    <td>
+                      <span className={`badge ${low ? "b-low" : "b-ok"}`}>{low ? "Below par" : "In stock"}</span>
+                    </td>
+                    <td>
+                      {item.holdings.length > 1 && (
+                        <button className="rm" onClick={() => handleRemoveHolding(h.id)}>
+                          ×
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
 
         {!showAddHolding ? (
           <button className="addbtn" onClick={() => setShowAddHolding(true)}>

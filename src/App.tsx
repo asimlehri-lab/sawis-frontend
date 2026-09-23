@@ -1776,40 +1776,42 @@ export default function App() {
                 {!itemsError && !items && <p className="muted">Loading items…</p>}
                 {items && items.length === 0 && <p className="muted">No items yet.</p>}
                 {items && items.length > 0 && (
-                  <table className="tbl">
-                    <thead>
-                      <tr>
-                        <th>Name</th>
-                        <th>Category</th>
-                        <th>Unit</th>
-                        <th className="num">VAT</th>
-                        <th className="num">Holdings</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items
-                        .filter((it) => {
-                          const q = itemSearch.trim().toLowerCase();
-                          if (!q) return true;
-                          return (
-                            it.name.toLowerCase().includes(q) ||
-                            (it.sku ?? "").toLowerCase().includes(q) ||
-                            it.supplier_links.some((link) => link.supplier_sku.toLowerCase().includes(q))
-                          );
-                        })
-                        .map((it) => (
-                          <tr key={it.id} className="clickable" onClick={() => setSelectedItemId(it.id)}>
-                            <td className="dish">{it.name}</td>
-                            <td className="muted">{it.category_name || "—"}</td>
-                            <td className="muted">{it.base_unit}</td>
-                            <td className="num">
-                              {it.effective_vat_rate ? `${Number(it.effective_vat_rate) * 100}%` : "—"}
-                            </td>
-                            <td className="num">{it.holdings.length}</td>
-                          </tr>
-                        ))}
-                    </tbody>
-                  </table>
+                  <div className="table-scroll">
+                    <table className="tbl">
+                      <thead>
+                        <tr>
+                          <th>Name</th>
+                          <th>Category</th>
+                          <th>Unit</th>
+                          <th className="num">VAT</th>
+                          <th className="num">Holdings</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items
+                          .filter((it) => {
+                            const q = itemSearch.trim().toLowerCase();
+                            if (!q) return true;
+                            return (
+                              it.name.toLowerCase().includes(q) ||
+                              (it.sku ?? "").toLowerCase().includes(q) ||
+                              it.supplier_links.some((link) => link.supplier_sku.toLowerCase().includes(q))
+                            );
+                          })
+                          .map((it) => (
+                            <tr key={it.id} className="clickable" onClick={() => setSelectedItemId(it.id)}>
+                              <td className="dish">{it.name}</td>
+                              <td className="muted">{it.category_name || "—"}</td>
+                              <td className="muted">{it.base_unit}</td>
+                              <td className="num">
+                                {it.effective_vat_rate ? `${Number(it.effective_vat_rate) * 100}%` : "—"}
+                              </td>
+                              <td className="num">{it.holdings.length}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </>
             )}
@@ -1833,61 +1835,63 @@ export default function App() {
                 )}
                 {recipes && recipes.length === 0 && <p className="muted">No recipes yet.</p>}
                 {recipes && recipes.length > 0 && (
-                  <table className="tbl">
-                    <thead>
-                      <tr>
-                        <th>Recipe</th>
-                        <th className="num">Yield</th>
-                        <th className="num">Batch cost</th>
-                        <th className="num">Cost / unit</th>
-                        <th className="num">Menu price</th>
-                        <th className="num">Food cost</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recipes
-                        .filter((r) => recipeFilter === "all" || r.kind === recipeFilter)
-                        .filter((r) => {
-                          const q = recipeSearch.trim().toLowerCase();
-                          if (!q) return true;
-                          return (
-                            (r.name ?? "").toLowerCase().includes(q) ||
-                            r.pos_id.toLowerCase().includes(q)
-                          );
-                        })
-                        .map((r) => {
-                          const usedInCount = recipes.filter((other) =>
-                            other.lines.some((l) => l.line_type === "recipe" && l.sub_recipe === r.id)
-                          ).length;
-                          return (
-                            <tr key={r.id} className="clickable" onClick={() => setSelectedRecipeId(r.id)}>
-                              <td className="dish">
-                                {r.name || <span className="muted">Untitled</span>}
-                                <span className={`kind-tag ${r.kind}`}>{r.kind === "sub" ? "Sub-recipe" : "Dish"}</span>
-                                <div className="rsub">
-                                  {r.kind === "sub"
-                                    ? usedInCount === 0
-                                      ? "not used yet"
-                                      : `used in ${usedInCount} recipe${usedInCount === 1 ? "" : "s"}`
-                                    : `${r.lines.length} line${r.lines.length === 1 ? "" : "s"}`}
-                                  {r.pos_id && ` · POS ${r.pos_id}`}
-                                  {r.menu_category && ` · ${r.menu_category}`}
-                                </div>
-                              </td>
-                              <td className="num">
-                                {r.yield_qty} {r.yield_unit}
-                              </td>
-                              <td className="num">{formatMoney(Number(r.batch_cost), orgCurrency)}</td>
-                              <td className="num">{formatMoney(Number(r.per_portion_cost), orgCurrency)}</td>
-                              <td className="num">{r.menu_price ? formatMoney(Number(r.menu_price), orgCurrency) : "—"}</td>
-                              <td className="num">
-                                {r.plate_food_cost_pct !== null ? `${r.plate_food_cost_pct.toFixed(1)}%` : "—"}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
+                  <div className="table-scroll">
+                    <table className="tbl">
+                      <thead>
+                        <tr>
+                          <th>Recipe</th>
+                          <th className="num">Yield</th>
+                          <th className="num">Batch cost</th>
+                          <th className="num">Cost / unit</th>
+                          <th className="num">Menu price</th>
+                          <th className="num">Food cost</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {recipes
+                          .filter((r) => recipeFilter === "all" || r.kind === recipeFilter)
+                          .filter((r) => {
+                            const q = recipeSearch.trim().toLowerCase();
+                            if (!q) return true;
+                            return (
+                              (r.name ?? "").toLowerCase().includes(q) ||
+                              r.pos_id.toLowerCase().includes(q)
+                            );
+                          })
+                          .map((r) => {
+                            const usedInCount = recipes.filter((other) =>
+                              other.lines.some((l) => l.line_type === "recipe" && l.sub_recipe === r.id)
+                            ).length;
+                            return (
+                              <tr key={r.id} className="clickable" onClick={() => setSelectedRecipeId(r.id)}>
+                                <td className="dish">
+                                  {r.name || <span className="muted">Untitled</span>}
+                                  <span className={`kind-tag ${r.kind}`}>{r.kind === "sub" ? "Sub-recipe" : "Dish"}</span>
+                                  <div className="rsub">
+                                    {r.kind === "sub"
+                                      ? usedInCount === 0
+                                        ? "not used yet"
+                                        : `used in ${usedInCount} recipe${usedInCount === 1 ? "" : "s"}`
+                                      : `${r.lines.length} line${r.lines.length === 1 ? "" : "s"}`}
+                                    {r.pos_id && ` · POS ${r.pos_id}`}
+                                    {r.menu_category && ` · ${r.menu_category}`}
+                                  </div>
+                                </td>
+                                <td className="num">
+                                  {r.yield_qty} {r.yield_unit}
+                                </td>
+                                <td className="num">{formatMoney(Number(r.batch_cost), orgCurrency)}</td>
+                                <td className="num">{formatMoney(Number(r.per_portion_cost), orgCurrency)}</td>
+                                <td className="num">{r.menu_price ? formatMoney(Number(r.menu_price), orgCurrency) : "—"}</td>
+                                <td className="num">
+                                  {r.plate_food_cost_pct !== null ? `${r.plate_food_cost_pct.toFixed(1)}%` : "—"}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </>
             )}
@@ -1935,48 +1939,50 @@ export default function App() {
 
                 {purchaseOrders && purchaseOrders.length === 0 && <p className="muted">No purchase orders yet.</p>}
                 {purchaseOrders && purchaseOrders.length > 0 && (
-                  <table className="tbl">
-                    <thead>
-                      <tr>
-                        <th>PO number</th>
-                        <th>Supplier</th>
-                        <th>Location</th>
-                        <th>Status</th>
-                        <th>Expected</th>
-                        <th className="num">Lines</th>
-                        <th className="num">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {purchaseOrders
-                        .filter((po) => poFilter === "all" || po.status === poFilter)
-                        .map((po) => {
-                          const supplier = suppliers.find((s) => s.id === po.supplier);
-                          const belowMin =
-                            po.status === "draft" &&
-                            supplier?.min_order_value &&
-                            Number(po.total) < Number(supplier.min_order_value);
-                          return (
-                            <tr key={po.id} className="clickable" onClick={() => setSelectedPOId(po.id)}>
-                              <td className="muted">{po.po_number || "—"}</td>
-                              <td className="dish">{po.supplier_name}</td>
-                              <td className="muted">{po.location_name}</td>
-                              <td>
-                                <span className={`postatus ps-${po.status}`}>
-                                  {po.status.charAt(0).toUpperCase() + po.status.slice(1)}
-                                </span>
-                                {belowMin && <span className="postatus ps-awaiting" style={{ marginLeft: 6 }}>Below min</span>}
-                              </td>
-                              <td className="muted">{fmtDate(po.expected_date)}</td>
-                              <td className="num">{po.lines.length}</td>
-                              <td className="num">
-                                {formatMoney(Number(po.total), locations.find((l) => l.id === po.location)?.currency)}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                    </tbody>
-                  </table>
+                  <div className="table-scroll">
+                    <table className="tbl">
+                      <thead>
+                        <tr>
+                          <th>PO number</th>
+                          <th>Supplier</th>
+                          <th>Location</th>
+                          <th>Status</th>
+                          <th>Expected</th>
+                          <th className="num">Lines</th>
+                          <th className="num">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {purchaseOrders
+                          .filter((po) => poFilter === "all" || po.status === poFilter)
+                          .map((po) => {
+                            const supplier = suppliers.find((s) => s.id === po.supplier);
+                            const belowMin =
+                              po.status === "draft" &&
+                              supplier?.min_order_value &&
+                              Number(po.total) < Number(supplier.min_order_value);
+                            return (
+                              <tr key={po.id} className="clickable" onClick={() => setSelectedPOId(po.id)}>
+                                <td className="muted">{po.po_number || "—"}</td>
+                                <td className="dish">{po.supplier_name}</td>
+                                <td className="muted">{po.location_name}</td>
+                                <td>
+                                  <span className={`postatus ps-${po.status}`}>
+                                    {po.status.charAt(0).toUpperCase() + po.status.slice(1)}
+                                  </span>
+                                  {belowMin && <span className="postatus ps-awaiting" style={{ marginLeft: 6 }}>Below min</span>}
+                                </td>
+                                <td className="muted">{fmtDate(po.expected_date)}</td>
+                                <td className="num">{po.lines.length}</td>
+                                <td className="num">
+                                  {formatMoney(Number(po.total), locations.find((l) => l.id === po.location)?.currency)}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </>
             )}
@@ -2314,32 +2320,34 @@ export default function App() {
             )}
 
             {importRows.length > 0 && importDone === null && (
-              <table className="im-tbl">
-                <thead>
-                  <tr>
-                    <th>Product line</th>
-                    <th>Unit</th>
-                    <th className="num">Price</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {importRows.slice(0, 8).map((r, i) => (
-                    <tr key={i}>
-                      <td>{r.name}</td>
-                      <td>
-                        {r.unit}
-                        {r.base_qty_per_unit && r.base_qty_per_unit !== "1" && (
-                          <span className="muted" style={{ fontSize: 12 }}>
-                            {" "}
-                            (1 = {Number(r.base_qty_per_unit).toFixed(2)} of item's unit)
-                          </span>
-                        )}
-                      </td>
-                      <td className="num">{formatMoney(Number(r.price), orgCurrency)}</td>
+              <div className="table-scroll">
+                <table className="im-tbl">
+                  <thead>
+                    <tr>
+                      <th>Product line</th>
+                      <th>Unit</th>
+                      <th className="num">Price</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {importRows.slice(0, 8).map((r, i) => (
+                      <tr key={i}>
+                        <td>{r.name}</td>
+                        <td>
+                          {r.unit}
+                          {r.base_qty_per_unit && r.base_qty_per_unit !== "1" && (
+                            <span className="muted" style={{ fontSize: 12 }}>
+                              {" "}
+                              (1 = {Number(r.base_qty_per_unit).toFixed(2)} of item's unit)
+                            </span>
+                          )}
+                        </td>
+                        <td className="num">{formatMoney(Number(r.price), orgCurrency)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
             {importRows.length > 8 && importDone === null && (
               <p className="muted" style={{ fontSize: 12 }}>

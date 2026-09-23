@@ -344,28 +344,30 @@ export default function WasteLog({
                   </button>
                 ))}
               </div>
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>When</th>
-                    <th>Item</th>
-                    <th>Reason</th>
-                    <th className="num">Qty</th>
-                    <th className="num">Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRecent.map((r) => (
-                    <tr key={r.id}>
-                      <td className="muted">{fmtWhen(r.occurredAt)}</td>
-                      <td>{r.itemName}</td>
-                      <td className="muted">{reasonLabel(r.reason)}</td>
-                      <td className="num">{r.qty.toFixed(2)}</td>
-                      <td className="num">{formatMoney(r.value, currency)}</td>
+              <div className="table-scroll">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>When</th>
+                      <th>Item</th>
+                      <th>Reason</th>
+                      <th className="num">Qty</th>
+                      <th className="num">Value</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filteredRecent.map((r) => (
+                      <tr key={r.id}>
+                        <td className="muted">{fmtWhen(r.occurredAt)}</td>
+                        <td>{r.itemName}</td>
+                        <td className="muted">{reasonLabel(r.reason)}</td>
+                        <td className="num">{r.qty.toFixed(2)}</td>
+                        <td className="num">{formatMoney(r.value, currency)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </>
           )}
         </div>

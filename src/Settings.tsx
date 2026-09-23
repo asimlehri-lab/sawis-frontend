@@ -906,46 +906,48 @@ function ItemsImportPanel({
             {existingIncluded > 0 &&
               ` ${existingIncluded} already exist by name — they won't be duplicated, but will get a stock holding at the location above if they don't have one yet.`}
           </div>
-          <table className="tbl" style={{ marginTop: 10 }}>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Category</th>
-                <th>Unit</th>
-                <th className="num">VAT</th>
-                <th className="num">Par</th>
-                <th>Supplier</th>
-                <th className="num">Cost</th>
-                <th>Status</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr key={i} style={!r.include ? { opacity: 0.45 } : undefined}>
-                  <td>{r.name}</td>
-                  <td className="muted">{r.category || "—"}</td>
-                  <td className="muted">{r.base_unit}</td>
-                  <td className="num">{r.vat_rate ? `${r.vat_rate}%` : "—"}</td>
-                  <td className="num">{r.par_level || "0"}</td>
-                  <td className="muted">{r.supplier && r.cost ? r.supplier : "—"}</td>
-                  <td className="num">{r.supplier && r.cost ? r.cost : "—"}</td>
-                  <td>
-                    {r.exists ? (
-                      <span className="badge b-low">Already exists — will add holding</span>
-                    ) : (
-                      <span className="badge b-ok">New</span>
-                    )}
-                  </td>
-                  <td>
-                    <button type="button" className="btn-ghost small" onClick={() => toggleInclude(i)}>
-                      {r.include ? "Skip" : "Include"}
-                    </button>
-                  </td>
+          <div className="table-scroll">
+            <table className="tbl" style={{ marginTop: 10 }}>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Category</th>
+                  <th>Unit</th>
+                  <th className="num">VAT</th>
+                  <th className="num">Par</th>
+                  <th>Supplier</th>
+                  <th className="num">Cost</th>
+                  <th>Status</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={i} style={!r.include ? { opacity: 0.45 } : undefined}>
+                    <td>{r.name}</td>
+                    <td className="muted">{r.category || "—"}</td>
+                    <td className="muted">{r.base_unit}</td>
+                    <td className="num">{r.vat_rate ? `${r.vat_rate}%` : "—"}</td>
+                    <td className="num">{r.par_level || "0"}</td>
+                    <td className="muted">{r.supplier && r.cost ? r.supplier : "—"}</td>
+                    <td className="num">{r.supplier && r.cost ? r.cost : "—"}</td>
+                    <td>
+                      {r.exists ? (
+                        <span className="badge b-low">Already exists — will add holding</span>
+                      ) : (
+                        <span className="badge b-ok">New</span>
+                      )}
+                    </td>
+                    <td>
+                      <button type="button" className="btn-ghost small" onClick={() => toggleInclude(i)}>
+                        {r.include ? "Skip" : "Include"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <div className="modal-actions" style={{ marginTop: 16 }}>
             <button
               className="btn-primary"
@@ -1509,79 +1511,81 @@ function RecipesImportPanel({
             line{rows.length === 1 ? "" : "s"} read from {fileName}.
             {newItemNames.size > 0 && ` ${newItemNames.size} new item${newItemNames.size === 1 ? "" : "s"} will be created.`}
           </div>
-          <table className="tbl" style={{ marginTop: 10 }}>
-            <thead>
-              <tr>
-                <th>Recipe</th>
-                <th>Ingredient (from CSV)</th>
-                <th>Matched item</th>
-                <th className="num">Qty</th>
-                <th>Unit</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => {
-                const isFirstOfGroup = i === 0 || rows[i - 1].recipeName.trim().toLowerCase() !== r.recipeName.trim().toLowerCase();
-                const match = isFirstOfGroup ? matchFor(r) : undefined;
-                const existingLineCount = match ? match.lines.filter((l) => l.line_type === "item").length : 0;
-                return (
-                  <tr key={i}>
-                    <td>
-                      {isFirstOfGroup ? (
-                        <>
-                          <b>{r.recipeName}</b>
-                          <div className="muted" style={{ fontSize: 11 }}>
-                            {r.kind} · yields {r.yield_qty} {r.yield_unit}
-                            {r.kind === "dish" && r.menu_price
-                              ? ` · ${currencySymbol(locations.find((l) => l.id === location)?.currency)}${r.menu_price}`
-                              : ""}
-                            {r.posId ? ` · POS ${r.posId}` : ""}
-                            {r.menuCategory ? ` · ${r.menuCategory}` : ""}
-                          </div>
-                          {match ? (
-                            <div className="badge b-low" style={{ marginTop: 3 }}>
-                              Will update — matched by {r.posId && match.pos_id === r.posId ? "POS ID" : "name"}
-                              {existingLineCount > 0 ? `, replaces ${existingLineCount} existing ingredient line${existingLineCount === 1 ? "" : "s"}` : ""}
+          <div className="table-scroll">
+            <table className="tbl" style={{ marginTop: 10 }}>
+              <thead>
+                <tr>
+                  <th>Recipe</th>
+                  <th>Ingredient (from CSV)</th>
+                  <th>Matched item</th>
+                  <th className="num">Qty</th>
+                  <th>Unit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => {
+                  const isFirstOfGroup = i === 0 || rows[i - 1].recipeName.trim().toLowerCase() !== r.recipeName.trim().toLowerCase();
+                  const match = isFirstOfGroup ? matchFor(r) : undefined;
+                  const existingLineCount = match ? match.lines.filter((l) => l.line_type === "item").length : 0;
+                  return (
+                    <tr key={i}>
+                      <td>
+                        {isFirstOfGroup ? (
+                          <>
+                            <b>{r.recipeName}</b>
+                            <div className="muted" style={{ fontSize: 11 }}>
+                              {r.kind} · yields {r.yield_qty} {r.yield_unit}
+                              {r.kind === "dish" && r.menu_price
+                                ? ` · ${currencySymbol(locations.find((l) => l.id === location)?.currency)}${r.menu_price}`
+                                : ""}
+                              {r.posId ? ` · POS ${r.posId}` : ""}
+                              {r.menuCategory ? ` · ${r.menuCategory}` : ""}
                             </div>
-                          ) : (
-                            <div className="badge b-ok" style={{ marginTop: 3 }}>
-                              Will create new recipe
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <span className="muted">↳</span>
-                      )}
-                    </td>
-                    <td>{r.ingredientRaw || <span className="muted">— (no ingredients on this row)</span>}</td>
-                    <td>
-                      {!r.ingredientRaw ? (
-                        <span className="muted">—</span>
-                      ) : r.matchedItemId ? (
-                        <span className="badge b-ok">{items.find((it) => it.id === r.matchedItemId)?.name}</span>
-                      ) : (
-                        <>
-                          <span className="badge b-low" style={{ marginRight: 6 }}>
-                            Will create new item
-                          </span>
-                          <SearchSelect
-                            value=""
-                            onChange={(val) => updateRow(i, { matchedItemId: val || null })}
-                            placeholder="— or match existing —"
-                            aria-label="Match existing item"
-                            style={{ width: 200 }}
-                            options={items.map((it) => ({ value: it.id, label: it.name }))}
-                          />
-                        </>
-                      )}
-                    </td>
-                    <td className="num">{r.qty || "—"}</td>
-                    <td className="muted">{r.unit || "—"}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                            {match ? (
+                              <div className="badge b-low" style={{ marginTop: 3 }}>
+                                Will update — matched by {r.posId && match.pos_id === r.posId ? "POS ID" : "name"}
+                                {existingLineCount > 0 ? `, replaces ${existingLineCount} existing ingredient line${existingLineCount === 1 ? "" : "s"}` : ""}
+                              </div>
+                            ) : (
+                              <div className="badge b-ok" style={{ marginTop: 3 }}>
+                                Will create new recipe
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <span className="muted">↳</span>
+                        )}
+                      </td>
+                      <td>{r.ingredientRaw || <span className="muted">— (no ingredients on this row)</span>}</td>
+                      <td>
+                        {!r.ingredientRaw ? (
+                          <span className="muted">—</span>
+                        ) : r.matchedItemId ? (
+                          <span className="badge b-ok">{items.find((it) => it.id === r.matchedItemId)?.name}</span>
+                        ) : (
+                          <>
+                            <span className="badge b-low" style={{ marginRight: 6 }}>
+                              Will create new item
+                            </span>
+                            <SearchSelect
+                              value=""
+                              onChange={(val) => updateRow(i, { matchedItemId: val || null })}
+                              placeholder="— or match existing —"
+                              aria-label="Match existing item"
+                              style={{ width: 200 }}
+                              options={items.map((it) => ({ value: it.id, label: it.name }))}
+                            />
+                          </>
+                        )}
+                      </td>
+                      <td className="num">{r.qty || "—"}</td>
+                      <td className="muted">{r.unit || "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
           <div className="modal-actions" style={{ marginTop: 16 }}>
             <button className="btn-primary" onClick={handleImport} disabled={importing || !location}>
               {importing

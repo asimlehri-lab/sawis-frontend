@@ -216,36 +216,40 @@ export default function SupplierDeliveries({
             </button>
           </div>
         ) : (
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>Location</th>
-                <th>Expected</th>
-                <th className="num">Lines</th>
-                <th className="num">Total</th>
-              </tr>
-            </thead>
-            <tbody>{open.map(renderRow)}</tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Location</th>
+                  <th>Expected</th>
+                  <th className="num">Lines</th>
+                  <th className="num">Total</th>
+                </tr>
+              </thead>
+              <tbody>{open.map(renderRow)}</tbody>
+            </table>
+          </div>
         )}
       </div>
 
       {history.length > 0 && (
         <div className="card">
           <h2 style={{ marginTop: 0 }}>Order history</h2>
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Status</th>
-                <th>Location</th>
-                <th>Expected</th>
-                <th className="num">Lines</th>
-                <th className="num">Total</th>
-              </tr>
-            </thead>
-            <tbody>{history.map(renderRow)}</tbody>
-          </table>
+          <div className="table-scroll">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Location</th>
+                  <th>Expected</th>
+                  <th className="num">Lines</th>
+                  <th className="num">Total</th>
+                </tr>
+              </thead>
+              <tbody>{history.map(renderRow)}</tbody>
+            </table>
+          </div>
         </div>
       )}
 

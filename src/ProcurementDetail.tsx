@@ -685,26 +685,28 @@ export default function ProcurementDetail({
         <p>
           <b>Expected:</b> {po.expected_date ?? "—"}
         </p>
-        <table>
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th>Qty</th>
-              <th>Unit price</th>
-              <th>Line total (ex VAT)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {po.lines.map((l) => (
-              <tr key={l.id}>
-                <td>{l.item_name}</td>
-                <td>{Number(l.qty).toFixed(2)}</td>
-                <td>{formatMoney(Number(l.unit_price), currency)}</td>
-                <td>{formatMoney(Number(l.line_total), currency)}</td>
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Qty</th>
+                <th>Unit price</th>
+                <th>Line total (ex VAT)</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {po.lines.map((l) => (
+                <tr key={l.id}>
+                  <td>{l.item_name}</td>
+                  <td>{Number(l.qty).toFixed(2)}</td>
+                  <td>{formatMoney(Number(l.unit_price), currency)}</td>
+                  <td>{formatMoney(Number(l.line_total), currency)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <p>
           <b>Total (ex VAT): {formatMoney(Number(po.total), currency)}</b>
           <br />
@@ -858,99 +860,101 @@ export default function ProcurementDetail({
 
       <div className="card">
         <h2>Order lines</h2>
-        <table className="htbl">
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th className="num">Qty</th>
-              <th className="num">Unit price</th>
-              <th className="num">VAT %</th>
-              <th className="num">Line total (ex VAT)</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {po.lines.length === 0 && (
+        <div className="table-scroll">
+          <table className="htbl">
+            <thead>
               <tr>
-                <td colSpan={6} className="muted empty-row">
-                  No lines yet — add items below.
-                </td>
+                <th>Item</th>
+                <th className="num">Qty</th>
+                <th className="num">Unit price</th>
+                <th className="num">VAT %</th>
+                <th className="num">Line total (ex VAT)</th>
+                <th></th>
               </tr>
-            )}
-            {po.lines.map((l) => {
-              const lineItem = items.find((it) => it.id === l.item);
-              const baseUnit = lineItem?.base_unit ?? "";
-              return (
-              <tr key={l.id}>
-                <td className="dispname">{l.item_name}</td>
-                <td className="num">
-                  {editable ? (
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0.01"
-                      key={`${l.id}-${l.qty}`}
-                      defaultValue={Number(l.qty).toFixed(2)}
-                      disabled={savingLineId === l.id}
-                      style={{ width: 80, textAlign: "right" }}
-                      onBlur={(e) => handleUpdateLineQty(l.id, l.qty, e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                      }}
-                    />
-                  ) : l.supplier_unit && l.supplier_qty != null ? (
-                    // As-invoiced qty/unit, e.g. "1 L" -- matches what's
-                    // printed on the supplier's own paper invoice, with the
-                    // converted, actually-costed figure shown underneath
-                    // for anyone who needs it (never the other way round;
-                    // see supplier_unit/supplier_qty's model comment).
-                    <>
-                      {formatQty(Number(l.supplier_qty))} {l.supplier_unit}
-                      <div className="sd">
-                        = {formatQty(Number(l.qty))} {baseUnit}
-                      </div>
-                    </>
-                  ) : (
-                    `${Number(l.qty).toFixed(2)}${baseUnit ? ` ${baseUnit}` : ""}`
-                  )}
-                </td>
-                <td className="num">{formatMoney(Number(l.unit_price), currency)}</td>
-                <td className="num">
-                  {editable ? (
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max="100"
-                      key={`${l.id}-${l.vat_rate ?? "inherit"}`}
-                      defaultValue={l.effective_vat_rate ? (Number(l.effective_vat_rate) * 100).toFixed(2) : ""}
-                      placeholder={lineItem?.effective_vat_rate ? undefined : "—"}
-                      disabled={savingLineId === l.id}
-                      style={{ width: 64, textAlign: "right" }}
-                      onBlur={(e) => handleUpdateLineVat(l.id, e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                      }}
-                    />
-                  ) : l.effective_vat_rate ? (
-                    `${(Number(l.effective_vat_rate) * 100).toFixed(2)}%`
-                  ) : (
-                    "—"
-                  )}
-                </td>
-                <td className="num">{formatMoney(Number(l.line_total), currency)}</td>
-                <td>
-                  {editable && (
-                    <button className="rm" onClick={() => handleRemoveLine(l.id)}>
-                      ×
-                    </button>
-                  )}
-                </td>
-              </tr>
-              );
-            })}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {po.lines.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="muted empty-row">
+                    No lines yet — add items below.
+                  </td>
+                </tr>
+              )}
+              {po.lines.map((l) => {
+                const lineItem = items.find((it) => it.id === l.item);
+                const baseUnit = lineItem?.base_unit ?? "";
+                return (
+                <tr key={l.id}>
+                  <td className="dispname">{l.item_name}</td>
+                  <td className="num">
+                    {editable ? (
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        key={`${l.id}-${l.qty}`}
+                        defaultValue={Number(l.qty).toFixed(2)}
+                        disabled={savingLineId === l.id}
+                        style={{ width: 80, textAlign: "right" }}
+                        onBlur={(e) => handleUpdateLineQty(l.id, l.qty, e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                        }}
+                      />
+                    ) : l.supplier_unit && l.supplier_qty != null ? (
+                      // As-invoiced qty/unit, e.g. "1 L" -- matches what's
+                      // printed on the supplier's own paper invoice, with the
+                      // converted, actually-costed figure shown underneath
+                      // for anyone who needs it (never the other way round;
+                      // see supplier_unit/supplier_qty's model comment).
+                      <>
+                        {formatQty(Number(l.supplier_qty))} {l.supplier_unit}
+                        <div className="sd">
+                          = {formatQty(Number(l.qty))} {baseUnit}
+                        </div>
+                      </>
+                    ) : (
+                      `${Number(l.qty).toFixed(2)}${baseUnit ? ` ${baseUnit}` : ""}`
+                    )}
+                  </td>
+                  <td className="num">{formatMoney(Number(l.unit_price), currency)}</td>
+                  <td className="num">
+                    {editable ? (
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max="100"
+                        key={`${l.id}-${l.vat_rate ?? "inherit"}`}
+                        defaultValue={l.effective_vat_rate ? (Number(l.effective_vat_rate) * 100).toFixed(2) : ""}
+                        placeholder={lineItem?.effective_vat_rate ? undefined : "—"}
+                        disabled={savingLineId === l.id}
+                        style={{ width: 64, textAlign: "right" }}
+                        onBlur={(e) => handleUpdateLineVat(l.id, e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                        }}
+                      />
+                    ) : l.effective_vat_rate ? (
+                      `${(Number(l.effective_vat_rate) * 100).toFixed(2)}%`
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="num">{formatMoney(Number(l.line_total), currency)}</td>
+                  <td>
+                    {editable && (
+                      <button className="rm" onClick={() => handleRemoveLine(l.id)}>
+                        ×
+                      </button>
+                    )}
+                  </td>
+                </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
 
         {editable ? (
           <form className="addholding" onSubmit={handleAddLine}>
@@ -1098,56 +1102,58 @@ export default function ProcurementDetail({
               placeholder="e.g. INV-10432"
             />
           </div>
-          <table className="htbl">
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th className="num">Ordered</th>
-                <th className="num">Received qty</th>
-                <th className="num">Received price</th>
-              </tr>
-            </thead>
-            <tbody>
-              {po.lines.map((l) => (
-                <tr key={l.id}>
-                  <td className="dispname">{l.item_name}</td>
-                  <td className="num muted">
-                    {Number(l.qty).toFixed(2)} @ {formatMoney(Number(l.unit_price), currency)}
-                  </td>
-                  <td className="num">
-                    <input
-                      className="par-in"
-                      type="number"
-                      min="0"
-                      step="any"
-                      value={receiveLines[l.id]?.qty ?? l.qty}
-                      onChange={(e) =>
-                        setReceiveLines((prev) => ({
-                          ...prev,
-                          [l.id]: { qty: e.target.value, price: prev[l.id]?.price ?? l.unit_price },
-                        }))
-                      }
-                    />
-                  </td>
-                  <td className="num">
-                    <input
-                      className="par-in"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={receiveLines[l.id]?.price ?? l.unit_price}
-                      onChange={(e) =>
-                        setReceiveLines((prev) => ({
-                          ...prev,
-                          [l.id]: { qty: prev[l.id]?.qty ?? l.qty, price: e.target.value },
-                        }))
-                      }
-                    />
-                  </td>
+          <div className="table-scroll">
+            <table className="htbl">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th className="num">Ordered</th>
+                  <th className="num">Received qty</th>
+                  <th className="num">Received price</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {po.lines.map((l) => (
+                  <tr key={l.id}>
+                    <td className="dispname">{l.item_name}</td>
+                    <td className="num muted">
+                      {Number(l.qty).toFixed(2)} @ {formatMoney(Number(l.unit_price), currency)}
+                    </td>
+                    <td className="num">
+                      <input
+                        className="par-in"
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={receiveLines[l.id]?.qty ?? l.qty}
+                        onChange={(e) =>
+                          setReceiveLines((prev) => ({
+                            ...prev,
+                            [l.id]: { qty: e.target.value, price: prev[l.id]?.price ?? l.unit_price },
+                          }))
+                        }
+                      />
+                    </td>
+                    <td className="num">
+                      <input
+                        className="par-in"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={receiveLines[l.id]?.price ?? l.unit_price}
+                        onChange={(e) =>
+                          setReceiveLines((prev) => ({
+                            ...prev,
+                            [l.id]: { qty: prev[l.id]?.qty ?? l.qty, price: e.target.value },
+                          }))
+                        }
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           {receiveError && <p className="error">{receiveError}</p>}
           <div className="modal-actions" style={{ marginTop: 14 }}>
             <button className="btn-ghost" onClick={() => setShowReceive(false)}>
@@ -1246,40 +1252,42 @@ export default function ProcurementDetail({
                   Assign each item to a supplier. Items assigned to more than one supplier become
                   separate new draft orders, created together.
                 </p>
-                <table className="im-tbl">
-                  <thead>
-                    <tr>
-                      <th>Item</th>
-                      <th>Qty</th>
-                      <th>New supplier</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {po.lines.map((l) => (
-                      <tr key={l.id}>
-                        <td>{l.item_name}</td>
-                        <td>{Number(l.qty).toFixed(2)}</td>
-                        <td>
-                          <select
-                            value={resourceLines[l.id] ?? po.supplier}
-                            onChange={(e) =>
-                              setResourceLines((prev) => ({ ...prev, [l.id]: e.target.value }))
-                            }
-                          >
-                            {suppliers
-                              .filter((s) => !s.archived || s.id === (resourceLines[l.id] ?? po.supplier))
-                              .map((s) => (
-                                <option key={s.id} value={s.id}>
-                                  {s.name}
-                                  {s.archived ? " (archived)" : ""}
-                                </option>
-                              ))}
-                          </select>
-                        </td>
+                <div className="table-scroll">
+                  <table className="im-tbl">
+                    <thead>
+                      <tr>
+                        <th>Item</th>
+                        <th>Qty</th>
+                        <th>New supplier</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {po.lines.map((l) => (
+                        <tr key={l.id}>
+                          <td>{l.item_name}</td>
+                          <td>{Number(l.qty).toFixed(2)}</td>
+                          <td>
+                            <select
+                              value={resourceLines[l.id] ?? po.supplier}
+                              onChange={(e) =>
+                                setResourceLines((prev) => ({ ...prev, [l.id]: e.target.value }))
+                              }
+                            >
+                              {suppliers
+                                .filter((s) => !s.archived || s.id === (resourceLines[l.id] ?? po.supplier))
+                                .map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name}
+                                    {s.archived ? " (archived)" : ""}
+                                  </option>
+                                ))}
+                            </select>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
                 {resourceError && <p className="error">{resourceError}</p>}
                 <div className="modal-actions">
                   <button type="button" className="btn-ghost" onClick={() => setShowResource(false)} disabled={resourcing}>

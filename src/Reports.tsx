@@ -218,22 +218,24 @@ function TrendChart({
           No sales recorded in this period yet.
         </p>
       ) : asTable ? (
-        <table className="tbl" style={{ marginTop: 4 }}>
-          <thead>
-            <tr>
-              <th>Period</th>
-              <th className="num">Food cost %</th>
-            </tr>
-          </thead>
-          <tbody>
-            {report.trend.map((t) => (
-              <tr key={t.label}>
-                <td>{t.label}</td>
-                <td className="num">{pct(t.food_cost_pct)}</td>
+        <div className="table-scroll">
+          <table className="tbl" style={{ marginTop: 4 }}>
+            <thead>
+              <tr>
+                <th>Period</th>
+                <th className="num">Food cost %</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {report.trend.map((t) => (
+                <tr key={t.label}>
+                  <td>{t.label}</td>
+                  <td className="num">{pct(t.food_cost_pct)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : (
         <>
           <div className="trend-chart">
@@ -320,47 +322,49 @@ function MenuTable({ rows, currency }: { rows: ReportsMenuRow[]; currency?: stri
           No dishes sold in this period yet.
         </p>
       ) : (
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th>Dish</th>
-              <th className="num">Sold</th>
-              <th className="num">Food cost</th>
-              <th className="num">GP / dish</th>
-              <th className="num">GP contribution</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.recipe_id}>
-                <td className="dish">{r.name}</td>
-                <td className="num">{r.qty}</td>
-                <td className="num">
-                  {r.food_cost_pct === null ? (
-                    "—"
-                  ) : r.food_cost_pct === 0 ? (
-                    // A dish with real ingredients essentially never costs
-                    // literally £0 to make — a flat 0.0% almost always means
-                    // an ingredient had no supplier price on file, not that
-                    // margin is perfect. Flag it rather than badge it green.
-                    <span
-                      className="badge warn"
-                      title="Likely incomplete — a real dish essentially never costs £0 to make. Check this recipe's ingredients for one with no supplier price on file."
-                    >
-                      0.0%*
-                    </span>
-                  ) : (
-                    <span className={`badge ${r.food_cost_pct > TARGET_FC ? "b-low" : "b-ok"}`}>
-                      {r.food_cost_pct.toFixed(1)}%
-                    </span>
-                  )}
-                </td>
-                <td className="num">{formatMoney(r.gp_per_unit, currency, 2)}</td>
-                <td className="num">{formatMoney(r.gp_contribution, currency, 2)}</td>
+        <div className="table-scroll">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Dish</th>
+                <th className="num">Sold</th>
+                <th className="num">Food cost</th>
+                <th className="num">GP / dish</th>
+                <th className="num">GP contribution</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.recipe_id}>
+                  <td className="dish">{r.name}</td>
+                  <td className="num">{r.qty}</td>
+                  <td className="num">
+                    {r.food_cost_pct === null ? (
+                      "—"
+                    ) : r.food_cost_pct === 0 ? (
+                      // A dish with real ingredients essentially never costs
+                      // literally £0 to make — a flat 0.0% almost always means
+                      // an ingredient had no supplier price on file, not that
+                      // margin is perfect. Flag it rather than badge it green.
+                      <span
+                        className="badge warn"
+                        title="Likely incomplete — a real dish essentially never costs £0 to make. Check this recipe's ingredients for one with no supplier price on file."
+                      >
+                        0.0%*
+                      </span>
+                    ) : (
+                      <span className={`badge ${r.food_cost_pct > TARGET_FC ? "b-low" : "b-ok"}`}>
+                        {r.food_cost_pct.toFixed(1)}%
+                      </span>
+                    )}
+                  </td>
+                  <td className="num">{formatMoney(r.gp_per_unit, currency, 2)}</td>
+                  <td className="num">{formatMoney(r.gp_contribution, currency, 2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );

@@ -680,53 +680,55 @@ export default function EndOfDay({
                     {unmatchedCount > 0 && ` ${unmatchedCount} need matching below before they can be imported.`}
                   </div>
                 )}
-                <table className="tbl" style={{ marginTop: 10 }}>
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Dish (from CSV)</th>
-                      <th>Matched recipe</th>
-                      <th className="num">Qty</th>
-                      <th className="num">Revenue</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((r, i) => (
-                      <tr key={i} style={r.skip ? { opacity: 0.45 } : undefined}>
-                        <td className="muted">{r.date}</td>
-                        <td>{r.dishRaw}</td>
-                        <td>
-                          {r.matchedRecipeId ? (
-                            <span className="badge b-ok">
-                              {dishRecipes.find((d) => d.id === r.matchedRecipeId)?.name}
-                            </span>
-                          ) : (
-                            <SearchSelect
-                              value=""
-                              onChange={(val) => updateRow(i, { matchedRecipeId: val || null })}
-                              disabled={r.skip}
-                              placeholder="Pick a recipe…"
-                              aria-label="Matched recipe"
-                              options={dishRecipes.map((d) => ({ value: d.id, label: d.name }))}
-                            />
-                          )}
-                        </td>
-                        <td className="num">{r.qty}</td>
-                        <td className="num">£{(Number(r.revenue) || 0).toFixed(2)}</td>
-                        <td>
-                          <button
-                            type="button"
-                            className="btn-ghost small"
-                            onClick={() => updateRow(i, { skip: !r.skip })}
-                          >
-                            {r.skip ? "Include" : "Skip"}
-                          </button>
-                        </td>
+                <div className="table-scroll">
+                  <table className="tbl" style={{ marginTop: 10 }}>
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Dish (from CSV)</th>
+                        <th>Matched recipe</th>
+                        <th className="num">Qty</th>
+                        <th className="num">Revenue</th>
+                        <th></th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {rows.map((r, i) => (
+                        <tr key={i} style={r.skip ? { opacity: 0.45 } : undefined}>
+                          <td className="muted">{r.date}</td>
+                          <td>{r.dishRaw}</td>
+                          <td>
+                            {r.matchedRecipeId ? (
+                              <span className="badge b-ok">
+                                {dishRecipes.find((d) => d.id === r.matchedRecipeId)?.name}
+                              </span>
+                            ) : (
+                              <SearchSelect
+                                value=""
+                                onChange={(val) => updateRow(i, { matchedRecipeId: val || null })}
+                                disabled={r.skip}
+                                placeholder="Pick a recipe…"
+                                aria-label="Matched recipe"
+                                options={dishRecipes.map((d) => ({ value: d.id, label: d.name }))}
+                              />
+                            )}
+                          </td>
+                          <td className="num">{r.qty}</td>
+                          <td className="num">£{(Number(r.revenue) || 0).toFixed(2)}</td>
+                          <td>
+                            <button
+                              type="button"
+                              className="btn-ghost small"
+                              onClick={() => updateRow(i, { skip: !r.skip })}
+                            >
+                              {r.skip ? "Include" : "Skip"}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </>
             )}
 

@@ -62,69 +62,71 @@ export default function Team({ accessToken, me, memberships, membershipsError, l
       {rows.length === 0 && !membershipsError && <p className="muted">No team members yet.</p>}
 
       {rows.length > 0 && (
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Job title</th>
-              <th>Role</th>
-              <th>Location</th>
-              <th>Department</th>
-              <th>Last active</th>
-              {isAdmin && <th></th>}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((m) => (
-              <tr key={m.id}>
-                <td>
-                  <div style={{ fontWeight: 600 }}>{m.name || "—"}</div>
-                  <div className="muted" style={{ fontSize: 11.5 }}>
-                    {m.email}
-                  </div>
-                </td>
-                <td className="muted">{m.job_title || "—"}</td>
-                <td>
-                  <span className={`badge role-${m.role}`}>{roleLabel(m.role)}</span>
-                </td>
-                <td className="muted">{m.location_name ?? "All locations"}</td>
-                <td className="muted">{m.department ? m.department.charAt(0).toUpperCase() + m.department.slice(1) : "All"}</td>
-                <td>
-                  {(() => {
-                    const { text, recent } = lastActive(m.last_login);
-                    return recent ? <span className="badge b-ok">{text}</span> : <span className="muted">{text}</span>;
-                  })()}
-                </td>
-                {isAdmin && (
-                  <td className="num">
-                    <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                      <button className="btn-ghost small" onClick={() => setEditingId(m.id)}>
-                        Edit
-                      </button>
-                      {removeConfirmId === m.id ? (
-                        <button
-                          className="btn-danger"
-                          style={{ fontSize: 12, padding: "7px 12px" }}
-                          onClick={async () => {
-                            await deleteMembership(accessToken, m.id);
-                            setRemoveConfirmId(null);
-                            onChanged();
-                          }}
-                        >
-                          Confirm
-                        </button>
-                      ) : (
-                        <button className="btn-ghost small" onClick={() => setRemoveConfirmId(m.id)}>
-                          Remove
-                        </button>
-                      )}
+        <div className="table-scroll">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Job title</th>
+                <th>Role</th>
+                <th>Location</th>
+                <th>Department</th>
+                <th>Last active</th>
+                {isAdmin && <th></th>}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((m) => (
+                <tr key={m.id}>
+                  <td>
+                    <div style={{ fontWeight: 600 }}>{m.name || "—"}</div>
+                    <div className="muted" style={{ fontSize: 11.5 }}>
+                      {m.email}
                     </div>
                   </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  <td className="muted">{m.job_title || "—"}</td>
+                  <td>
+                    <span className={`badge role-${m.role}`}>{roleLabel(m.role)}</span>
+                  </td>
+                  <td className="muted">{m.location_name ?? "All locations"}</td>
+                  <td className="muted">{m.department ? m.department.charAt(0).toUpperCase() + m.department.slice(1) : "All"}</td>
+                  <td>
+                    {(() => {
+                      const { text, recent } = lastActive(m.last_login);
+                      return recent ? <span className="badge b-ok">{text}</span> : <span className="muted">{text}</span>;
+                    })()}
+                  </td>
+                  {isAdmin && (
+                    <td className="num">
+                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                        <button className="btn-ghost small" onClick={() => setEditingId(m.id)}>
+                          Edit
+                        </button>
+                        {removeConfirmId === m.id ? (
+                          <button
+                            className="btn-danger"
+                            style={{ fontSize: 12, padding: "7px 12px" }}
+                            onClick={async () => {
+                              await deleteMembership(accessToken, m.id);
+                              setRemoveConfirmId(null);
+                              onChanged();
+                            }}
+                          >
+                            Confirm
+                          </button>
+                        ) : (
+                          <button className="btn-ghost small" onClick={() => setRemoveConfirmId(m.id)}>
+                            Remove
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {isAdmin && !showAdd && (

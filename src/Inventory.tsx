@@ -403,85 +403,89 @@ function LiveStockTab({
         {holdings.length === 0 && <p className="muted">Nothing stocked at this location yet.</p>}
         {holdings.length > 0 && filtered.length === 0 && <p className="muted">No items match.</p>}
         {filtered.length > 0 && (
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Department</th>
-                <th>Section</th>
-                <th className="num">On hand</th>
-                <th className="num">Par</th>
-                <th>Status</th>
-                <th className="num">Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((h) => {
-                const oh = onHand[h.id];
-                const low = oh !== undefined && oh < h.parLevel;
-                const expanded = expandedId === h.id;
-                const rowMovements = stockMovements
-                  .filter((m) => m.item === h.itemId && m.location === activeLocation && m.department === h.department)
-                  .slice()
-                  .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
-                  .slice(0, 10);
-                return (
-                  <Fragment key={h.id}>
-                    <tr className="clickable" onClick={() => setExpandedId(expanded ? null : h.id)}>
-                      <td>{h.itemName}</td>
-                      <td className="muted">{deptLabel(h.department)}</td>
-                      <td className="muted">{h.sectionName ?? "—"}</td>
-                      <td className="num">
-                        {oh === undefined ? "…" : oh.toFixed(2)} {h.baseUnit}
-                      </td>
-                      <td className="num">{h.parLevel.toFixed(2)}</td>
-                      <td>
-                        <span className={`badge ${low ? "b-low" : "b-ok"}`}>{low ? "Low" : "OK"}</span>
-                      </td>
-                      <td className="num">{formatMoney((oh ?? 0) * (cheapestPrice(h.itemId) ?? 0), currency)}</td>
-                    </tr>
-                    {expanded && (
-                      <tr>
-                        <td colSpan={7} style={{ background: "var(--bg)" }}>
-                          {rowMovements.length === 0 && (
-                            <p className="muted" style={{ margin: "8px 4px" }}>
-                              No ledger activity recorded yet.
-                            </p>
-                          )}
-                          {rowMovements.length > 0 && (
-                            <table className="tbl" style={{ margin: "6px 0" }}>
-                              <thead>
-                                <tr>
-                                  <th>When</th>
-                                  <th>Type</th>
-                                  <th className="num">Qty</th>
-                                  <th className="num">Unit cost</th>
-                                  <th>Source</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {rowMovements.map((m) => (
-                                  <tr key={m.id}>
-                                    <td className="muted">
-                                      {new Date(m.occurred_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                                    </td>
-                                    <td>{m.movement_type}</td>
-                                    <td className="num">{Number(m.qty_delta) > 0 ? "+" : ""}{Number(m.qty_delta).toFixed(2)}</td>
-                                    <td className="num">{formatMoney(Number(m.unit_cost), currency)}</td>
-                                    <td className="muted">{m.source_type}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          )}
+          <div className="table-scroll">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Department</th>
+                  <th>Section</th>
+                  <th className="num">On hand</th>
+                  <th className="num">Par</th>
+                  <th>Status</th>
+                  <th className="num">Value</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((h) => {
+                  const oh = onHand[h.id];
+                  const low = oh !== undefined && oh < h.parLevel;
+                  const expanded = expandedId === h.id;
+                  const rowMovements = stockMovements
+                    .filter((m) => m.item === h.itemId && m.location === activeLocation && m.department === h.department)
+                    .slice()
+                    .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
+                    .slice(0, 10);
+                  return (
+                    <Fragment key={h.id}>
+                      <tr className="clickable" onClick={() => setExpandedId(expanded ? null : h.id)}>
+                        <td>{h.itemName}</td>
+                        <td className="muted">{deptLabel(h.department)}</td>
+                        <td className="muted">{h.sectionName ?? "—"}</td>
+                        <td className="num">
+                          {oh === undefined ? "…" : oh.toFixed(2)} {h.baseUnit}
                         </td>
+                        <td className="num">{h.parLevel.toFixed(2)}</td>
+                        <td>
+                          <span className={`badge ${low ? "b-low" : "b-ok"}`}>{low ? "Low" : "OK"}</span>
+                        </td>
+                        <td className="num">{formatMoney((oh ?? 0) * (cheapestPrice(h.itemId) ?? 0), currency)}</td>
                       </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+                      {expanded && (
+                        <tr>
+                          <td colSpan={7} style={{ background: "var(--bg)" }}>
+                            {rowMovements.length === 0 && (
+                              <p className="muted" style={{ margin: "8px 4px" }}>
+                                No ledger activity recorded yet.
+                              </p>
+                            )}
+                            {rowMovements.length > 0 && (
+                              <div className="table-scroll">
+                                <table className="tbl" style={{ margin: "6px 0" }}>
+                                  <thead>
+                                    <tr>
+                                      <th>When</th>
+                                      <th>Type</th>
+                                      <th className="num">Qty</th>
+                                      <th className="num">Unit cost</th>
+                                      <th>Source</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {rowMovements.map((m) => (
+                                      <tr key={m.id}>
+                                        <td className="muted">
+                                          {new Date(m.occurred_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                                        </td>
+                                        <td>{m.movement_type}</td>
+                                        <td className="num">{Number(m.qty_delta) > 0 ? "+" : ""}{Number(m.qty_delta).toFixed(2)}</td>
+                                        <td className="num">{formatMoney(Number(m.unit_cost), currency)}</td>
+                                        <td className="muted">{m.source_type}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -514,46 +518,48 @@ function LiveStockTab({
           return (
             <div key={d.value} className="print-report-section">
               <h2>{d.label}</h2>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Item</th>
-                    <th>Section</th>
-                    <th>On hand</th>
-                    <th>Par</th>
-                    <th>Status</th>
-                    <th>Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {deptHoldings.map((h) => {
-                    const oh = onHand[h.id] ?? 0;
-                    const low = oh < h.parLevel;
-                    return (
-                      <tr key={h.id}>
-                        <td>{h.itemName}</td>
-                        <td>{h.sectionName ?? "—"}</td>
-                        <td>
-                          {oh.toFixed(2)} {h.baseUnit}
-                        </td>
-                        <td>{h.parLevel.toFixed(2)}</td>
-                        <td className={low ? "print-low" : undefined}>{low ? "Low" : "OK"}</td>
-                        <td>{formatMoney(oh * (cheapestPrice(h.itemId) ?? 0), currency)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td colSpan={5}>
-                      <b>Department subtotal</b>
-                    </td>
-                    <td>
-                      <b>{formatMoney(deptValue, currency)}</b>
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Section</th>
+                      <th>On hand</th>
+                      <th>Par</th>
+                      <th>Status</th>
+                      <th>Value</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deptHoldings.map((h) => {
+                      const oh = onHand[h.id] ?? 0;
+                      const low = oh < h.parLevel;
+                      return (
+                        <tr key={h.id}>
+                          <td>{h.itemName}</td>
+                          <td>{h.sectionName ?? "—"}</td>
+                          <td>
+                            {oh.toFixed(2)} {h.baseUnit}
+                          </td>
+                          <td>{h.parLevel.toFixed(2)}</td>
+                          <td className={low ? "print-low" : undefined}>{low ? "Low" : "OK"}</td>
+                          <td>{formatMoney(oh * (cheapestPrice(h.itemId) ?? 0), currency)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colSpan={5}>
+                        <b>Department subtotal</b>
+                      </td>
+                      <td>
+                        <b>{formatMoney(deptValue, currency)}</b>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             </div>
           );
         })}
@@ -966,26 +972,28 @@ function CountSheetsTab({
               <p>
                 <b>Location:</b> {locationName || "—"} &nbsp;&nbsp; <b>Date:</b> {new Date().toLocaleDateString()}
               </p>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Item</th>
-                    <th>Unit</th>
-                    <th>Par</th>
-                    <th>Counted qty</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sectionHoldings.map((h) => (
-                    <tr key={h.id}>
-                      <td>{h.itemName}</td>
-                      <td>{h.baseUnit}</td>
-                      <td>{h.parLevel.toFixed(2)}</td>
-                      <td></td>
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Unit</th>
+                      <th>Par</th>
+                      <th>Counted qty</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {sectionHoldings.map((h) => (
+                      <tr key={h.id}>
+                        <td>{h.itemName}</td>
+                        <td>{h.baseUnit}</td>
+                        <td>{h.parLevel.toFixed(2)}</td>
+                        <td></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           );
         })}
