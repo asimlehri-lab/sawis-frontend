@@ -98,6 +98,11 @@ const REFRESH_TOKEN_KEY = "sawis_refresh_token";
 // handleSubmit explicitly overrides this to "End of day" every time,
 // regardless of whatever page happened to be stored from before.
 const ACTIVE_PAGE_KEY = "sawis_active_page";
+// SAWIS defaults to light regardless of the device's OS setting -- dark is
+// an explicit opt-in via the sidebar's toggle (see the THEME_KEY effect
+// below), never auto-applied from prefers-color-scheme. See the token
+// comment at the top of App.css for the full reasoning.
+const THEME_KEY = "sawis_theme";
 
 function storeTokens(access: string, refresh: string) {
   localStorage.setItem(ACCESS_TOKEN_KEY, access);
@@ -451,6 +456,11 @@ export default function App() {
   // (see .sidebar/.mobile-topbar in App.css). Desktop/tablet never sets
   // this since the hamburger button that toggles it is CSS-hidden there.
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // "light" unless the person has explicitly picked dark before -- never
+  // read from the OS. Applied to <html> via data-theme in the effect below.
+  const [theme, setTheme] = useState<"light" | "dark">(() =>
+    localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light"
+  );
   // Which tab End of day should mount on -- normally "overview" (the
   // default every nav click resets to, see goToNav), only ever set to
   // "reorder" for the moment it takes to jump there from the notification
@@ -738,6 +748,13 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(ACTIVE_PAGE_KEY, activePage);
   }, [activePage]);
+
+  // Apply the chosen theme to the real DOM (App.css's tokens key off
+  // data-theme on <html>, not a class) and remember it for next time.
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
 
   // Restore a session from localStorage on load — runs once. Tries the
   // stored access token first (cheap: one request); if that fails (most
@@ -1598,6 +1615,15 @@ export default function App() {
             <span>{me.org.name}</span>
           </div>
         </div>
+        <button
+          type="button"
+          className="nav-btn"
+          style={{ marginBottom: 4 }}
+          onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+          aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+        >
+          {theme === "dark" ? "☀ Light theme" : "🌙 Dark theme"}
+        </button>
         {me.memberships.some((m) => m.role === "admin") && (
           <button
             className={`nav-btn ${activePage === "Settings" ? "active" : ""}`}

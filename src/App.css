@@ -1,15 +1,21 @@
-/* Design tokens -- see the dark-mode block right below for the same set
-   redefined for prefers-color-scheme: dark. Every semantic/status color
-   in the app is meant to go through one of these rather than a literal
-   hex, both for consistency (one true "warning amber" instead of five
+/* Design tokens -- see the [data-theme="dark"] block right below for the
+   same set redefined for dark mode. Every semantic/status color in the
+   app is meant to go through one of these rather than a literal hex,
+   both for consistency (one true "warning amber" instead of five
    near-identical ones scattered across files) and so dark mode actually
    reaches every screen instead of just the ones someone remembered to
    update. Decorative multi-stop gradients (.brandmark, .champ-hero,
    .tone-*, .section-icon.ic-*) are the deliberate exception -- treated
    like a logo/brand-identity accent that stays the same in both themes,
-   not a text/background pair that needs contrast-checked adaptation. */
+   not a text/background pair that needs contrast-checked adaptation.
+
+   Theme is an explicit user choice (see the toggle in App.tsx's sidebar),
+   not driven by the OS's prefers-color-scheme -- SAWIS defaults to light
+   regardless of device setting, and only switches when someone actually
+   picks dark. The choice is read/written via localStorage's THEME_KEY in
+   App.tsx and applied as a data-theme attribute on <html>. */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --bg: #FAF8F3;
   --surface: #FFFFFF;
   --border: #EAE3D6;
@@ -51,31 +57,30 @@
   --row-done: #FCFBF7;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1B1917;
-    --surface: #242019;
-    --border: #3A362E;
-    --ink: #F1EDE4;
-    --muted: #A39C8D;
-    --brand: #7C93F7;
-    --brand-hover: #97A9FA;
-    --brand-soft: #232B52;
-    --brand-soft-hover: #2B3564;
-    --brick: #E28880;
-    --brick-soft: #3D2420;
-    --good: #6FBF8B;
-    --good-soft: #1F3527;
-    --caution: #E4924F;
-    --caution-soft: #3B2A17;
-    --warn: #D9B15D;
-    --warn-soft: #362C14;
-    --violet: #B79CF5;
-    --violet-soft: #332658;
-    --violet-soft-hover: #3C2E68;
-    --info: #6EB3EA;
-    --row-done: #2A2620;
-  }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1B1917;
+  --surface: #242019;
+  --border: #3A362E;
+  --ink: #F1EDE4;
+  --muted: #A39C8D;
+  --brand: #7C93F7;
+  --brand-hover: #97A9FA;
+  --brand-soft: #232B52;
+  --brand-soft-hover: #2B3564;
+  --brick: #E28880;
+  --brick-soft: #3D2420;
+  --good: #6FBF8B;
+  --good-soft: #1F3527;
+  --caution: #E4924F;
+  --caution-soft: #3B2A17;
+  --warn: #D9B15D;
+  --warn-soft: #362C14;
+  --violet: #B79CF5;
+  --violet-soft: #332658;
+  --violet-soft-hover: #3C2E68;
+  --info: #6EB3EA;
+  --row-done: #2A2620;
 }
 
 * { box-sizing: border-box; }

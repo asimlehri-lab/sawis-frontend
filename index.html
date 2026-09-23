@@ -5,6 +5,18 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>sawis-frontend</title>
+    <!-- Applies a saved dark-theme choice before the app renders, so a
+         returning user who picked dark doesn't see a flash of the light
+         theme first. Mirrors App.tsx's THEME_KEY effect -- keep both in
+         sync if that key or default ever changes. Defaults to light and
+         does nothing for anyone who hasn't explicitly chosen dark. -->
+    <script>
+      try {
+        if (localStorage.getItem("sawis_theme") === "dark") {
+          document.documentElement.setAttribute("data-theme", "dark");
+        }
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
