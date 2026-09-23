@@ -1720,7 +1720,7 @@ export default function App() {
             <div className="content-head">
               <h1 className="page-title">{activePage}</h1>
               {activePage === "Items" && (
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <input
                     className="head-search"
                     value={itemSearch}
@@ -1736,7 +1736,7 @@ export default function App() {
                 </div>
               )}
               {activePage === "Recipes" && (
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <input
                     className="head-search"
                     value={recipeSearch}
@@ -1749,7 +1749,7 @@ export default function App() {
                 </div>
               )}
               {activePage === "Procurement" && (
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button
                     className="btn-ghost small"
                     onClick={() => {
@@ -2507,7 +2507,7 @@ export default function App() {
                       reliably opens the photo library/file picker instead --
                       so one button of each guarantees both paths regardless
                       of browser quirks. */}
-                  <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <label className="btn-ghost small" style={{ cursor: scanning ? "default" : "pointer", opacity: scanning ? 0.6 : 1 }}>
                       📷 Take photo
                       <input

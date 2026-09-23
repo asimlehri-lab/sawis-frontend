@@ -1018,6 +1018,8 @@ nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 12px;
   margin-bottom: 18px;
 }
 
@@ -1032,6 +1034,18 @@ nav {
   padding: 8px 12px;
   font-size: 13px;
   width: 240px;
+  max-width: 100%;
+}
+
+/* Below phone width, the page title and its action row (search box +
+   buttons, built inline per-page in App.tsx) were overflowing the screen
+   -- .head-search's fixed 240px plus a couple of buttons simply don't
+   fit a ~360px viewport in one row. Same breakpoint as the sidebar drawer
+   (App.tsx's mobile-topbar) so it's one consistent "phone" threshold. */
+@media (max-width: 700px) {
+  .content-head { flex-direction: column; align-items: stretch; }
+  .content-head > div { flex-wrap: wrap; width: 100%; }
+  .head-search { flex: 1 1 160px; width: auto; }
 }
 
 .modal-backdrop {
