@@ -447,6 +447,10 @@ export default function App() {
   // page was open (see ACTIVE_PAGE_KEY above) -- the very first visit
   // (nothing stored yet) still starts on End of day.
   const [activePage, setActivePage] = useState(() => localStorage.getItem(ACTIVE_PAGE_KEY) || "End of day");
+  // Phone-width only -- the sidebar becomes a slide-in drawer below ~700px
+  // (see .sidebar/.mobile-topbar in App.css). Desktop/tablet never sets
+  // this since the hamburger button that toggles it is CSS-hidden there.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   // Which tab End of day should mount on -- normally "overview" (the
   // default every nav click resets to, see goToNav), only ever set to
   // "reorder" for the moment it takes to jump there from the notification
@@ -830,6 +834,7 @@ export default function App() {
 
   function goToNav(label: string, opts?: { eodTab?: "overview" | "reorder" }) {
     setActivePage(label);
+    setMobileNavOpen(false);
     setSelectedRecipeId(null);
     setSelectedItemId(null);
     setShowImport(false);
@@ -1543,7 +1548,31 @@ export default function App() {
           <button onClick={() => window.location.reload()}>Refresh now</button>
         </div>
       )}
-      <aside className="sidebar">
+      {/* Phone-width only (see .mobile-topbar in App.css) -- the sidebar's
+          own brand mark stays put for desktop/tablet, this is just the bar
+          that replaces it once the sidebar becomes an off-canvas drawer. */}
+      <div className="mobile-topbar">
+        <button
+          type="button"
+          className="hamburger-btn"
+          aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
+          aria-expanded={mobileNavOpen}
+          onClick={() => setMobileNavOpen((open) => !open)}
+        >
+          <span />
+          <span />
+          <span />
+        </button>
+        <div className="mobile-topbar-brand">
+          <div className="brandmark small">S</div>
+          <b>sawis</b>
+        </div>
+      </div>
+      <div
+        className={`mobile-nav-backdrop ${mobileNavOpen ? "show" : ""}`}
+        onClick={() => setMobileNavOpen(false)}
+      />
+      <aside className={`sidebar ${mobileNavOpen ? "open" : ""}`}>
         <div className="sidebar-brand">
           <div className="brandmark small">S</div>
           <div>

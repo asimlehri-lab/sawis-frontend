@@ -885,6 +885,83 @@ nav {
 
 .logout { width: 100%; margin-top: 10px; }
 
+/* Phone-width nav -- hidden/inert by default (desktop & tablet keep the
+   plain static sidebar above, exactly as before). Below the breakpoint the
+   sidebar becomes a fixed off-canvas drawer that slides in over the page,
+   toggled by the hamburger bar that replaces it. Breakpoint is 700px, safely
+   under a 768px tablet-portrait width, so tablets keep the sidebar docked. */
+.mobile-topbar { display: none; }
+.mobile-nav-backdrop { display: none; }
+
+.hamburger-btn {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  cursor: pointer;
+  flex: none;
+}
+.hamburger-btn span { display: block; width: 16px; height: 2px; margin: 0 auto; background: var(--ink); border-radius: 2px; }
+
+.mobile-topbar-brand { display: flex; align-items: center; gap: 8px; }
+.mobile-topbar-brand b { font-size: 14.5px; }
+
+@media (max-width: 700px) {
+  .app { display: block; min-height: 100vh; }
+
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 25;
+  }
+
+  .mobile-nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(33, 31, 27, 0.4);
+    z-index: 29;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .mobile-nav-backdrop.show { opacity: 1; pointer-events: auto; }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 260px;
+    max-width: 82vw;
+    z-index: 30;
+    box-shadow: 12px 0 32px rgba(33, 31, 27, 0.18);
+    transform: translateX(-100%);
+    transition: transform 0.22s ease;
+    overflow-y: auto;
+  }
+  .sidebar.open { transform: translateX(0); }
+
+  .content { padding: 16px; }
+  .content-header { margin: -16px -16px 16px; padding: 10px 16px; }
+}
+
+@media (max-width: 700px) and (prefers-reduced-motion: reduce) {
+  .sidebar, .mobile-nav-backdrop { transition: none; }
+}
+
 .content { padding: 24px 28px; }
 
 .page-title {
