@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import {
   bulkImportItems,
   bulkImportRecipes,
+  changePassword,
   createInventoryCheckSchedule,
   fetchInventoryCheckSchedules,
   fetchVapidPublicKey,
@@ -190,7 +191,101 @@ export default function Settings({ accessToken, items, recipes, locations, onIte
       <LocationSettingsPanel accessToken={accessToken} locations={locations} />
       <div style={{ height: 20 }} />
       <NotificationSettingsPanel accessToken={accessToken} locations={locations} />
+      <div style={{ height: 20 }} />
+      <ChangePasswordPanel accessToken={accessToken} />
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Self-service password change. Forgotten-password case isn't this panel --
+// that needs an org admin (Team's own "Reset password" action) or, for
+// SAWIS staff, the Django admin password-change link.
+// ---------------------------------------------------------------------------
+
+function ChangePasswordPanel({ accessToken }: { accessToken: string }) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    setError(null);
+    setSaved(false);
+    if (!currentPassword) {
+      setError("Enter your current password.");
+      return;
+    }
+    if (!newPassword || newPassword !== confirmPassword) {
+      setError("New passwords don't match.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await changePassword(accessToken, currentPassword, newPassword);
+      setSaved(true);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not change password.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <h2 style={{ marginTop: 0 }}>Password</h2>
+      <p className="hint">
+        Change your own sign-in password. Forgotten it instead? Ask an org admin to reset it for you from Team.
+      </p>
+      <div className="fgrid fgrid-2">
+        <div className="field">
+          <label>Current password</label>
+          <input
+            type="password"
+            value={currentPassword}
+            onChange={(e) => {
+              setCurrentPassword(e.target.value);
+              setSaved(false);
+            }}
+          />
+        </div>
+        <div />
+        <div className="field">
+          <label>New password</label>
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => {
+              setNewPassword(e.target.value);
+              setSaved(false);
+            }}
+          />
+        </div>
+        <div className="field">
+          <label>Confirm new password</label>
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => {
+              setConfirmPassword(e.target.value);
+              setSaved(false);
+            }}
+          />
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+        {error && <span className="error" style={{ padding: "4px 8px" }}>{error}</span>}
+        {saved && !error && <span className="badge b-ok">Changed</span>}
+        <button type="button" className="btn-ghost small" disabled={saving} onClick={handleSave}>
+          {saving ? "Saving…" : "Change password"}
+        </button>
+      </div>
+    </div>
   );
 }
 

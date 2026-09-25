@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { createMember, deleteMembership, updateMembership } from "./api";
+import { createMember, deleteMembership, resetMemberPassword, updateMembership } from "./api";
 import type { Location, Me, Membership } from "./api";
 
 interface Props {
@@ -51,6 +51,7 @@ export default function Team({ accessToken, me, memberships, membershipsError, l
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [removeConfirmId, setRemoveConfirmId] = useState<string | null>(null);
+  const [resetPasswordId, setResetPasswordId] = useState<string | null>(null);
 
   const rows = memberships
     .slice()
@@ -101,6 +102,9 @@ export default function Team({ accessToken, me, memberships, membershipsError, l
                       <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                         <button className="btn-ghost small" onClick={() => setEditingId(m.id)}>
                           Edit
+                        </button>
+                        <button className="btn-ghost small" onClick={() => setResetPasswordId(m.id)}>
+                          Reset password
                         </button>
                         {removeConfirmId === m.id ? (
                           <button
@@ -156,6 +160,14 @@ export default function Team({ accessToken, me, memberships, membershipsError, l
             setEditingId(null);
             onChanged();
           }}
+        />
+      )}
+
+      {resetPasswordId && (
+        <ResetPasswordModal
+          accessToken={accessToken}
+          membership={memberships.find((m) => m.id === resetPasswordId)!}
+          onClose={() => setResetPasswordId(null)}
         />
       )}
     </>
@@ -365,6 +377,78 @@ function EditMemberModal({
             {saving ? "Saving…" : "Save changes"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+
+function ResetPasswordModal({
+  accessToken,
+  membership,
+  onClose,
+}: {
+  accessToken: string;
+  membership: Membership;
+  onClose: () => void;
+}) {
+  const [newPassword, setNewPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    setErr(null);
+    try {
+      await resetMemberPassword(accessToken, membership.id, newPassword);
+      setDone(true);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not reset this password.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={() => !saving && onClose()}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h2>Reset password</h2>
+        <p className="muted" style={{ fontSize: 12.5, marginTop: 0 }}>
+          Set a new password for {membership.name || membership.email}. There's no email step — tell them the new
+          password directly.
+        </p>
+        {done ? (
+          <>
+            <p className="muted">Password reset.</p>
+            <div className="modal-actions">
+              <button type="button" className="btn-primary" onClick={onClose}>
+                Done
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="field">
+              <label>New password</label>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="At least 10 characters"
+              />
+            </div>
+            {err && <p className="error">{err}</p>}
+            <div className="modal-actions">
+              <button type="button" className="btn-ghost" onClick={onClose} disabled={saving}>
+                Cancel
+              </button>
+              <button type="button" className="btn-primary" onClick={handleSave} disabled={saving}>
+                {saving ? "Saving…" : "Reset password"}
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

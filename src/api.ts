@@ -821,6 +821,58 @@ export async function deleteMembership(accessToken: string, id: string): Promise
   }
 }
 
+// Self-service password change (Settings) -- requires the caller's current
+// password. See apps/tenancy/viewsets.py ChangePasswordView for the
+// AUTH_PASSWORD_VALIDATORS rules the new password is checked against.
+export async function changePassword(
+  accessToken: string,
+  currentPassword: string,
+  newPassword: string
+): Promise<void> {
+  const res = await fetch(`${API_URL}/api/tenancy/me/change-password/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    if (body && typeof body === "object") {
+      const messages = Object.entries(body).map(([, errs]) => (Array.isArray(errs) ? errs.join(", ") : errs));
+      throw new Error(messages.join(" · ") || "Could not change password.");
+    }
+    throw new Error("Could not change password.");
+  }
+}
+
+// Org-admin reset of a teammate's password (Team) -- mirrors createMember's
+// own "admin sets a password directly" pattern. Backend scopes this to the
+// admin's own org via MembershipViewSet.get_queryset().
+export async function resetMemberPassword(
+  accessToken: string,
+  membershipId: string,
+  newPassword: string
+): Promise<void> {
+  const res = await fetch(`${API_URL}/api/tenancy/memberships/${membershipId}/reset_password/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ new_password: newPassword }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    if (body && typeof body === "object") {
+      const messages = Object.entries(body).map(([, errs]) => (Array.isArray(errs) ? errs.join(", ") : errs));
+      throw new Error(messages.join(" · ") || "Could not reset this password.");
+    }
+    throw new Error("Could not reset this password.");
+  }
+}
+
 export async function fetchItem(accessToken: string, id: string): Promise<CatalogItem> {
   return authedFetch(`/api/catalog/items/${id}/`, accessToken);
 }
