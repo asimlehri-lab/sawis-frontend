@@ -476,10 +476,20 @@ export interface BulkRecipeImportResult {
 // RecipeViewSet.bulk_import / _guess_base_unit. The frontend's review
 // step is what makes that safe: it shows exactly which ingredient names
 // have no match before the user confirms.
+//
+// `items`, if given, is upserted server-side FIRST, before any recipe row
+// -- this is what the unified recipe+item import template sends its Items
+// tab as (see Settings.tsx's parseThreeTabWorkbook / recipeImportTemplate.ts),
+// so an ingredient line can match a brand-new item by name and get its
+// real base_unit/category/vat/etc instead of the guess-from-unit-text
+// fallback above. Omitted entirely (rather than sent as []) when there's
+// nothing new to upsert, matching how `recipes` itself is always required
+// but this is opt-in.
 export async function bulkImportRecipes(
   accessToken: string,
   location: string,
-  recipes: BulkRecipeInput[]
+  recipes: BulkRecipeInput[],
+  items?: BulkItemInput[]
 ): Promise<BulkRecipeImportResult> {
   const res = await fetch(`${API_URL}/api/catalog/recipes/bulk_import/`, {
     method: "POST",
@@ -487,7 +497,7 @@ export async function bulkImportRecipes(
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify({ location, recipes }),
+    body: JSON.stringify(items && items.length > 0 ? { location, recipes, items } : { location, recipes }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null);

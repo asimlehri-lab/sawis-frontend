@@ -171,7 +171,7 @@ export default function EndOfDay({
   // body) applies the fix in the same render pass instead of one tick
   // later, and this project's lint config (react-hooks/set-state-in-effect)
   // flags setState-in-effect outright. Same fix already proven in
-  // Settings.tsx's ItemsImportPanel for the identical race.
+  // Settings.tsx's import panels for the identical race.
   const [locationsSeen, setLocationsSeen] = useState(locations);
   if (locations !== locationsSeen) {
     setLocationsSeen(locations);
