@@ -13,18 +13,26 @@ import type { CatalogItem, Recipe } from "./api";
 //
 // The three tabs:
 //  - Items: "existing" rows (grey) are this org's current item catalogue,
-//    pulled in live -- reference only, feeds the Recipe Ingredients tab's
-//    ingredient dropdown so nothing has to be retyped. "new" rows (green)
-//    are blank, for genuinely new items -- filled in the same pass as the
-//    recipes that use them. This replaces the old standalone "Import
-//    items" template: that panel is gone, this is the only import now.
-//  - Recipes: one row per recipe (or per size variant of one), grouped and
-//    shaded by category. "display_name" is a formula (recipe + size) --
-//    that's the name that actually gets created/matched in SAWIS, and
-//    what the Recipe Ingredients tab's recipe-picker shows.
-//  - Recipe Ingredients: one row per ingredient line. "category (auto)"
-//    and "unit" are both formulas (looked up from the other two tabs),
-//    never typed.
+//    pulled in live -- reference only (this import never edits an existing
+//    item's fields, only backfills a missing stock holding -- see
+//    bulk_upsert_items on the backend), so only name/base_unit are shown.
+//    "new" rows (green) are blank, for genuinely new items -- filled in the
+//    same pass as the recipes that use them. This replaces the old
+//    standalone "Import items" template: that panel is gone, this is the
+//    only import now.
+//  - Recipes: one row per EXISTING recipe (or per size variant of one --
+//    see splitRecipeName below), fully filled in from this org's real
+//    data, plus blank rows at the end for brand-new recipes. Grouped and
+//    shaded by category then base name. "display_name" is a formula
+//    (recipe + size) -- that's the name that actually gets created/matched
+//    in SAWIS on re-upload, and what the Recipe Ingredients tab's
+//    recipe-picker shows.
+//  - Recipe Ingredients: one row per ingredient line, also pre-filled from
+//    each existing recipe's real RecipeLines (item-type only -- a
+//    sub-recipe reference can't be expressed in this flat shape, same
+//    limitation the bulk_import endpoint itself already has), plus blank
+//    rows at the end. "category (auto)" and "unit" are both formulas
+//    (looked up from the other two tabs), never typed.
 // ---------------------------------------------------------------------------
 
 const NAVY = "FF1F2A44";
@@ -36,13 +44,14 @@ const NEW_ITEM_FILL = "FFE9F0E6";
 const BORDER_C = "FFD8D2C2";
 const WHITE = "FFFFFFFF";
 
-// Generous defaults for a first pass -- if someone needs more rows than
-// this, the fix is the same as any Excel template: select the last
-// template row and drag its fill handle down (formulas and dropdowns
-// extend with it). Called out in the Read me tab.
+// Headroom for brand-new entries, on top of whatever real data an org
+// already has. If someone needs more rows than this, the fix is the same
+// as any Excel template: select the last template row and drag its fill
+// handle down (formulas and dropdowns extend with it) -- called out in the
+// Read me tab.
 const NEW_ITEM_BLANK_ROWS = 30;
-const RECIPE_BLANK_ROWS = 50;
-const INGREDIENT_BLANK_ROWS = 250;
+const RECIPE_BLANK_ROWS = 30;
+const INGREDIENT_BLANK_ROWS = 100;
 
 function thinBorder() {
   const side = { style: "thin" as const, color: { argb: BORDER_C } };
@@ -106,6 +115,64 @@ function strictListValidation(formula: string, errorTitle: string, error: string
   };
 }
 
+function numberOrBlank(raw: string | null | undefined): number | "" {
+  if (!raw) return "";
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : "";
+}
+
+// Splits a recipe's stored name into a base name + trailing "(size)"
+// label, e.g. "Pink Lychee Iced Tea (0.5L)" -> base "Pink Lychee Iced Tea",
+// size "0.5L". A name with no trailing parenthetical just returns the
+// whole name as base and an empty size -- the common case. This is the
+// exact inverse of the Recipes tab's display_name formula
+// (`=base&IF(size<>"", " ("&size&")", "")`), so re-splitting and
+// reassembling a name that already follows this convention round-trips
+// byte-for-byte and still matches the same Recipe server-side on
+// re-upload. A recipe whose existing name has irregular spacing around an
+// existing parenthetical (rare) may round-trip to a slightly different
+// string -- worth knowing, not worth engineering around here.
+function splitRecipeName(name: string): { base: string; size: string } {
+  const m = /^(.*?)\s*\(([^()]+)\)\s*$/.exec(name.trim());
+  if (m) return { base: m[1].trim(), size: m[2].trim() };
+  return { base: name.trim(), size: "" };
+}
+
+// Sorts "size" labels sensibly whether or not they look numeric (e.g.
+// "0.3L" < "0.5L" < "0.7L", but also "Small" < "Large" alphabetically) --
+// a leading number wins when both sides have one, otherwise falls back to
+// plain text comparison.
+function compareSizes(a: string, b: string): number {
+  const na = parseFloat(a);
+  const nb = parseFloat(b);
+  if (!Number.isNaN(na) && !Number.isNaN(nb)) return na - nb;
+  return a.localeCompare(b);
+}
+
+interface RecipeEntry {
+  category: string;
+  base: string;
+  size: string;
+  recipe: Recipe;
+}
+
+function buildRecipeEntries(recipes: Recipe[]): RecipeEntry[] {
+  const entries: RecipeEntry[] = recipes.map((r) => {
+    const { base, size } = splitRecipeName(r.name);
+    return { category: (r.menu_category || "").trim(), base, size, recipe: r };
+  });
+  entries.sort((a, b) => {
+    if (a.category !== b.category) return a.category.localeCompare(b.category);
+    if (a.base !== b.base) return a.base.localeCompare(b.base);
+    return compareSizes(a.size, b.size);
+  });
+  return entries;
+}
+
+function familyKey(e: RecipeEntry): string {
+  return `${e.category}\u0000${e.base}`;
+}
+
 function buildReadMeSheet(wb: ExcelJS.Workbook) {
   const rm = wb.addWorksheet("Read me");
   rm.views = [{ showGridLines: false }];
@@ -122,26 +189,32 @@ function buildReadMeSheet(wb: ExcelJS.Workbook) {
     "",
     "1. Items tab",
     "   \"existing\" rows (grey) are your current item catalogue, pulled in automatically --",
-    "   reference only, so the Recipe Ingredients tab's dropdown has something to pick from",
-    "   without retyping. Add anything genuinely new as a \"new\" row (green) below them --",
-    "   only item_name + base_unit are required, everything else is optional.",
+    "   reference only (this import never edits an existing item's own fields, only backs",
+    "   an existing item's ingredient lines below), so the Recipe Ingredients tab's dropdown",
+    "   has something to pick from without retyping. Add anything genuinely new as a \"new\"",
+    "   row (green) below them -- only item_name + base_unit are required, everything else",
+    "   is optional.",
     "",
-    "2. Category grouping",
-    "   The Recipes and Recipe Ingredients tabs are sorted and shaded by category, and",
-    "   \"category\" is a dropdown. The first few rows on the Recipes tab list your existing",
-    "   categories so they show up in that dropdown -- they're otherwise blank and get",
-    "   skipped on import, so it's fine to leave them there or delete them once you don't",
-    "   need the reminder any more.",
+    "2. Recipes tab",
+    "   Every recipe you already have is listed here, fully filled in and grouped/shaded by",
+    "   category then name -- edit a row to update that recipe, or add a new row below the",
+    "   existing ones to create a new one. \"category\" is a dropdown built from categories",
+    "   you already use.",
     "",
     "3. Size variants, grouped and duplicable",
-    "   \"recipe\" is the base dish/drink name and \"size\" is its own column (e.g. Small/",
-    "   Large, or blank for anything with no sizes). \"display_name\" is computed",
-    "   automatically from the two and is what actually gets created/matched in SAWIS --",
-    "   that's also what the Recipe Ingredients tab's recipe-picker shows, so each size of",
-    "   the same item shows as a clearly distinct choice. Build one size's ingredient list,",
-    "   then copy that block of rows down for the next size and adjust the quantities --",
-    "   quantities don't usually scale by a clean multiplier between sizes, so this is a",
-    "   head start to edit, not an auto-fill.",
+    "   \"recipe\" is the base dish/drink name and \"size\" is its own column -- a recipe whose",
+    "   stored name already ends in \"(something)\" (e.g. \"Iced Tea (0.5L)\") has been split",
+    "   into recipe=\"Iced Tea\", size=\"0.5L\" automatically. \"display_name\" is computed from",
+    "   the two and is what actually gets created/matched in SAWIS -- that's also what the",
+    "   Recipe Ingredients tab's recipe-picker shows, so each size of the same item shows as",
+    "   a clearly distinct choice. All sizes of the same item sit in adjacent rows, shaded as",
+    "   one block.",
+    "",
+    "4. Recipe Ingredients tab",
+    "   Every existing recipe's ingredients are listed here too (only its item-type lines --",
+    "   a sub-recipe reference can't be edited from this file, same as the import endpoint",
+    "   itself). \"category (auto)\" and \"unit\" both fill themselves in from your picks in the",
+    "   other two columns -- never typed.",
     "",
     "Matching an existing recipe (by POS ID, or by name if there's no POS ID) updates it --",
     "replacing its ingredient list with what's on the Recipe Ingredients tab here -- instead",
@@ -201,29 +274,42 @@ function buildItemsSheet(wb: ExcelJS.Workbook, items: CatalogItem[]) {
   return { lastItemRow };
 }
 
-function buildRecipesSheet(wb: ExcelJS.Workbook, recipes: Recipe[]) {
+function buildRecipesSheet(wb: ExcelJS.Workbook, entries: RecipeEntry[]) {
   const sheet = wb.addWorksheet("Recipes");
   const headers = ["category", "recipe", "size", "display_name", "pos_id", "kind", "yield_qty", "yield_unit", "menu_price", "menu_group"];
   setHeaders(sheet, headers);
   freezeHeaderRow(sheet);
 
-  const existingCategories = Array.from(
-    new Set(recipes.map((r) => (r.menu_category || "").trim()).filter((c) => c.length > 0))
-  ).sort((a, b) => a.localeCompare(b));
-
   let row = 2;
-  for (const cat of existingCategories) {
-    sheet.getCell(row, 1).value = cat;
-    sheet.getCell(row, 1).font = { name: "Calibri", bold: true, size: 11, color: { argb: NAVY } };
+  let shade = false;
+  let lastFamily: string | null = null;
+  const categoryFirstRow = new Map<string, number>();
+  for (const e of entries) {
+    const fk = familyKey(e);
+    if (fk !== lastFamily) {
+      shade = !shade;
+      lastFamily = fk;
+    }
+    if (!categoryFirstRow.has(e.category)) categoryFirstRow.set(e.category, row);
+    const r = e.recipe;
+    sheet.getCell(row, 1).value = e.category;
+    sheet.getCell(row, 2).value = e.base;
+    sheet.getCell(row, 3).value = e.size;
     sheet.getCell(row, 4).value = { formula: `B${row}&IF(C${row}<>"", " ("&C${row}&")", "")` };
+    sheet.getCell(row, 5).value = r.pos_id || "";
+    sheet.getCell(row, 6).value = r.kind;
+    sheet.getCell(row, 7).value = numberOrBlank(r.yield_qty);
+    sheet.getCell(row, 8).value = r.yield_unit;
+    sheet.getCell(row, 9).value = r.kind === "dish" ? numberOrBlank(r.menu_price) : "";
+    sheet.getCell(row, 10).value = r.menu_group;
     borderRow(sheet, row, headers.length);
-    bandRow(sheet, row, headers.length, CREAM);
+    bandRow(sheet, row, headers.length, shade ? BAND_B : BAND_A);
     row++;
   }
   for (let i = 0; i < RECIPE_BLANK_ROWS; i++) {
     sheet.getCell(row, 4).value = { formula: `B${row}&IF(C${row}<>"", " ("&C${row}&")", "")` };
     borderRow(sheet, row, headers.length);
-    bandRow(sheet, row, headers.length, i % 2 === 0 ? BAND_A : BAND_B);
+    bandRow(sheet, row, headers.length, CREAM);
     row++;
   }
   const lastRecipeRow = row - 1;
@@ -243,6 +329,10 @@ function buildRecipesSheet(wb: ExcelJS.Workbook, recipes: Recipe[]) {
     );
   }
 
+  for (const [, firstRow] of categoryFirstRow) {
+    sheet.getCell(firstRow, 1).font = { name: "Calibri", bold: true, size: 11, color: { argb: NAVY } };
+  }
+
   sheet.getCell("C1").note =
     "Leave blank for a dish/drink with no size variants. Type a label (e.g. Small/Large) for one that does -- the sizes of the same item then sit as adjacent, shaded rows.";
   sheet.getCell("D1").note =
@@ -252,13 +342,40 @@ function buildRecipesSheet(wb: ExcelJS.Workbook, recipes: Recipe[]) {
   return { lastRecipeRow };
 }
 
-function buildRecipeIngredientsSheet(wb: ExcelJS.Workbook, lastRecipeRow: number, lastItemRow: number) {
+function buildRecipeIngredientsSheet(
+  wb: ExcelJS.Workbook,
+  entries: RecipeEntry[],
+  lastRecipeRow: number,
+  lastItemRow: number
+) {
   const sheet = wb.addWorksheet("Recipe Ingredients");
   const headers = ["category (auto)", "recipe", "ingredient", "qty", "unit"];
   setHeaders(sheet, headers);
   freezeHeaderRow(sheet);
 
   let row = 2;
+  let shade = false;
+  let lastFamily: string | null = null;
+  for (const e of entries) {
+    const fk = familyKey(e);
+    if (fk !== lastFamily) {
+      shade = !shade;
+      lastFamily = fk;
+    }
+    const itemLines = e.recipe.lines.filter((l) => l.line_type === "item");
+    for (const line of itemLines) {
+      sheet.getCell(row, 1).value = {
+        formula: `IF(B${row}="","",IFERROR(INDEX(Recipes!$A:$A,MATCH(B${row},Recipes!$D:$D,0)),""))`,
+      };
+      sheet.getCell(row, 2).value = e.recipe.name;
+      sheet.getCell(row, 3).value = line.item_name || "";
+      sheet.getCell(row, 4).value = numberOrBlank(line.qty);
+      sheet.getCell(row, 5).value = { formula: `IFERROR(VLOOKUP(C${row},Items!$B:$C,2,FALSE),"")` };
+      borderRow(sheet, row, headers.length);
+      bandRow(sheet, row, headers.length, shade ? BAND_B : BAND_A);
+      row++;
+    }
+  }
   for (let i = 0; i < INGREDIENT_BLANK_ROWS; i++) {
     sheet.getCell(row, 1).value = {
       formula: `IF(B${row}="","",IFERROR(INDEX(Recipes!$A:$A,MATCH(B${row},Recipes!$D:$D,0)),""))`,
@@ -294,10 +411,11 @@ function buildRecipeIngredientsSheet(wb: ExcelJS.Workbook, lastRecipeRow: number
 
 export async function buildRecipeImportWorkbook(items: CatalogItem[], recipes: Recipe[]): Promise<ExcelJS.Workbook> {
   const wb = new ExcelJS.Workbook();
+  const entries = buildRecipeEntries(recipes);
   buildReadMeSheet(wb);
   const { lastItemRow } = buildItemsSheet(wb, items);
-  const { lastRecipeRow } = buildRecipesSheet(wb, recipes);
-  buildRecipeIngredientsSheet(wb, lastRecipeRow, lastItemRow);
+  const { lastRecipeRow } = buildRecipesSheet(wb, entries);
+  buildRecipeIngredientsSheet(wb, entries, lastRecipeRow, lastItemRow);
   return wb;
 }
 
