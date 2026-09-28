@@ -225,6 +225,10 @@ function buildReadMeSheet(wb: ExcelJS.Workbook) {
     "",
     "Need more rows than are here? Select the last template row on that tab and drag its",
     "fill handle down -- the dropdowns and formulas extend with it.",
+    "",
+    "Looking for one recipe or item among a long list? Every tab's header row has filter",
+    "arrows built in (Data > Filter in Excel/Sheets/LibreOffice if they're ever hidden) --",
+    "click one to search, sort, or narrow down to just what you're amending.",
   ];
   let r = 5;
   for (const line of lines) {
@@ -310,6 +314,8 @@ function buildItemsSheet(wb: ExcelJS.Workbook, items: CatalogItem[], location: s
   sheet.getCell("D1").note =
     "On \"existing\" rows, category/vat/par_level/supplier/cost show that item's current values (par_level for the location you've picked below) so you can see and copy them -- editing these cells has no effect on an existing item, since matching is by name only.";
 
+  sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastItemRow, column: headers.length } };
+
   setColumnWidths(sheet, [10, 26, 11, 14, 7, 10, 16, 9]);
   return { lastItemRow };
 }
@@ -378,6 +384,8 @@ function buildRecipesSheet(wb: ExcelJS.Workbook, entries: RecipeEntry[]) {
   sheet.getCell("D1").note =
     "Computed automatically from recipe + size -- this is the name that actually gets created/matched in SAWIS. Don't type into this column.";
 
+  sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastRecipeRow, column: headers.length } };
+
   setColumnWidths(sheet, [13, 24, 8, 28, 8, 8, 9, 10, 10, 10]);
   return { lastRecipeRow };
 }
@@ -445,6 +453,8 @@ function buildRecipeIngredientsSheet(
   sheet.getCell("C1").note = "Picks from the Items tab -- both existing items and anything you just added as \"new\" there.";
   sheet.getCell("E1").note =
     "Fills itself in the moment you pick an ingredient (looked up from that item's base_unit on the Items tab). Never typed.";
+
+  sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastIngredientRow, column: headers.length } };
 
   setColumnWidths(sheet, [13, 28, 26, 8, 10]);
 }
