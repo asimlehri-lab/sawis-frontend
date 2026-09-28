@@ -1311,7 +1311,7 @@ function RecipeAndItemImportPanel({
             onClick={async () => {
               setTemplateDownloading(true);
               try {
-                await downloadRecipeImportTemplate(items, recipes);
+                await downloadRecipeImportTemplate(items, recipes, location);
               } finally {
                 setTemplateDownloading(false);
               }
@@ -1333,10 +1333,7 @@ function RecipeAndItemImportPanel({
         <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={handleFile} />
         <div className="vhint">
           Upload the filled-in template from above. Matching <code>pos_id</code> (or name) <b>updates</b> an
-          existing recipe, replacing its ingredients; anything new is <b>created</b>. An older single-sheet
-          CSV/Excel file (header row:{" "}
-          <code>recipe,pos_id,menu_category,kind,yield_qty,yield_unit,menu_price,menu_group,ingredient,qty,unit</code>
-          ) is still accepted too, for anyone with one already.
+          existing recipe, replacing its ingredients; anything new is <b>created</b>.
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import type { CatalogItem, Recipe } from "./api";
+import type { CatalogItem, Recipe, ItemSupplierRow } from "./api";
 
 // ---------------------------------------------------------------------------
 // Live, personalized Recipe + Item import template.
@@ -15,11 +15,14 @@ import type { CatalogItem, Recipe } from "./api";
 //  - Items: "existing" rows (grey) are this org's current item catalogue,
 //    pulled in live -- reference only (this import never edits an existing
 //    item's fields, only backfills a missing stock holding -- see
-//    bulk_upsert_items on the backend), so only name/base_unit are shown.
-//    "new" rows (green) are blank, for genuinely new items -- filled in the
-//    same pass as the recipes that use them. This replaces the old
-//    standalone "Import items" template: that panel is gone, this is the
-//    only import now.
+//    bulk_upsert_items on the backend). category/vat/par_level (at the
+//    selected location)/usual supplier/cost are shown too, purely so
+//    existing values are visible at a glance and can be copied into a new
+//    row -- editing one of these cells on an "existing" row has no effect,
+//    since matching is by name only. "new" rows (green) are blank, for
+//    genuinely new items -- filled in the same pass as the recipes that
+//    use them. This replaces the old standalone "Import items" template:
+//    that panel is gone, this is the only import now.
 //  - Recipes: one row per EXISTING recipe (or per size variant of one --
 //    see splitRecipeName below), fully filled in from this org's real
 //    data, plus blank rows at the end for brand-new recipes. Grouped and
@@ -188,12 +191,12 @@ function buildReadMeSheet(wb: ExcelJS.Workbook) {
     "Items tab in this same file, alongside your recipes.",
     "",
     "1. Items tab",
-    "   \"existing\" rows (grey) are your current item catalogue, pulled in automatically --",
-    "   reference only (this import never edits an existing item's own fields, only backs",
-    "   an existing item's ingredient lines below), so the Recipe Ingredients tab's dropdown",
-    "   has something to pick from without retyping. Add anything genuinely new as a \"new\"",
-    "   row (green) below them -- only item_name + base_unit are required, everything else",
-    "   is optional.",
+    "   \"existing\" rows (grey) are your current item catalogue, pulled in automatically,",
+    "   with their current category/vat/par_level/supplier/cost shown alongside so you can",
+    "   see and copy them -- reference only, this import never edits an existing item's own",
+    "   fields (editing those cells does nothing), it only backs an existing item's",
+    "   ingredient lines below. Add anything genuinely new as a \"new\" row (green) below them",
+    "   -- only item_name + base_unit are required, everything else is optional.",
     "",
     "2. Recipes tab",
     "   Every recipe you already have is listed here, fully filled in and grouped/shaded by",
@@ -232,7 +235,35 @@ function buildReadMeSheet(wb: ExcelJS.Workbook) {
   setColumnWidths(rm, [3, 108]);
 }
 
-function buildItemsSheet(wb: ExcelJS.Workbook, items: CatalogItem[]) {
+// Same "usual supplier" resolution Reorder.tsx uses for its own price
+// comparison: prefer the item's explicit Item.default_supplier when it's
+// actually linked here, otherwise whichever supplier it was most recently
+// ordered from. Reference-only here (see the note on this sheet), but
+// picking the same supplier consistently is still more useful than an
+// arbitrary one.
+function resolveUsualSupplierLink(item: CatalogItem): ItemSupplierRow | null {
+  const links = item.supplier_links || [];
+  if (links.length === 0) return null;
+  if (item.default_supplier) {
+    const explicit = links.find((l) => l.supplier === item.default_supplier);
+    if (explicit) return explicit;
+  }
+  const withDate = links.filter((l) => l.last_ordered_at);
+  if (withDate.length === 0) return links[0];
+  return withDate.reduce((a, b) => ((a.last_ordered_at as string) > (b.last_ordered_at as string) ? a : b));
+}
+
+// effective_vat_rate is a fraction string ("0.2000"); the sheet's own `vat`
+// column (and bulk_upsert_items' `vat_rate` parsing) uses a whole-number
+// percentage (20) -- see Settings.tsx's newItemRows parsing for the same
+// x100 convention in the other direction.
+function vatPercent(item: CatalogItem): number | "" {
+  if (!item.effective_vat_rate) return "";
+  const n = Number(item.effective_vat_rate) * 100;
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : "";
+}
+
+function buildItemsSheet(wb: ExcelJS.Workbook, items: CatalogItem[], location: string) {
   const sheet = wb.addWorksheet("Items");
   const headers = ["status", "item_name", "base_unit", "category", "vat", "par_level", "supplier", "cost"];
   setHeaders(sheet, headers);
@@ -245,9 +276,16 @@ function buildItemsSheet(wb: ExcelJS.Workbook, items: CatalogItem[]) {
 
   let row = 2;
   for (const item of existing) {
+    const holding = item.holdings.find((h) => h.location === location);
+    const link = resolveUsualSupplierLink(item);
     sheet.getCell(row, 1).value = "existing";
     sheet.getCell(row, 2).value = item.name;
     sheet.getCell(row, 3).value = item.base_unit;
+    sheet.getCell(row, 4).value = item.category_name || "";
+    sheet.getCell(row, 5).value = vatPercent(item);
+    sheet.getCell(row, 6).value = holding ? numberOrBlank(holding.par_level) : "";
+    sheet.getCell(row, 7).value = link ? link.supplier_name : "";
+    sheet.getCell(row, 8).value = link ? numberOrBlank(link.unit_price) : "";
     borderRow(sheet, row, headers.length);
     bandRow(sheet, row, headers.length, LIGHT);
     row++;
@@ -269,6 +307,8 @@ function buildItemsSheet(wb: ExcelJS.Workbook, items: CatalogItem[]) {
     '"existing" rows are your current catalogue, pulled in automatically -- reference only, don\'t edit. Add anything genuinely new as a "new" row below.';
   sheet.getCell("B1").note =
     "Only item_name + base_unit are required -- everything else (category/vat/par_level/supplier/cost) is optional, same as the old standalone Items import.";
+  sheet.getCell("D1").note =
+    "On \"existing\" rows, category/vat/par_level/supplier/cost show that item's current values (par_level for the location you've picked below) so you can see and copy them -- editing these cells has no effect on an existing item, since matching is by name only.";
 
   setColumnWidths(sheet, [10, 26, 11, 14, 7, 10, 16, 9]);
   return { lastItemRow };
@@ -409,11 +449,15 @@ function buildRecipeIngredientsSheet(
   setColumnWidths(sheet, [13, 28, 26, 8, 10]);
 }
 
-export async function buildRecipeImportWorkbook(items: CatalogItem[], recipes: Recipe[]): Promise<ExcelJS.Workbook> {
+export async function buildRecipeImportWorkbook(
+  items: CatalogItem[],
+  recipes: Recipe[],
+  location: string
+): Promise<ExcelJS.Workbook> {
   const wb = new ExcelJS.Workbook();
   const entries = buildRecipeEntries(recipes);
   buildReadMeSheet(wb);
-  const { lastItemRow } = buildItemsSheet(wb, items);
+  const { lastItemRow } = buildItemsSheet(wb, items, location);
   const { lastRecipeRow } = buildRecipesSheet(wb, entries);
   buildRecipeIngredientsSheet(wb, entries, lastRecipeRow, lastItemRow);
   return wb;
@@ -424,8 +468,12 @@ export async function buildRecipeImportWorkbook(items: CatalogItem[], recipes: R
 // replacement for that file's old static, pre-built RECIPE_TEMPLATE_XLSX_B64
 // blob, personalized to this org's actual current items/recipes instead of
 // shipping blank.
-export async function downloadRecipeImportTemplate(items: CatalogItem[], recipes: Recipe[]): Promise<void> {
-  const wb = await buildRecipeImportWorkbook(items, recipes);
+export async function downloadRecipeImportTemplate(
+  items: CatalogItem[],
+  recipes: Recipe[],
+  location: string
+): Promise<void> {
+  const wb = await buildRecipeImportWorkbook(items, recipes, location);
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
