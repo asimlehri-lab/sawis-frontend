@@ -857,6 +857,25 @@ export async function changePassword(
   }
 }
 
+export async function verifyPassword(accessToken: string, password: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/tenancy/me/verify-password/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ password }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    if (body && typeof body === "object") {
+      const messages = Object.entries(body).map(([, errs]) => (Array.isArray(errs) ? errs.join(", ") : errs));
+      throw new Error(messages.join(" · ") || "Incorrect password.");
+    }
+    throw new Error("Incorrect password.");
+  }
+}
+
 // Org-admin reset of a teammate's password (Team) -- mirrors createMember's
 // own "admin sets a password directly" pattern. Backend scopes this to the
 // admin's own org via MembershipViewSet.get_queryset().

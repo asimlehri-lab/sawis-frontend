@@ -2113,7 +2113,13 @@ export default function App() {
               />
             )}
 
-            {activePage === "Reports" && accessToken && <Reports accessToken={accessToken} locations={locations} />}
+            {activePage === "Reports" && accessToken && (
+              <Reports
+                accessToken={accessToken}
+                locations={locations}
+                isAdmin={me.memberships.some((m) => m.role === "admin")}
+              />
+            )}
 
             {activePage !== "Items" &&
               activePage !== "Recipes" &&

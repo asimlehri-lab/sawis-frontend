@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
 import { fetchReportsSummary, formatMoney, currencySymbol } from "./api";
 import type { Location, ReportsMenuRow, ReportsSummary } from "./api";
+import PasswordConfirmModal from "./PasswordConfirmModal";
 
 interface Props {
   accessToken: string;
   locations: Location[];
+  isAdmin: boolean;
 }
 
 const TARGET_FC = 30;
@@ -22,8 +24,12 @@ const sectionHeadStyle: React.CSSProperties = {
   margin: 0,
 };
 
-export default function Reports({ accessToken, locations }: Props) {
+export default function Reports({ accessToken, locations, isAdmin }: Props) {
   const [location, setLocation] = useState(locations[0]?.id ?? "");
+  // Export is restricted to admins and gated behind a password
+  // re-confirmation (see PasswordConfirmModal) -- this report includes
+  // per-dish cost and margin data.
+  const [confirmingExport, setConfirmingExport] = useState(false);
   const currency = locations.find((l) => l.id === location)?.currency;
   const [period, setPeriod] = useState<"week" | "month" | "lastmonth">("week");
   const [report, setReport] = useState<ReportsSummary | null>(null);
@@ -83,12 +89,28 @@ export default function Reports({ accessToken, locations }: Props) {
             Last month
           </button>
         </div>
-        {report && (
-          <button className="btn-primary small" style={{ marginLeft: "auto" }} onClick={() => exportMenuCsv(report)}>
+        {report && isAdmin && (
+          <button
+            className="btn-primary small"
+            style={{ marginLeft: "auto" }}
+            onClick={() => setConfirmingExport(true)}
+          >
             Export CSV
           </button>
         )}
       </div>
+      {confirmingExport && report && (
+        <PasswordConfirmModal
+          accessToken={accessToken}
+          title="Confirm your password"
+          description="This exports the menu performance report, including per-dish cost and margin figures. Re-enter your password to continue."
+          onConfirmed={() => {
+            setConfirmingExport(false);
+            exportMenuCsv(report);
+          }}
+          onClose={() => setConfirmingExport(false)}
+        />
+      )}
 
       {error && <p className="error">{error}</p>}
       {loading && !report && <p className="muted">Loading…</p>}

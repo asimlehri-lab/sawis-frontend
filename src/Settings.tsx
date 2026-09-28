@@ -19,6 +19,7 @@ import MenuListImportModal from "./MenuListImportModal";
 import type { ParsedMenuRow } from "./MenuListImportModal";
 import SearchSelect from "./SearchSelect";
 import { downloadRecipeImportTemplate } from "./recipeImportTemplate";
+import PasswordConfirmModal from "./PasswordConfirmModal";
 // DAY_NAMES is exported from App.tsx, which imports Settings back -- same
 // established circular-import pattern already used by SupplierDeliveries.tsx
 // (see its own DAY_NAMES import) rather than duplicating the array here.
@@ -744,6 +745,10 @@ function RecipeAndItemImportPanel({
   // otherwise get. Always cleared at the start of handleFile.
   const [newItemRows, setNewItemRows] = useState<BulkItemInput[]>([]);
   const [templateDownloading, setTemplateDownloading] = useState(false);
+  // Gates the template download behind a password re-confirmation (see
+  // PasswordConfirmModal) -- the template contains this org's full costed
+  // item/recipe catalogue, suppliers included.
+  const [confirmingTemplateDownload, setConfirmingTemplateDownload] = useState(false);
   const [parseError, setParseError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
@@ -1308,14 +1313,7 @@ function RecipeAndItemImportPanel({
             type="button"
             className="btn-ghost small"
             disabled={templateDownloading}
-            onClick={async () => {
-              setTemplateDownloading(true);
-              try {
-                await downloadRecipeImportTemplate(items, recipes, location);
-              } finally {
-                setTemplateDownloading(false);
-              }
-            }}
+            onClick={() => setConfirmingTemplateDownload(true)}
           >
             {templateDownloading ? "Preparing…" : "⇩ Download Excel template"}
           </button>
@@ -1326,6 +1324,23 @@ function RecipeAndItemImportPanel({
           Recipes, Recipe Ingredients — see the Read me tab for how they fit together. Got a POS menu export
           instead of typing it by hand? Use "Prefill from your menu list" under Advanced below.
         </div>
+        {confirmingTemplateDownload && (
+          <PasswordConfirmModal
+            accessToken={accessToken}
+            title="Confirm your password"
+            description="This downloads your full recipe and item catalogue, including costs and suppliers. Re-enter your password to continue."
+            onConfirmed={async () => {
+              setConfirmingTemplateDownload(false);
+              setTemplateDownloading(true);
+              try {
+                await downloadRecipeImportTemplate(items, recipes, location);
+              } finally {
+                setTemplateDownloading(false);
+              }
+            }}
+            onClose={() => setConfirmingTemplateDownload(false)}
+          />
+        )}
       </div>
 
       <div className="field" style={{ marginBottom: 14 }}>
