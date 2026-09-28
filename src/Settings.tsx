@@ -279,6 +279,8 @@ function ChangePasswordPanel({ accessToken }: { accessToken: string }) {
 function LocationSettingsPanel({ accessToken, locations }: { accessToken: string; locations: Location[] }) {
   const [overheadValues, setOverheadValues] = useState<Record<string, string>>({});
   const [currencyValues, setCurrencyValues] = useState<Record<string, CurrencyCode>>({});
+  const [foodTargetValues, setFoodTargetValues] = useState<Record<string, string>>({});
+  const [drinkTargetValues, setDrinkTargetValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -289,9 +291,17 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
   function currencyFor(loc: Location) {
     return currencyValues[loc.id] ?? loc.currency;
   }
+  function foodTargetFor(loc: Location) {
+    return foodTargetValues[loc.id] ?? loc.target_food_cost_pct ?? "30";
+  }
+  function drinkTargetFor(loc: Location) {
+    return drinkTargetValues[loc.id] ?? loc.target_drink_cost_pct ?? "30";
+  }
 
   async function handleSave(loc: Location) {
     const raw = overheadFor(loc).trim();
+    const foodRaw = foodTargetFor(loc).trim();
+    const drinkRaw = drinkTargetFor(loc).trim();
     setSaving((s) => ({ ...s, [loc.id]: true }));
     setErrors((e) => ({ ...e, [loc.id]: "" }));
     setSaved((s) => ({ ...s, [loc.id]: false }));
@@ -299,6 +309,8 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
       await updateLocation(accessToken, loc.id, {
         currency: currencyFor(loc),
         monthly_overhead: raw === "" ? null : raw,
+        target_food_cost_pct: foodRaw === "" ? "30" : foodRaw,
+        target_drink_cost_pct: drinkRaw === "" ? "30" : drinkRaw,
       });
       setSaved((s) => ({ ...s, [loc.id]: true }));
     } catch (e) {
@@ -314,7 +326,8 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
       <p className="hint">
         Currency changes which symbol this location's own prices/reports show — display only, no exchange-rate
         conversion. Monthly overhead (rent, labour, other fixed costs) feeds End of day's net margin estimate;
-        leave blank to skip that estimate.
+        leave blank to skip that estimate. Food/drink target % is what Reports and each recipe's own page flag
+        "over"/"under" against, in place of the old fixed 30%.
       </p>
       {!locations.length && <p className="muted">No locations yet.</p>}
       {locations.map((loc) => (
@@ -348,6 +361,48 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
                 setSaved((s) => ({ ...s, [loc.id]: false }));
               }}
             />
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span className="muted" style={{ fontSize: 11 }}>
+                Food target
+              </span>
+              <input
+                className="price-in"
+                style={{ width: 56 }}
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                value={foodTargetFor(loc)}
+                onChange={(e) => {
+                  setFoodTargetValues((v) => ({ ...v, [loc.id]: e.target.value }));
+                  setSaved((s) => ({ ...s, [loc.id]: false }));
+                }}
+              />
+              <span className="muted" style={{ fontSize: 11 }}>
+                %
+              </span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <span className="muted" style={{ fontSize: 11 }}>
+                Drink target
+              </span>
+              <input
+                className="price-in"
+                style={{ width: 56 }}
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                value={drinkTargetFor(loc)}
+                onChange={(e) => {
+                  setDrinkTargetValues((v) => ({ ...v, [loc.id]: e.target.value }));
+                  setSaved((s) => ({ ...s, [loc.id]: false }));
+                }}
+              />
+              <span className="muted" style={{ fontSize: 11 }}>
+                %
+              </span>
+            </div>
             <button
               type="button"
               className="btn-ghost small"

@@ -42,6 +42,23 @@ export function defaultCurrency(locations: { currency?: string }[]): CurrencyCod
   return (locations[0]?.currency as CurrencyCode) ?? "GBP";
 }
 
+// Same "fall back to the org's first location" convention as
+// defaultCurrency above, for screens (RecipeDetail) that aren't already
+// scoped to one specific location -- recipes/items are org-wide, so
+// there's no single "right" location's target to use otherwise. Screens
+// that DO already have one location picked (Reports) should read that
+// location's own target_food_cost_pct/target_drink_cost_pct directly
+// instead of calling this.
+export function defaultTargetCostPct(
+  locations: { target_food_cost_pct?: string; target_drink_cost_pct?: string }[],
+  group: "food" | "drink"
+): number {
+  const loc = locations[0];
+  const raw = group === "drink" ? loc?.target_drink_cost_pct : loc?.target_food_cost_pct;
+  const n = raw ? Number(raw) : NaN;
+  return Number.isFinite(n) ? n : 30;
+}
+
 // Supplier unit/pack conversion — shared by ItemDetail's "Link" flow, the
 // Scan receipt review table, and the supplier catalogue importer. A
 // supplier very often prices things in a different unit than the item is
@@ -628,6 +645,12 @@ export interface Location {
   // reminder notification (Phase 3) should first appear. Defaults to 1
   // server-side, adjustable per location in Settings.
   delivery_reminder_lead_days: number;
+  // Food/drink-cost-% target this location is measured against (Reports'
+  // per-dish badges, the food-cost trend line, and RecipeDetail's own
+  // food-cost hero number). Defaults to "30.00" server-side -- the value
+  // that was hardcoded everywhere before these fields existed.
+  target_food_cost_pct: string;
+  target_drink_cost_pct: string;
 }
 
 export async function fetchLocations(accessToken: string): Promise<Location[]> {
@@ -637,7 +660,13 @@ export async function fetchLocations(accessToken: string): Promise<Location[]> {
 export async function updateLocation(
   accessToken: string,
   id: string,
-  patch: { currency?: CurrencyCode; monthly_overhead?: string | null; delivery_reminder_lead_days?: number }
+  patch: {
+    currency?: CurrencyCode;
+    monthly_overhead?: string | null;
+    delivery_reminder_lead_days?: number;
+    target_food_cost_pct?: string;
+    target_drink_cost_pct?: string;
+  }
 ): Promise<Location> {
   const res = await fetch(`${API_URL}/api/tenancy/locations/${id}/`, {
     method: "PATCH",

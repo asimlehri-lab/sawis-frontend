@@ -9,8 +9,6 @@ interface Props {
   isAdmin: boolean;
 }
 
-const TARGET_FC = 30;
-
 function pct(n: number | null, d = 1) {
   return n === null ? "—" : `${n.toFixed(d)}%`;
 }
@@ -31,6 +29,15 @@ export default function Reports({ accessToken, locations, isAdmin }: Props) {
   // per-dish cost and margin data.
   const [confirmingExport, setConfirmingExport] = useState(false);
   const currency = locations.find((l) => l.id === location)?.currency;
+  // This location's own food/drink-cost-% targets (Settings > Locations),
+  // defaulting to 30 if this location somehow has neither set. The
+  // report's single top-line food-cost % blends food+drink sales
+  // together, so it compares against the food target as a reference line
+  // -- only the per-dish table below (which knows each row's own
+  // menu_group) actually splits food vs drink.
+  const activeLocation = locations.find((l) => l.id === location);
+  const foodTarget = activeLocation ? Number(activeLocation.target_food_cost_pct) || 30 : 30;
+  const drinkTarget = activeLocation ? Number(activeLocation.target_drink_cost_pct) || 30 : 30;
   const [period, setPeriod] = useState<"week" | "month" | "lastmonth">("week");
   const [report, setReport] = useState<ReportsSummary | null>(null);
   const [loading, setLoading] = useState(false);
@@ -120,19 +127,19 @@ export default function Reports({ accessToken, locations, isAdmin }: Props) {
           <div className="muted" style={{ marginTop: -6, marginBottom: 16, fontSize: 11.5 }}>
             {report.range.start} – {report.range.end}
           </div>
-          <RptKpis report={report} currency={currency} />
-          <TrendChart report={report} asTable={trendAsTable} setAsTable={setTrendAsTable} />
+          <RptKpis report={report} currency={currency} target={foodTarget} />
+          <TrendChart report={report} asTable={trendAsTable} setAsTable={setTrendAsTable} target={foodTarget} />
           <SplitBar report={report} currency={currency} />
-          <MenuTable rows={report.menu} currency={currency} />
+          <MenuTable rows={report.menu} currency={currency} foodTarget={foodTarget} drinkTarget={drinkTarget} />
         </>
       )}
     </div>
   );
 }
 
-function RptKpis({ report, currency }: { report: ReportsSummary; currency?: string }) {
+function RptKpis({ report, currency, target }: { report: ReportsSummary; currency?: string; target: number }) {
   const fc = report.food_cost_pct;
-  const fcOver = fc !== null && fc > TARGET_FC;
+  const fcOver = fc !== null && fc > target;
   const gp = report.gross_profit_pct;
   const wastePct = report.waste_pct;
   const variance = report.variance;
@@ -168,7 +175,7 @@ function RptKpis({ report, currency }: { report: ReportsSummary; currency?: stri
                 ) : (
                   <span className={`tag ${fcOver ? "bad" : "good"}`}>{fcOver ? "Over target" : "On target"}</span>
                 )}{" "}
-                · target 30%
+                · target {target}%
               </div>
             </>
           )}
@@ -214,15 +221,17 @@ function TrendChart({
   report,
   asTable,
   setAsTable,
+  target,
 }: {
   report: ReportsSummary;
   asTable: boolean;
   setAsTable: (v: boolean) => void;
+  target: number;
 }) {
   const values = report.trend.map((t) => t.food_cost_pct).filter((v): v is number => v !== null);
   const hasData = values.length > 0;
-  const scaleMax = Math.ceil(Math.max(TARGET_FC + 10, ...(hasData ? values : [0])) / 10) * 10;
-  const tgtBottomPct = (TARGET_FC / scaleMax) * 100;
+  const scaleMax = Math.ceil(Math.max(target + 10, ...(hasData ? values : [0])) / 10) * 10;
+  const tgtBottomPct = (target / scaleMax) * 100;
 
   return (
     <section className="card" style={{ marginTop: 16 }}>
@@ -266,7 +275,7 @@ function TrendChart({
               <div className="trend-bar-col" key={t.label}>
                 {t.food_cost_pct !== null ? (
                   <div
-                    className={`trend-bar ${t.food_cost_pct > TARGET_FC ? "over" : "under"}`}
+                    className={`trend-bar ${t.food_cost_pct > target ? "over" : "under"}`}
                     style={{ height: `${Math.max((t.food_cost_pct / scaleMax) * 100, 2)}%` }}
                     title={`${t.label}: ${t.food_cost_pct.toFixed(1)}%`}
                   />
@@ -335,7 +344,17 @@ function SplitBar({ report, currency }: { report: ReportsSummary; currency?: str
   );
 }
 
-function MenuTable({ rows, currency }: { rows: ReportsMenuRow[]; currency?: string }) {
+function MenuTable({
+  rows,
+  currency,
+  foodTarget,
+  drinkTarget,
+}: {
+  rows: ReportsMenuRow[];
+  currency?: string;
+  foodTarget: number;
+  drinkTarget: number;
+}) {
   return (
     <section className="card" style={{ marginTop: 16 }}>
       <h2 style={{ ...sectionHeadStyle, marginBottom: 12 }}>Menu performance</h2>
@@ -356,7 +375,9 @@ function MenuTable({ rows, currency }: { rows: ReportsMenuRow[]; currency?: stri
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {rows.map((r) => {
+                const rowTarget = r.menu_group === "drink" ? drinkTarget : foodTarget;
+                return (
                 <tr key={r.recipe_id}>
                   <td className="dish">{r.name}</td>
                   <td className="num">{r.qty}</td>
@@ -375,7 +396,10 @@ function MenuTable({ rows, currency }: { rows: ReportsMenuRow[]; currency?: stri
                         0.0%*
                       </span>
                     ) : (
-                      <span className={`badge ${r.food_cost_pct > TARGET_FC ? "b-low" : "b-ok"}`}>
+                      <span
+                        className={`badge ${r.food_cost_pct > rowTarget ? "b-low" : "b-ok"}`}
+                        title={`Target: ${rowTarget}% (${r.menu_group})`}
+                      >
                         {r.food_cost_pct.toFixed(1)}%
                       </span>
                     )}
@@ -383,7 +407,8 @@ function MenuTable({ rows, currency }: { rows: ReportsMenuRow[]; currency?: stri
                   <td className="num">{formatMoney(r.gp_per_unit, currency, 2)}</td>
                   <td className="num">{formatMoney(r.gp_contribution, currency, 2)}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>

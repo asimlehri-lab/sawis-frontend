@@ -9,11 +9,10 @@ import {
   YIELD_UNITS,
   formatMoney,
   defaultCurrency,
+  defaultTargetCostPct,
 } from "./api";
 import type { Recipe, CatalogItem, Location } from "./api";
 import SearchSelect from "./SearchSelect";
-
-const TARGET_FC = 30;
 
 interface Props {
   recipeId: string;
@@ -200,7 +199,11 @@ export default function RecipeDetail({
   }
 
   const isSub = recipe.kind === "sub";
-  const fcOver = recipe.plate_food_cost_pct !== null && recipe.plate_food_cost_pct > TARGET_FC;
+  // Recipes/items are org-wide, not per-location (see currency's own
+  // note), so this falls back to the org's first location's target, same
+  // convention defaultCurrency() already uses -- see defaultTargetCostPct.
+  const target = defaultTargetCostPct(locations, recipe.menu_group === "drink" ? "drink" : "food");
+  const fcOver = recipe.plate_food_cost_pct !== null && recipe.plate_food_cost_pct > target;
   const yieldNum = Number(recipe.yield_qty) || 1;
   const menuPriceNum = recipe.menu_price ? Number(recipe.menu_price) : 0;
 
@@ -496,7 +499,7 @@ export default function RecipeDetail({
                 <div className={`big ${fcOver ? "over" : "good"}`}>
                   {recipe.plate_food_cost_pct !== null ? `${recipe.plate_food_cost_pct.toFixed(1)}%` : "—"}
                 </div>
-                <div className="tgt">food cost / {recipe.yield_unit} · target {TARGET_FC}%</div>
+                <div className="tgt">food cost / {recipe.yield_unit} · target {target}%</div>
                 <div className="meter">
                   <div
                     className="fill"
