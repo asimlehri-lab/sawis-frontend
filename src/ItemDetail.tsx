@@ -17,7 +17,7 @@ import {
   defaultCurrency,
   convertToBaseUnit,
 } from "./api";
-import type { CatalogItem, Category, Location, ItemSupplierRow, SupplierItemRow, Supplier } from "./api";
+import type { CatalogItem, Category, Location, ItemSupplierRow, SupplierItemRow, Supplier, Recipe } from "./api";
 
 interface Props {
   itemId: string;
@@ -27,10 +27,12 @@ interface Props {
   locations: Location[];
   suppliers: Supplier[];
   supplierItems: SupplierItemRow[];
+  recipes: Recipe[];
   onBack: () => void;
   onChanged: () => void;
   onCategoriesChanged: () => void;
   onOpenSupplier?: (supplierId: string) => void;
+  onOpenRecipe?: (recipeId: string) => void;
 }
 
 const DEPARTMENTS = [
@@ -118,18 +120,33 @@ export default function ItemDetail({
   locations,
   suppliers,
   supplierItems,
+  recipes,
   onBack,
   onChanged,
   onCategoriesChanged,
   onOpenSupplier,
+  onOpenRecipe,
 }: Props) {
   const [item, setItem] = useState<CatalogItem | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [onHandMap, setOnHandMap] = useState<Record<string, number>>({});
+  // Chips are capped so an item used across a huge chunk of the menu
+  // (salt, oil, ...) doesn't turn this card into a wall of tags -- "+N
+  // more" reveals the rest on demand instead.
+  const [showAllUsedIn, setShowAllUsedIn] = useState(false);
   // Supplier prices are org-wide, not tied to one location — no single
   // "right" currency for them, so this falls back to the org's first
   // location's currency (see defaultCurrency's own notes in api.ts).
   const currency = defaultCurrency(locations);
+  // Recipes that use this item as an ingredient (line_type "item", not a
+  // sub-recipe reference) -- itemId is known synchronously from the prop,
+  // so this doesn't wait on the item fetch below.
+  const usedInRecipes = recipes
+    .filter((r) => r.lines.some((l) => l.line_type === "item" && l.item === itemId))
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name));
+  const USED_IN_CHIP_CAP = 12;
+  const visibleUsedIn = showAllUsedIn ? usedInRecipes : usedInRecipes.slice(0, USED_IN_CHIP_CAP);
 
   const [vatPct, setVatPct] = useState("");
   const [showAddHolding, setShowAddHolding] = useState(false);
@@ -678,6 +695,34 @@ export default function ItemDetail({
               </p>
             )}
           </form>
+        )}
+      </div>
+
+      <div className="card">
+        <h2>Used in recipes</h2>
+        {usedInRecipes.length === 0 ? (
+          <p className="muted">Not used in any recipe yet.</p>
+        ) : (
+          <>
+            <div className="chip-row" style={{ marginBottom: usedInRecipes.length > USED_IN_CHIP_CAP ? 4 : 0 }}>
+              {visibleUsedIn.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  className="chip"
+                  title={`${r.kind === "sub" ? "Sub-recipe" : "Dish"}${r.menu_category ? " · " + r.menu_category : ""}`}
+                  onClick={() => onOpenRecipe?.(r.id)}
+                >
+                  {r.name}
+                </button>
+              ))}
+            </div>
+            {usedInRecipes.length > USED_IN_CHIP_CAP && (
+              <button type="button" className="open-link" onClick={() => setShowAllUsedIn((v) => !v)}>
+                {showAllUsedIn ? "Show fewer" : `+${usedInRecipes.length - USED_IN_CHIP_CAP} more`}
+              </button>
+            )}
+          </>
         )}
       </div>
 

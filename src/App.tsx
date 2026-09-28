@@ -1710,12 +1710,17 @@ export default function App() {
             locations={locations}
             suppliers={suppliers}
             supplierItems={supplierItems}
+            recipes={recipes ?? []}
             onBack={() => setSelectedItemId(null)}
             onChanged={() => loadItems(accessToken)}
             onCategoriesChanged={() => fetchCategories(accessToken).then(setCategories).catch(() => {})}
             onOpenSupplier={(id) => {
               goToNav("Procurement");
               setSelectedSupplierId(id);
+            }}
+            onOpenRecipe={(id) => {
+              goToNav("Recipes");
+              setSelectedRecipeId(id);
             }}
           />
         ) : activePage === "Procurement" && showSupplierList && accessToken ? (
