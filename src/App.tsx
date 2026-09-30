@@ -1873,9 +1873,22 @@ export default function App() {
                               it.supplier_links.some((link) => link.supplier_sku.toLowerCase().includes(q))
                             );
                           })
-                          .map((it) => (
+                          .map((it) => {
+                            const itAllergens = allergens.filter((a) => it.allergens.includes(a.id));
+                            return (
                             <tr key={it.id} className="clickable" onClick={() => setSelectedItemId(it.id)}>
-                              <td className="dish">{it.name}</td>
+                              <td className="dish">
+                                {it.name}
+                                {itAllergens.length > 0 && (
+                                  <span className="allergen-icons-inline">
+                                    {itAllergens.map((a) => (
+                                      <span key={a.id} title={a.name}>
+                                        <AllergenIcon code={a.code} size={14} className="ai-icon" />
+                                      </span>
+                                    ))}
+                                  </span>
+                                )}
+                              </td>
                               <td className="muted">{it.category_name || "—"}</td>
                               <td className="muted">{it.base_unit}</td>
                               <td className="num">
@@ -1883,7 +1896,8 @@ export default function App() {
                               </td>
                               <td className="num">{it.holdings.length}</td>
                             </tr>
-                          ))}
+                            );
+                          })}
                       </tbody>
                     </table>
                   </div>
