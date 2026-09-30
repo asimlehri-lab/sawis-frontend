@@ -315,6 +315,11 @@ export interface BulkItemInput {
   // there's no such thing as a cost with no supplier or vice versa.
   supplier?: string;
   cost?: string;
+  // Optional predicted-waste-% seed for a brand-new item's own
+  // target_waste_pct -- same "new items only, never touches an existing
+  // item" rule as every other optional field here (see
+  // bulk_upsert_items' own docstring on the backend).
+  waste_pct?: string;
 }
 
 export interface BulkItemImportResult {

@@ -269,7 +269,7 @@ function vatPercent(item: CatalogItem): number | "" {
 
 function buildItemsSheet(wb: ExcelJS.Workbook, items: CatalogItem[], location: string) {
   const sheet = wb.addWorksheet("Items");
-  const headers = ["status", "item_name", "base_unit", "category", "vat", "par_level", "supplier", "cost"];
+  const headers = ["status", "item_name", "base_unit", "category", "vat", "par_level", "supplier", "cost", "waste_pct"];
   setHeaders(sheet, headers);
   freezeHeaderRow(sheet);
 
@@ -290,6 +290,7 @@ function buildItemsSheet(wb: ExcelJS.Workbook, items: CatalogItem[], location: s
     sheet.getCell(row, 6).value = holding ? numberOrBlank(holding.par_level) : "";
     sheet.getCell(row, 7).value = link ? link.supplier_name : "";
     sheet.getCell(row, 8).value = link ? numberOrBlank(link.unit_price) : "";
+    sheet.getCell(row, 9).value = numberOrBlank(item.target_waste_pct);
     borderRow(sheet, row, headers.length);
     bandRow(sheet, row, headers.length, LIGHT);
     row++;
@@ -310,13 +311,15 @@ function buildItemsSheet(wb: ExcelJS.Workbook, items: CatalogItem[], location: s
   sheet.getCell("A1").note =
     '"existing" rows are your current catalogue, pulled in automatically -- reference only, don\'t edit. Add anything genuinely new as a "new" row below.';
   sheet.getCell("B1").note =
-    "Only item_name + base_unit are required -- everything else (category/vat/par_level/supplier/cost) is optional, same as the old standalone Items import.";
+    "Only item_name + base_unit are required -- everything else (category/vat/par_level/supplier/cost/waste_pct) is optional, same as the old standalone Items import.";
   sheet.getCell("D1").note =
-    "On \"existing\" rows, category/vat/par_level/supplier/cost show that item's current values (par_level for the location you've picked below) so you can see and copy them -- editing these cells has no effect on an existing item, since matching is by name only.";
+    "On \"existing\" rows, category/vat/par_level/supplier/cost/waste_pct show that item's current values (par_level for the location you've picked below) so you can see and copy them -- editing these cells has no effect on an existing item, since matching is by name only.";
+  sheet.getCell("I1").note =
+    "Your own predicted spoilage % for this item (e.g. 5 for 5%) -- shown on the item's own page next to the actual % calculated from your waste log. Leave blank to set it later.";
 
   sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastItemRow, column: headers.length } };
 
-  setColumnWidths(sheet, [10, 26, 11, 14, 7, 10, 16, 9]);
+  setColumnWidths(sheet, [10, 26, 11, 14, 7, 10, 16, 9, 10]);
   return { lastItemRow };
 }
 

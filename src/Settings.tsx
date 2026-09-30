@@ -887,6 +887,7 @@ function RecipeAndItemImportPanel({
     const itParIdx = headerIndex(itHeader, "par_level");
     const itSupplierIdx = headerIndex(itHeader, "supplier");
     const itCostIdx = headerIndex(itHeader, "cost");
+    const itWasteIdx = headerIndex(itHeader, "waste_pct");
     if (itNameIdx === -1 || itUnitIdx === -1) {
       return { error: 'The "Items" tab is missing its item_name or base_unit column.' };
     }
@@ -904,6 +905,8 @@ function RecipeAndItemImportPanel({
       const cost = costRaw && !isNaN(Number(costRaw)) && Number(costRaw) >= 0 ? costRaw : "";
       const supplier = itSupplierIdx > -1 ? (r[itSupplierIdx] || "").trim() : "";
       const vatRaw = itVatIdx > -1 ? (r[itVatIdx] || "").trim() : "";
+      const wasteRaw = itWasteIdx > -1 ? (r[itWasteIdx] || "").trim() : "";
+      const waste_pct = wasteRaw && !isNaN(Number(wasteRaw)) && Number(wasteRaw) >= 0 ? wasteRaw : "";
       itemRows.push({
         name,
         base_unit,
@@ -912,6 +915,7 @@ function RecipeAndItemImportPanel({
         par_level: par_level || undefined,
         supplier: supplier && cost ? supplier : undefined,
         cost: supplier && cost ? cost : undefined,
+        waste_pct: waste_pct || undefined,
       });
     }
 
