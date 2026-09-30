@@ -27,13 +27,16 @@ import type {
   Supplier,
   Recipe,
   ItemWasteStats,
+  Allergen,
 } from "./api";
+import AllergenIcon from "./AllergenIcon";
 
 interface Props {
   itemId: string;
   accessToken: string;
   userEmail: string;
   categories: Category[];
+  allergens: Allergen[];
   locations: Location[];
   suppliers: Supplier[];
   supplierItems: SupplierItemRow[];
@@ -127,6 +130,7 @@ export default function ItemDetail({
   accessToken,
   userEmail,
   categories,
+  allergens,
   locations,
   suppliers,
   supplierItems,
@@ -307,6 +311,14 @@ export default function ItemDetail({
   function handleVatBlur() {
     const fraction = vatPct.trim() === "" ? null : (Number(vatPct) / 100).toFixed(4);
     saveField({ vat_rate: fraction });
+  }
+
+  function handleToggleAllergen(allergenId: string) {
+    if (!item) return;
+    const next = item.allergens.includes(allergenId)
+      ? item.allergens.filter((id) => id !== allergenId)
+      : [...item.allergens, allergenId];
+    saveField({ allergens: next });
   }
 
   function openAddCategory() {
@@ -630,6 +642,31 @@ export default function ItemDetail({
               <div className="vhint">default for {selectedCategory.name}: {categoryDefaultPct}%</div>
             )}
           </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>Allergens</h2>
+        <p className="hint">
+          Which of the 14 major allergens this item itself contains -- tag it once here and every recipe that
+          uses it picks it up automatically (see that recipe's own Allergens card).
+        </p>
+        <div className="chip-row" style={{ marginBottom: 0 }}>
+          {allergens.map((a) => {
+            const active = item.allergens.includes(a.id);
+            return (
+              <button
+                key={a.id}
+                type="button"
+                className={`chip allergen-chip${active ? " active" : ""}`}
+                onClick={() => handleToggleAllergen(a.id)}
+                title={a.name}
+              >
+                <AllergenIcon code={a.code} size={16} />
+                {a.name}
+              </button>
+            );
+          })}
         </div>
       </div>
 

@@ -10,6 +10,7 @@ import {
   fetchRecipes,
   createRecipe,
   YIELD_UNITS,
+  fetchAllergens,
   fetchCategories,
   fetchLocations,
   fetchSuppliers,
@@ -40,6 +41,7 @@ import type {
   CatalogItem,
   Recipe,
   Category,
+  Allergen,
   Location,
   Supplier,
   SupplierItemRow,
@@ -495,6 +497,10 @@ export default function App() {
 
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
+  // The 14-row global allergen catalogue -- fetched lazily like
+  // categories/locations (Items and Recipes pages are the only ones
+  // that need it), never expected to change during a session.
+  const [allergens, setAllergens] = useState<Allergen[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   // Recipes/Suppliers are org-wide, not tied to one location — this table's
   // costs fall back to the org's first location's currency (see
@@ -693,6 +699,7 @@ export default function App() {
     if (activePage === "Items") {
       loadItems(accessToken);
       fetchCategories(accessToken).then(setCategories).catch(() => {});
+      fetchAllergens(accessToken).then(setAllergens).catch(() => {});
       fetchLocations(accessToken).then(setLocations).catch(() => {});
       fetchSuppliers(accessToken).then(setSuppliers).catch(() => {});
       fetchSupplierItems(accessToken).then(setSupplierItems).catch(() => {});
@@ -700,6 +707,7 @@ export default function App() {
     if (activePage === "Recipes") {
       loadRecipes(accessToken);
       if (!items) loadItems(accessToken); // recipe detail needs the item picker too
+      fetchAllergens(accessToken).then(setAllergens).catch(() => {});
     }
     if (activePage === "Procurement") {
       loadPOs(accessToken);
@@ -1695,6 +1703,7 @@ export default function App() {
             accessToken={accessToken}
             items={items ?? []}
             allRecipes={recipes ?? []}
+            allergens={allergens}
             locations={locations}
             onBack={() => setSelectedRecipeId(null)}
             onChanged={() => loadRecipes(accessToken)}
@@ -1707,6 +1716,7 @@ export default function App() {
             accessToken={accessToken}
             userEmail={me.email}
             categories={categories}
+            allergens={allergens}
             locations={locations}
             suppliers={suppliers}
             supplierItems={supplierItems}

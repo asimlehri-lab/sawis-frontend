@@ -2282,6 +2282,15 @@ input[type="file"] {
 }
 .chip:hover { border-color: var(--brand); }
 .chip.active { background: var(--brand); border-color: var(--brand); color: #fff; }
+.allergen-chip { display: inline-flex; align-items: center; gap: 6px; }
+.allergen-badge-row { display: flex; flex-wrap: wrap; gap: 10px; }
+.allergen-badge {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--bg); border: 1px solid var(--border); border-radius: 20px;
+  padding: 7px 14px 7px 10px; font-size: 12.5px; font-weight: 600; color: var(--ink);
+}
+.allergen-badge .ai-icon { color: var(--caution); flex: none; }
+.allergen-empty { font-size: 12.5px; color: var(--muted); }
 
 .waste-cols { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 900px) { .waste-cols { grid-template-columns: 1fr; } }

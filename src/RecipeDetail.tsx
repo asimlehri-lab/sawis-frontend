@@ -11,14 +11,16 @@ import {
   defaultCurrency,
   defaultTargetCostPct,
 } from "./api";
-import type { Recipe, CatalogItem, Location } from "./api";
+import type { Recipe, CatalogItem, Location, Allergen } from "./api";
 import SearchSelect from "./SearchSelect";
+import AllergenIcon from "./AllergenIcon";
 
 interface Props {
   recipeId: string;
   accessToken: string;
   items: CatalogItem[];
   allRecipes: Recipe[];
+  allergens: Allergen[];
   locations: Location[];
   onBack: () => void;
   onChanged: () => void;
@@ -34,6 +36,7 @@ export default function RecipeDetail({
   accessToken,
   items,
   allRecipes,
+  allergens,
   locations,
   onBack,
   onChanged,
@@ -206,6 +209,10 @@ export default function RecipeDetail({
   const fcOver = recipe.plate_food_cost_pct !== null && recipe.plate_food_cost_pct > target;
   const yieldNum = Number(recipe.yield_qty) || 1;
   const menuPriceNum = recipe.menu_price ? Number(recipe.menu_price) : 0;
+  // allergens (the app-wide catalogue) is already ordered by
+  // Allergen.Meta.ordering server-side -- filtering it preserves that
+  // same order, so the badge row doesn't need its own sort.
+  const recipeAllergens = allergens.filter((a) => recipe.allergens.includes(a.id));
 
   return (
     <div>
@@ -228,6 +235,21 @@ export default function RecipeDetail({
           ? "In-house prep used inside other recipes — costed per portion."
           : "Ingredient costs pull live from inventory and any sub-recipes used."}
       </p>
+
+      <div className="allergen-badge-row" style={{ marginBottom: 18 }}>
+        {recipeAllergens.length > 0 ? (
+          recipeAllergens.map((a) => (
+            <span key={a.id} className="allergen-badge" title={a.name}>
+              <AllergenIcon code={a.code} size={15} className="ai-icon" />
+              {a.name}
+            </span>
+          ))
+        ) : (
+          <span className="allergen-empty">
+            No allergens tagged on this recipe's ingredients yet — tag them on each item's own page.
+          </span>
+        )}
+      </div>
 
       {error && <p className="error">{error}</p>}
 
