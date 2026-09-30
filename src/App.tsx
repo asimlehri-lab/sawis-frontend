@@ -2146,6 +2146,10 @@ export default function App() {
                   goToNav("Recipes");
                   setSelectedRecipeId(id);
                 }}
+                onOpenPO={(id) => {
+                  goToNav("Procurement");
+                  setSelectedPOId(id);
+                }}
                 onNavigateApp={(label) => goToNav(label)}
               />
             )}

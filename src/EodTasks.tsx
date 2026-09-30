@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { costBand, costBandColor, fetchStockCounts } from "./api";
-import type { CatalogItem, Location, Me, Recipe, StockCountRow, StockMovementRow } from "./api";
+import { costBand, costBandColor, fetchNotifications, fetchStockCounts } from "./api";
+import type { AppNotification, CatalogItem, Location, Me, Recipe, StockCountRow, StockMovementRow } from "./api";
 
 interface Props {
   me: Me;
@@ -11,8 +11,35 @@ interface Props {
   items: CatalogItem[];
   stockMovements: StockMovementRow[];
   onOpenRecipe: (id: string) => void;
+  onOpenPO: (id: string) => void;
   onViewReorder: () => void;
   onNavigateApp: (label: string) => void;
+}
+
+// Same windowing as NotificationBell.tsx's own "Coming up" section -- kept
+// as its own copy rather than a shared import so this tab and the bell can
+// keep evolving independently (same reasoning as onHandFor below).
+const NOTIF_WINDOW_PAST_DAYS = 3;
+const NOTIF_WINDOW_FUTURE_DAYS = 7;
+
+function daysFromToday(dateStr: string): number {
+  const d = new Date(`${dateStr}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((d.getTime() - today.getTime()) / 86400000);
+}
+
+function fmtRelativeDay(dateStr: string): string {
+  const diff = daysFromToday(dateStr);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Tomorrow";
+  if (diff === -1) return "Yesterday";
+  const label = new Date(`${dateStr}T00:00:00`).toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+  return diff < 0 ? `${label} · overdue` : label;
 }
 
 const sectionHeadStyle: React.CSSProperties = {
@@ -55,12 +82,21 @@ export default function EodTasks({
   items,
   stockMovements,
   onOpenRecipe,
+  onOpenPO,
   onViewReorder,
   onNavigateApp,
 }: Props) {
   const isManagerOrAbove = me.memberships.some(
     (m) => m.role === "admin" || m.role === "manager" || m.role === "finance"
   );
+
+  // Fetched once here (not per-role-view) since only one of the two views
+  // below ever mounts at a time, and this is the same small org-wide list
+  // NotificationBell already fetches for its own "Coming up" section.
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  useEffect(() => {
+    fetchNotifications(accessToken).then(setNotifications).catch(() => {});
+  }, [accessToken]);
 
   return isManagerOrAbove ? (
     <ManagerTasks
@@ -69,7 +105,9 @@ export default function EodTasks({
       recipes={recipes}
       items={items}
       stockMovements={stockMovements}
+      notifications={notifications}
       onOpenRecipe={onOpenRecipe}
+      onOpenPO={onOpenPO}
       onViewReorder={onViewReorder}
     />
   ) : (
@@ -79,6 +117,7 @@ export default function EodTasks({
       location={location}
       locations={locations}
       stockMovements={stockMovements}
+      notifications={notifications}
       onNavigateApp={onNavigateApp}
     />
   );
@@ -90,7 +129,9 @@ function ManagerTasks({
   recipes,
   items,
   stockMovements,
+  notifications,
   onOpenRecipe,
+  onOpenPO,
   onViewReorder,
 }: {
   location: string;
@@ -98,9 +139,21 @@ function ManagerTasks({
   recipes: Recipe[];
   items: CatalogItem[];
   stockMovements: StockMovementRow[];
+  notifications: AppNotification[];
   onOpenRecipe: (id: string) => void;
+  onOpenPO: (id: string) => void;
   onViewReorder: () => void;
 }) {
+  // Delivery reminders (Phase 3 notifications, generated daily server-side
+  // from each PurchaseOrder's expected_date) -- ordering/financial in
+  // nature, so grouped with the rest of this manager-only view rather than
+  // staff's. Inventory-check-due notifications go to StaffTasks instead
+  // (see below) -- that one's an operational "go count something" prompt.
+  const upcomingDeliveries = notifications
+    .filter((n) => n.kind === "delivery_reminder")
+    .filter((n) => daysFromToday(n.relevant_date) >= -NOTIF_WINDOW_PAST_DAYS)
+    .filter((n) => daysFromToday(n.relevant_date) <= NOTIF_WINDOW_FUTURE_DAYS)
+    .sort((a, b) => a.relevant_date.localeCompare(b.relevant_date));
   // This tab's own location picker feeds the cost targets below (targets
   // are per-location, per Settings > Locations); below-par stays
   // unscoped, same as NotificationBell, since a holding already carries
@@ -233,6 +286,38 @@ function ManagerTasks({
           </>
         )}
       </section>
+
+      <section className="card task-section">
+        <div className="task-section-head">
+          <h2 style={sectionHeadStyle}>Upcoming deliveries</h2>
+          <span className={`tag ${upcomingDeliveries.length ? "warn" : "good"}`}>
+            {upcomingDeliveries.length ? `${upcomingDeliveries.length} due soon` : "None due soon"}
+          </span>
+        </div>
+        {upcomingDeliveries.length === 0 ? (
+          <p className="task-empty">Nothing expected in the next {NOTIF_WINDOW_FUTURE_DAYS} days.</p>
+        ) : (
+          <div className="task-list">
+            {upcomingDeliveries.map((n) => (
+              <button
+                key={n.id}
+                type="button"
+                className="task-item task-item-clickable"
+                onClick={() => n.purchase_order && onOpenPO(n.purchase_order)}
+              >
+                <div>
+                  <b>{n.po_number || "Delivery"}</b>
+                  <span className="muted"> · {n.location_name}</span>
+                  {n.supplier_name && <span className="muted"> · {n.supplier_name}</span>}
+                </div>
+                <span className="muted" style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
+                  {fmtRelativeDay(n.relevant_date)}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -243,6 +328,7 @@ function StaffTasks({
   location,
   locations,
   stockMovements,
+  notifications,
   onNavigateApp,
 }: {
   me: Me;
@@ -250,6 +336,7 @@ function StaffTasks({
   location: string;
   locations: Location[];
   stockMovements: StockMovementRow[];
+  notifications: AppNotification[];
   onNavigateApp: (label: string) => void;
 }) {
   // Fetched once on mount -- not worth threading fetchStockCounts through
@@ -279,6 +366,17 @@ function StaffTasks({
   const wasteLoggedToday = stockMovements.some(
     (m) => m.movement_type === "waste" && m.location === myStaffLocation && m.occurred_at.slice(0, 10) === todayStr
   );
+
+  // The location-wide scheduled reminder (Settings > Locations >
+  // Inventory check day), not a specific person's assignment -- that's
+  // myAssignments above (CountAssignment). This is "your location's due
+  // for a count soon," shown to everyone at that location since a
+  // schedule-based reminder has no assignee yet to route it to.
+  const upcomingChecks = notifications
+    .filter((n) => n.kind === "inventory_check_due")
+    .filter((n) => daysFromToday(n.relevant_date) >= -NOTIF_WINDOW_PAST_DAYS)
+    .filter((n) => daysFromToday(n.relevant_date) <= NOTIF_WINDOW_FUTURE_DAYS)
+    .sort((a, b) => a.relevant_date.localeCompare(b.relevant_date));
 
   return (
     <div>
@@ -310,6 +408,37 @@ function StaffTasks({
                 </div>
                 <span className={`tag ${a.status === "in_progress" ? "warn" : "bad"}`}>
                   {a.status === "in_progress" ? "In progress" : "To do"}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="card task-section">
+        <div className="task-section-head">
+          <h2 style={sectionHeadStyle}>Inventory check coming up</h2>
+          <span className={`tag ${upcomingChecks.length ? "warn" : "good"}`}>
+            {upcomingChecks.length ? `${upcomingChecks.length} due soon` : "None due soon"}
+          </span>
+        </div>
+        {upcomingChecks.length === 0 ? (
+          <p className="task-empty">No inventory check due in the next {NOTIF_WINDOW_FUTURE_DAYS} days.</p>
+        ) : (
+          <div className="task-list">
+            {upcomingChecks.map((n) => (
+              <button
+                key={n.id}
+                type="button"
+                className="task-item task-item-clickable"
+                onClick={() => onNavigateApp("Inventory")}
+              >
+                <div>
+                  <b>Inventory check due</b>
+                  <span className="muted"> · {n.location_name}</span>
+                </div>
+                <span className="muted" style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
+                  {fmtRelativeDay(n.relevant_date)}
                 </span>
               </button>
             ))}

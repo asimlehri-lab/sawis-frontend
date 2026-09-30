@@ -26,6 +26,10 @@ interface Props {
   // tab's cost-breach rows. Lives at the App.tsx level since it's a
   // cross-page navigation, not something EndOfDay owns.
   onOpenRecipe: (id: string) => void;
+  // Opens a PurchaseOrder's detail page (Procurement tab) -- used by the
+  // Tasks tab's upcoming-deliveries rows. Same callback shape as
+  // NotificationBell's own onOpenPO in App.tsx.
+  onOpenPO: (id: string) => void;
   // Cross-page nav for the Tasks tab (e.g. "Inventory" for an assigned
   // count, "Waste log" for the reminder) -- same goToNav App.tsx already
   // uses for its own sidebar.
@@ -167,6 +171,7 @@ export default function EndOfDay({
   stockMovements,
   initialTab,
   onOpenRecipe,
+  onOpenPO,
   onNavigateApp,
 }: Props) {
   const [tab, setTab] = useState<"overview" | "reorder" | "tasks">(initialTab ?? "overview");
@@ -683,6 +688,7 @@ export default function EndOfDay({
           items={items}
           stockMovements={stockMovements}
           onOpenRecipe={onOpenRecipe}
+          onOpenPO={onOpenPO}
           onViewReorder={() => setTab("reorder")}
           onNavigateApp={onNavigateApp}
         />
