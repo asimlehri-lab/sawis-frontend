@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import type { CSSProperties, JSX } from "react";
 
 // One hand-drawn line icon per EU/UK major allergen (see Allergen model
 // on the backend) -- a small, deliberately consistent family: 24x24
