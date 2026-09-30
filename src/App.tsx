@@ -10,6 +10,7 @@ import {
   fetchRecipes,
   createRecipe,
   YIELD_UNITS,
+  fetchAllergens,
   fetchCategories,
   fetchLocations,
   fetchSuppliers,
@@ -34,12 +35,15 @@ import {
   currencySymbol,
   autoFactor,
   convertToBaseUnit,
+  defaultTargetCostPct,
+  costBand,
 } from "./api";
 import type {
   Me,
   CatalogItem,
   Recipe,
   Category,
+  Allergen,
   Location,
   Supplier,
   SupplierItemRow,
@@ -56,6 +60,7 @@ import type {
 } from "./api";
 import RecipeDetail from "./RecipeDetail";
 import ItemDetail from "./ItemDetail";
+import AllergenIcon from "./AllergenIcon";
 import Loader from "./Loader";
 import ProcurementDetail from "./ProcurementDetail";
 import SupplierDeliveries from "./SupplierDeliveries";
@@ -68,15 +73,16 @@ import Settings from "./Settings";
 import Reports from "./Reports";
 import SearchSelect from "./SearchSelect";
 import NotificationBell from "./NotificationBell";
-import CategoryFilter from "./CategoryFilter";
+import FilterBar from "./FilterBar";
+import type { FilterFacet, FilterValues } from "./FilterBar";
 import HelpChat from "./HelpChat";
 import "./App.css";
 
 const NAV_ITEMS = [
   "End of day",
   "Inventory",
-  "Items",
   "Procurement",
+  "Items",
   "Recipes",
   "Waste log",
   "Reports",
@@ -495,6 +501,10 @@ export default function App() {
 
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
+  // The 14-row global allergen catalogue -- fetched lazily like
+  // categories/locations (Items and Recipes pages are the only ones
+  // that need it), never expected to change during a session.
+  const [allergens, setAllergens] = useState<Allergen[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   // Recipes/Suppliers are org-wide, not tied to one location — this table's
   // costs fall back to the org's first location's currency (see
@@ -503,9 +513,10 @@ export default function App() {
   // instead, since a PO genuinely belongs to one location.
   const orgCurrency = defaultCurrency(locations);
   // Distinct menu_category values actually present on the recipes list, sorted
-  // alphabetically -- fed into the Recipes CategoryFilter (see recipeCategoryFilter
-  // above). Recomputed on every render rather than memoized: this is a handful of
-  // short strings over at most a few hundred recipes, not worth the added complexity.
+  // alphabetically -- fed into the Recipes FilterBar's "category" facet (see
+  // recipeFacets below). Recomputed on every render rather than memoized: this
+  // is a handful of short strings over at most a few hundred recipes, not
+  // worth the added complexity.
   const recipeMenuCategoryOptions = Array.from(
     new Set((recipes ?? []).map((r) => r.menu_category).filter((c): c is string => !!c))
   )
@@ -539,15 +550,59 @@ export default function App() {
   // are already fully loaded, so there's no need for a backend query param.
   const [recipeSearch, setRecipeSearch] = useState("");
   const [itemSearch, setItemSearch] = useState("");
-  // Multi-select category filters for the Items/Recipes lists (CategoryFilter.tsx) --
-  // null means "no filter, show every category" (the requested default); an actual
-  // array is an explicit selection, including an empty one (nothing checked, nothing
-  // shown) -- see CategoryFilter.tsx's own comment for why that tri-state exists.
-  // Items filters by Category.id (it.category); Recipes filters by the freeform
-  // r.menu_category string, since recipes aren't linked to the Category model at all
-  // -- see CatalogItem vs Recipe in api.ts.
-  const [itemCategoryFilter, setItemCategoryFilter] = useState<string[] | null>(null);
-  const [recipeCategoryFilter, setRecipeCategoryFilter] = useState<string[] | null>(null);
+  // Faceted filters for the Items/Recipes lists (FilterBar.tsx, which
+  // retired the old single-dimension CategoryFilter.tsx). One FilterValues
+  // object per list holds every facet's own tri-state selection, keyed by
+  // facet key -- see FilterBar.tsx's own comment for what null vs an
+  // (possibly empty) array means per facet.
+  const [itemFilters, setItemFilters] = useState<FilterValues>({});
+  const [recipeFilters, setRecipeFilters] = useState<FilterValues>({});
+
+  // Items: Category (Category.id), Supplier (matches either the item's
+  // default_supplier or any of its supplier_links, since "who could I buy
+  // this from" is more useful here than just the one default), Allergens.
+  const itemFacets: FilterFacet[] = [
+    { key: "category", label: "Category", options: categories.map((c) => ({ value: c.id, label: c.name })) },
+    { key: "supplier", label: "Supplier", options: suppliers.map((s) => ({ value: s.id, label: s.name })) },
+    { key: "allergens", label: "Allergens", options: allergens.map((a) => ({ value: a.id, label: a.name })) },
+  ];
+
+  // Recipes: menu_category (freeform string, not the Category model --
+  // recipes aren't linked to Category at all, see CatalogItem vs Recipe in
+  // api.ts), Item used (search over every item name -- which recipes use
+  // ingredient X), Food/Drink (menu_group), and Cost vs target (the same
+  // 3-band good/caution/danger split the cost gauges use, via costBand()).
+  const recipeFacets: FilterFacet[] = [
+    { key: "category", label: "Category", options: recipeMenuCategoryOptions },
+    {
+      key: "item",
+      label: "Item used",
+      options: (items ?? []).map((it) => ({ value: it.id, label: it.name })),
+      searchThreshold: 1,
+    },
+    {
+      key: "group",
+      label: "Food or drink",
+      options: [
+        { value: "food", label: "Food" },
+        { value: "drink", label: "Drink" },
+      ],
+    },
+    {
+      key: "cost",
+      label: "Cost vs target",
+      options: [
+        { value: "good", label: "On target" },
+        { value: "caution", label: "Over target" },
+        { value: "danger", label: "Well over target" },
+      ],
+    },
+    // A recipe's own allergens are the union of its ingredients' tags,
+    // computed server-side (Recipe.allergens) -- same option list as
+    // Items' own allergens facet, just matched against the recipe's
+    // already-computed array instead of a per-item tag.
+    { key: "allergens", label: "Allergens", options: allergens.map((a) => ({ value: a.id, label: a.name })) },
+  ];
 
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[] | null>(null);
   const [poError, setPoError] = useState<string | null>(null);
@@ -562,6 +617,20 @@ export default function App() {
   const [savingPO, setSavingPO] = useState(false);
   const [newPOError, setNewPOError] = useState<string | null>(null);
   const [poFilter, setPoFilter] = useState<"all" | "draft" | "sent" | "received">("all");
+  // Faceted filter (FilterBar.tsx) for the Procurement list -- status stays
+  // the existing rtabs toggle above (poFilter), same as Recipes keeps its
+  // Dish/Sub-recipe toggle separate from its own FilterBar.
+  const [poFilters, setPoFilters] = useState<FilterValues>({});
+  const poFacets: FilterFacet[] = [
+    { key: "supplier", label: "Supplier", options: suppliers.map((s) => ({ value: s.id, label: s.name })) },
+    { key: "location", label: "Location", options: locations.map((l) => ({ value: l.id, label: l.name })) },
+    {
+      key: "item",
+      label: "Item",
+      options: (items ?? []).map((it) => ({ value: it.id, label: it.name })),
+      searchThreshold: 1,
+    },
+  ];
   const [itemSupplierLinks, setItemSupplierLinks] = useState<ItemSupplierRow[]>([]);
   const [itemReceiptAliases, setItemReceiptAliases] = useState<ItemReceiptAliasRow[]>([]);
 
@@ -693,6 +762,7 @@ export default function App() {
     if (activePage === "Items") {
       loadItems(accessToken);
       fetchCategories(accessToken).then(setCategories).catch(() => {});
+      fetchAllergens(accessToken).then(setAllergens).catch(() => {});
       fetchLocations(accessToken).then(setLocations).catch(() => {});
       fetchSuppliers(accessToken).then(setSuppliers).catch(() => {});
       fetchSupplierItems(accessToken).then(setSupplierItems).catch(() => {});
@@ -700,6 +770,7 @@ export default function App() {
     if (activePage === "Recipes") {
       loadRecipes(accessToken);
       if (!items) loadItems(accessToken); // recipe detail needs the item picker too
+      fetchAllergens(accessToken).then(setAllergens).catch(() => {});
     }
     if (activePage === "Procurement") {
       loadPOs(accessToken);
@@ -738,6 +809,7 @@ export default function App() {
     if (activePage === "Settings") {
       if (!items) loadItems(accessToken);
       loadRecipes(accessToken);
+      fetchAllergens(accessToken).then(setAllergens).catch(() => {});
       fetchLocations(accessToken).then(setLocations).catch(() => {});
     }
     if (activePage === "Reports") {
@@ -1695,6 +1767,7 @@ export default function App() {
             accessToken={accessToken}
             items={items ?? []}
             allRecipes={recipes ?? []}
+            allergens={allergens}
             locations={locations}
             onBack={() => setSelectedRecipeId(null)}
             onChanged={() => loadRecipes(accessToken)}
@@ -1707,6 +1780,7 @@ export default function App() {
             accessToken={accessToken}
             userEmail={me.email}
             categories={categories}
+            allergens={allergens}
             locations={locations}
             suppliers={suppliers}
             supplierItems={supplierItems}
@@ -1777,10 +1851,10 @@ export default function App() {
                     onChange={(e) => setItemSearch(e.target.value)}
                     placeholder="Search by name, SKU, or supplier code…"
                   />
-                  <CategoryFilter
-                    options={categories.map((c) => ({ value: c.id, label: c.name }))}
-                    selected={itemCategoryFilter}
-                    onChange={setItemCategoryFilter}
+                  <FilterBar
+                    facets={itemFacets}
+                    values={itemFilters}
+                    onChange={(key, next) => setItemFilters((prev) => ({ ...prev, [key]: next }))}
                   />
                   <button className="btn-ghost small" onClick={() => setShowImport(true)}>
                     ⇪ Import supplier list
@@ -1798,10 +1872,10 @@ export default function App() {
                     onChange={(e) => setRecipeSearch(e.target.value)}
                     placeholder="Search by name or POS ID…"
                   />
-                  <CategoryFilter
-                    options={recipeMenuCategoryOptions}
-                    selected={recipeCategoryFilter}
-                    onChange={setRecipeCategoryFilter}
+                  <FilterBar
+                    facets={recipeFacets}
+                    values={recipeFilters}
+                    onChange={(key, next) => setRecipeFilters((prev) => ({ ...prev, [key]: next }))}
                   />
                   <button className="btn-primary small" onClick={() => setShowNewRecipe(true)}>
                     + New recipe
@@ -1850,7 +1924,19 @@ export default function App() {
                       <tbody>
                         {items
                           .filter(
-                            (it) => itemCategoryFilter === null || itemCategoryFilter.includes(it.category ?? "")
+                            (it) => (itemFilters.category ?? null) === null || itemFilters.category!.includes(it.category ?? "")
+                          )
+                          .filter(
+                            (it) =>
+                              (itemFilters.supplier ?? null) === null ||
+                              itemFilters.supplier!.some(
+                                (sId) => it.default_supplier === sId || it.supplier_links.some((sl) => sl.supplier === sId)
+                              )
+                          )
+                          .filter(
+                            (it) =>
+                              (itemFilters.allergens ?? null) === null ||
+                              itemFilters.allergens!.some((aId) => it.allergens.includes(aId))
                           )
                           .filter((it) => {
                             const q = itemSearch.trim().toLowerCase();
@@ -1861,9 +1947,22 @@ export default function App() {
                               it.supplier_links.some((link) => link.supplier_sku.toLowerCase().includes(q))
                             );
                           })
-                          .map((it) => (
+                          .map((it) => {
+                            const itAllergens = allergens.filter((a) => it.allergens.includes(a.id));
+                            return (
                             <tr key={it.id} className="clickable" onClick={() => setSelectedItemId(it.id)}>
-                              <td className="dish">{it.name}</td>
+                              <td className="dish">
+                                {it.name}
+                                {itAllergens.length > 0 && (
+                                  <span className="allergen-icons-inline">
+                                    {itAllergens.map((a) => (
+                                      <span key={a.id} title={a.name}>
+                                        <AllergenIcon code={a.code} size={14} className="ai-icon" />
+                                      </span>
+                                    ))}
+                                  </span>
+                                )}
+                              </td>
                               <td className="muted">{it.category_name || "—"}</td>
                               <td className="muted">{it.base_unit}</td>
                               <td className="num">
@@ -1871,7 +1970,8 @@ export default function App() {
                               </td>
                               <td className="num">{it.holdings.length}</td>
                             </tr>
-                          ))}
+                            );
+                          })}
                       </tbody>
                     </table>
                   </div>
@@ -1914,7 +2014,27 @@ export default function App() {
                         {recipes
                           .filter((r) => recipeFilter === "all" || r.kind === recipeFilter)
                           .filter(
-                            (r) => recipeCategoryFilter === null || recipeCategoryFilter.includes(r.menu_category)
+                            (r) => (recipeFilters.category ?? null) === null || recipeFilters.category!.includes(r.menu_category)
+                          )
+                          .filter(
+                            (r) =>
+                              (recipeFilters.item ?? null) === null ||
+                              recipeFilters.item!.some((itemId) => r.lines.some((l) => l.item === itemId))
+                          )
+                          .filter(
+                            (r) => (recipeFilters.group ?? null) === null || recipeFilters.group!.includes(r.menu_group)
+                          )
+                          .filter(
+                            (r) =>
+                              (recipeFilters.cost ?? null) === null ||
+                              recipeFilters.cost!.includes(
+                                costBand(r.plate_food_cost_pct, defaultTargetCostPct(locations, r.menu_group === "drink" ? "drink" : "food"))
+                              )
+                          )
+                          .filter(
+                            (r) =>
+                              (recipeFilters.allergens ?? null) === null ||
+                              recipeFilters.allergens!.some((aId) => r.allergens.includes(aId))
                           )
                           .filter((r) => {
                             const q = recipeSearch.trim().toLowerCase();
@@ -1928,11 +2048,21 @@ export default function App() {
                             const usedInCount = recipes.filter((other) =>
                               other.lines.some((l) => l.line_type === "recipe" && l.sub_recipe === r.id)
                             ).length;
+                            const rAllergens = allergens.filter((a) => r.allergens.includes(a.id));
                             return (
                               <tr key={r.id} className="clickable" onClick={() => setSelectedRecipeId(r.id)}>
                                 <td className="dish">
                                   {r.name || <span className="muted">Untitled</span>}
                                   <span className={`kind-tag ${r.kind}`}>{r.kind === "sub" ? "Sub-recipe" : "Dish"}</span>
+                                  {rAllergens.length > 0 && (
+                                    <span className="allergen-icons-inline">
+                                      {rAllergens.map((a) => (
+                                        <span key={a.id} title={a.name}>
+                                          <AllergenIcon code={a.code} size={14} className="ai-icon" />
+                                        </span>
+                                      ))}
+                                    </span>
+                                  )}
                                   <div className="rsub">
                                     {r.kind === "sub"
                                       ? usedInCount === 0
@@ -1990,16 +2120,23 @@ export default function App() {
                 )}
 
                 {purchaseOrders && purchaseOrders.length > 0 && (
-                  <div className="rtabs">
-                    {(["all", "draft", "sent", "received"] as const).map((f) => (
-                      <button
-                        key={f}
-                        className={`rtab ${poFilter === f ? "on" : ""}`}
-                        onClick={() => setPoFilter(f)}
-                      >
-                        {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
-                      </button>
-                    ))}
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <div className="rtabs" style={{ margin: 0 }}>
+                      {(["all", "draft", "sent", "received"] as const).map((f) => (
+                        <button
+                          key={f}
+                          className={`rtab ${poFilter === f ? "on" : ""}`}
+                          onClick={() => setPoFilter(f)}
+                        >
+                          {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                    <FilterBar
+                      facets={poFacets}
+                      values={poFilters}
+                      onChange={(key, next) => setPoFilters((prev) => ({ ...prev, [key]: next }))}
+                    />
                   </div>
                 )}
 
@@ -2021,6 +2158,13 @@ export default function App() {
                       <tbody>
                         {purchaseOrders
                           .filter((po) => poFilter === "all" || po.status === poFilter)
+                          .filter((po) => (poFilters.supplier ?? null) === null || poFilters.supplier!.includes(po.supplier))
+                          .filter((po) => (poFilters.location ?? null) === null || poFilters.location!.includes(po.location))
+                          .filter(
+                            (po) =>
+                              (poFilters.item ?? null) === null ||
+                              poFilters.item!.some((itemId) => po.lines.some((l) => l.item === itemId))
+                          )
                           .map((po) => {
                             const supplier = suppliers.find((s) => s.id === po.supplier);
                             const belowMin =
@@ -2099,11 +2243,22 @@ export default function App() {
             {activePage === "End of day" && accessToken && (
               <EndOfDay
                 accessToken={accessToken}
+                me={me}
                 locations={locations}
                 recipes={recipes ?? []}
                 items={items ?? []}
                 itemSupplierLinks={itemSupplierLinks}
+                stockMovements={stockMovements}
                 initialTab={eodInitialTab}
+                onOpenRecipe={(id) => {
+                  goToNav("Recipes");
+                  setSelectedRecipeId(id);
+                }}
+                onOpenPO={(id) => {
+                  goToNav("Procurement");
+                  setSelectedPOId(id);
+                }}
+                onNavigateApp={(label) => goToNav(label)}
               />
             )}
 
@@ -2112,6 +2267,7 @@ export default function App() {
                 accessToken={accessToken}
                 items={items ?? []}
                 recipes={recipes ?? []}
+                allergens={allergens}
                 locations={locations}
                 onItemsChanged={() => loadItems(accessToken)}
                 onRecipesChanged={() => loadRecipes(accessToken)}

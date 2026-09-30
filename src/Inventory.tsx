@@ -1,5 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import Loader from "./Loader";
+import FilterBar from "./FilterBar";
+import type { FilterFacet, FilterValues } from "./FilterBar";
 import {
   createCountAssignment,
   createCountLine,
@@ -329,6 +331,10 @@ function LiveStockTab({
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState<"all" | "kitchen" | "bar" | "foh">("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Faceted filter (FilterBar.tsx) -- department keeps its own existing
+  // rtabs toggle above, same as Recipes' Dish/Sub-recipe split stays
+  // outside its own FilterBar.
+  const [liveStockFilters, setLiveStockFilters] = useState<FilterValues>({});
 
   const stockValue = holdings.reduce((sum, h) => sum + (onHand[h.id] ?? 0) * (cheapestPrice(h.itemId) ?? 0), 0);
   const belowPar = holdings.filter((h) => (onHand[h.id] ?? 0) < h.parLevel).length;
@@ -338,9 +344,47 @@ function LiveStockTab({
     .sort((a, b) => (b.counted_at ?? "").localeCompare(a.counted_at ?? ""))[0];
   const openCount = countsHere.find((c) => c.status === "open");
 
+  // Section/category options are the distinct values actually present on
+  // this location's holdings (same "recomputed on every render, not worth
+  // memoizing" convention as recipeMenuCategoryOptions in App.tsx), with an
+  // explicit "" value standing in for "no section"/"no category" so a
+  // holding that isn't assigned one is still filterable rather than
+  // silently excluded from every facet option.
+  const sectionOptionsMap = new Map<string, string>();
+  holdings.forEach((h) => sectionOptionsMap.set(h.section ?? "", h.sectionName ?? "No section"));
+  const sectionOptions = Array.from(sectionOptionsMap, ([value, label]) => ({ value, label })).sort((a, b) =>
+    a.value === "" ? 1 : b.value === "" ? -1 : a.label.localeCompare(b.label)
+  );
+  const categoryOptionsMap = new Map<string, string>();
+  holdings.forEach((h) => categoryOptionsMap.set(h.category ?? "", h.categoryName ?? "No category"));
+  const categoryOptions = Array.from(categoryOptionsMap, ([value, label]) => ({ value, label })).sort((a, b) =>
+    a.value === "" ? 1 : b.value === "" ? -1 : a.label.localeCompare(b.label)
+  );
+  const liveStockFacets: FilterFacet[] = [
+    {
+      key: "status",
+      label: "Status",
+      options: [
+        { value: "low", label: "Below par" },
+        { value: "ok", label: "OK" },
+      ],
+    },
+    { key: "section", label: "Section", options: sectionOptions },
+    { key: "category", label: "Category", options: categoryOptions },
+  ];
+
   const filtered = holdings.filter((h) => {
     if (deptFilter !== "all" && h.department !== deptFilter) return false;
     if (search && !h.itemName.toLowerCase().includes(search.toLowerCase())) return false;
+    const statusSel = liveStockFilters.status ?? null;
+    if (statusSel !== null) {
+      const isLow = onHand[h.id] !== undefined && onHand[h.id]! < h.parLevel;
+      if (!statusSel.includes(isLow ? "low" : "ok")) return false;
+    }
+    const sectionSel = liveStockFilters.section ?? null;
+    if (sectionSel !== null && !sectionSel.includes(h.section ?? "")) return false;
+    const categorySel = liveStockFilters.category ?? null;
+    if (categorySel !== null && !categorySel.includes(h.category ?? "")) return false;
     return true;
   });
 
@@ -398,6 +442,11 @@ function LiveStockTab({
               </button>
             ))}
           </div>
+          <FilterBar
+            facets={liveStockFacets}
+            values={liveStockFilters}
+            onChange={(key, next) => setLiveStockFilters((prev) => ({ ...prev, [key]: next }))}
+          />
         </div>
 
         {holdings.length === 0 && <p className="muted">Nothing stocked at this location yet.</p>}

@@ -59,6 +59,29 @@ export function defaultTargetCostPct(
   return Number.isFinite(n) ? n : 30;
 }
 
+// Cost-vs-target color banding, shared by every food/drink-cost-% gauge in
+// the app (RecipeDetail's hero, Reports'/EodReport's KPI hero, the per-dish
+// menu table badges, and End of day > Tasks' cost-breach list). Three
+// bands, not two: at/under target is fine (green), moderately over is
+// worth a glance (the same orange this app has always used for "over
+// target"), and meaningfully over -- more than 10 points past target -- is
+// a real problem, using the same red (--brick) this app already reserves
+// for danger actions and negative stock variance. A flat 10-point margin
+// rather than a relative multiplier, so a low target (e.g. a soft-drink
+// line with a 10% target) doesn't get an unreachably tight middle band.
+export type CostBand = "good" | "caution" | "danger";
+
+export function costBand(pct: number | null, target: number): CostBand {
+  if (pct === null) return "good";
+  if (pct <= target) return "good";
+  if (pct <= target + 10) return "caution";
+  return "danger";
+}
+
+export function costBandColor(band: CostBand): string {
+  return band === "good" ? "var(--good)" : band === "caution" ? "var(--caution)" : "var(--brick)";
+}
+
 // Supplier unit/pack conversion — shared by ItemDetail's "Link" flow, the
 // Scan receipt review table, and the supplier catalogue importer. A
 // supplier very often prices things in a different unit than the item is
@@ -161,11 +184,34 @@ export interface CatalogItem {
   vat_rate: string | null;
   effective_vat_rate: string | null;
   default_supplier: string | null;
+  // Predicted spoilage/waste % the user sets per item -- null until set.
+  // Compared against fetchItemWasteStats' actual figure on ItemDetail.
+  target_waste_pct: string | null;
+  // Allergen ids this item itself contains -- tagged directly by the
+  // user (see AllergenPicker in ItemDetail.tsx). A recipe's own
+  // allergens are the union of its ingredients' tags, computed server-
+  // side (see Recipe.allergens below), never tagged per-recipe.
+  allergens: string[];
   archived: boolean;
   holdings: ItemHolding[];
   // Included so the Items list can be searched by a supplier's own item
   // code, not just by our SKU/name -- see ItemSupplierRow.supplier_sku.
   supplier_links: ItemSupplierRow[];
+}
+
+export interface Allergen {
+  id: string;
+  code: string;
+  name: string;
+  order: number;
+}
+
+// The 14 EU/UK-regulated major allergens -- fixed, global reference
+// data, not paginated per-org like everything else this app fetches.
+// Fetch once and join locally against Item.allergens / Recipe.allergens
+// rather than re-fetching per item/recipe.
+export async function fetchAllergens(accessToken: string): Promise<Allergen[]> {
+  return authedFetchAllPages<Allergen>("/api/catalog/allergens/", accessToken);
 }
 
 async function authedFetch(path: string, accessToken: string) {
@@ -312,6 +358,18 @@ export interface BulkItemInput {
   // there's no such thing as a cost with no supplier or vice versa.
   supplier?: string;
   cost?: string;
+  // Optional predicted-waste-% seed for a brand-new item's own
+  // target_waste_pct -- same "new items only, never touches an existing
+  // item" rule as every other optional field here (see
+  // bulk_upsert_items' own docstring on the backend).
+  waste_pct?: string;
+  // Optional comma-separated allergen names or codes (case-insensitive).
+  // Unlike every other optional field here, this ONE applies to an
+  // existing item too, not just a brand-new one -- see
+  // bulk_upsert_items' own docstring on the backend. Settings.tsx's
+  // parseThreeTabWorkbook only sends an "existing" row through at all
+  // when this cell has been filled in.
+  allergens?: string;
 }
 
 export interface BulkItemImportResult {
@@ -331,6 +389,9 @@ export interface BulkItemImportResult {
   // SupplierItem price) was set or refreshed by this import's supplier/
   // cost columns.
   supplier_links_set: string[];
+  // Names of items (new or existing) whose allergen tags were set by
+  // this import's allergens column.
+  allergens_set: string[];
 }
 
 // `location` is required server-side — every imported item also gets an
@@ -399,6 +460,10 @@ export interface Recipe {
   batch_cost: number;
   per_portion_cost: number;
   plate_food_cost_pct: number | null;
+  // Computed server-side: the union of every ingredient's (and every
+  // sub-recipe's own ingredients') tagged allergens -- see
+  // Recipe.allergens() on the backend. Never set directly.
+  allergens: string[];
 }
 
 export const YIELD_UNITS = ["plate", "portion", "glass", "kg", "litre"];
@@ -486,6 +551,10 @@ export interface BulkRecipeImportResult {
   // ItemHolding at `location` yet and had one backfilled — same
   // reasoning as BulkItemImportResult.holdings_backfilled.
   holdings_backfilled: string[];
+  // Names of items (new or existing) whose allergen tags were set by
+  // this import's Items-tab allergens column — same reasoning as
+  // BulkItemImportResult.allergens_set.
+  allergens_set: string[];
 }
 
 // Backend creates any ingredient with no item_id as a brand-new Item on
@@ -942,6 +1011,8 @@ export interface ItemPatch {
   vat_rate?: string | null;
   base_unit?: string;
   default_supplier?: string | null;
+  target_waste_pct?: string | null;
+  allergens?: string[];
   archived?: boolean;
 }
 
@@ -1038,6 +1109,34 @@ export async function fetchOnHand(
     accessToken
   );
   return Number(data.on_hand) || 0;
+}
+
+export interface WasteTrendPoint {
+  label: string;
+  actual_waste_pct: number | null;
+}
+
+export interface ItemWasteStats {
+  item: string;
+  target_waste_pct: string | null;
+  actual_waste_pct: number | null;
+  waste_qty: string;
+  used_qty: string;
+  window_days: number;
+  // "ok" | "over" | "no_target" | "no_data"
+  status: string;
+  trend: WasteTrendPoint[];
+}
+
+// location omitted aggregates the item's waste rate across every
+// location -- see StockMovementViewSet.waste_stats' own docstring.
+export async function fetchItemWasteStats(
+  accessToken: string,
+  itemId: string,
+  locationId?: string
+): Promise<ItemWasteStats> {
+  const q = locationId ? `&location=${locationId}` : "";
+  return authedFetch(`/api/ledger/stock-movements/waste_stats/?item=${itemId}${q}`, accessToken);
 }
 
 export interface Supplier {

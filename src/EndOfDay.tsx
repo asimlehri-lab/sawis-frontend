@@ -1,24 +1,39 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { fetchLastImportDate, importSales } from "./api";
-import type { CatalogItem, ItemSupplierRow, Location, Recipe } from "./api";
+import type { CatalogItem, ItemSupplierRow, Location, Me, Recipe, StockMovementRow } from "./api";
 import Reorder from "./Reorder";
 import EodReport from "./EodReport";
+import EodTasks from "./EodTasks";
 import SearchSelect from "./SearchSelect";
 import ScanEodSales from "./ScanEodSales";
 
 interface Props {
   accessToken: string;
+  me: Me;
   locations: Location[];
   recipes: Recipe[];
   items: CatalogItem[];
   itemSupplierLinks: ItemSupplierRow[];
+  stockMovements: StockMovementRow[];
   // Which tab to mount on -- defaults to "overview" (the normal nav-click
   // behavior). The notification bell's "View reorder list" button passes
   // "reorder" so it lands directly there. This component only exists while
   // App.tsx's activePage === "End of day" (conditional render), so a fresh
   // read of this prop on every mount is enough -- no sync effect needed.
-  initialTab?: "overview" | "reorder";
+  initialTab?: "overview" | "reorder" | "tasks";
+  // Jumps to a recipe's own detail page (Recipes tab) -- used by the Tasks
+  // tab's cost-breach rows. Lives at the App.tsx level since it's a
+  // cross-page navigation, not something EndOfDay owns.
+  onOpenRecipe: (id: string) => void;
+  // Opens a PurchaseOrder's detail page (Procurement tab) -- used by the
+  // Tasks tab's upcoming-deliveries rows. Same callback shape as
+  // NotificationBell's own onOpenPO in App.tsx.
+  onOpenPO: (id: string) => void;
+  // Cross-page nav for the Tasks tab (e.g. "Inventory" for an assigned
+  // count, "Waste log" for the reminder) -- same goToNav App.tsx already
+  // uses for its own sidebar.
+  onNavigateApp: (label: string) => void;
 }
 
 interface ParsedRow {
@@ -148,13 +163,18 @@ function fmtImportedAt(iso: string): string {
 
 export default function EndOfDay({
   accessToken,
+  me,
   locations,
   recipes,
   items,
   itemSupplierLinks,
+  stockMovements,
   initialTab,
+  onOpenRecipe,
+  onOpenPO,
+  onNavigateApp,
 }: Props) {
-  const [tab, setTab] = useState<"overview" | "reorder">(initialTab ?? "overview");
+  const [tab, setTab] = useState<"overview" | "reorder" | "tasks">(initialTab ?? "overview");
   const [location, setLocation] = useState(locations[0]?.id ?? "");
   // locations loads asynchronously (App.tsx only fetches it once activePage
   // becomes "End of day" -- see the effect keyed on activePage there) -- if
@@ -648,12 +668,31 @@ export default function EndOfDay({
         <button className={`rtab ${tab === "overview" ? "on" : ""}`} onClick={() => setTab("overview")}>
           Overview
         </button>
+        <button className={`rtab ${tab === "tasks" ? "on" : ""}`} onClick={() => setTab("tasks")}>
+          Tasks
+        </button>
         <button className={`rtab ${tab === "reorder" ? "on" : ""}`} onClick={() => setTab("reorder")}>
           Reorder
         </button>
       </div>
 
       {tab === "overview" && <EodReport accessToken={accessToken} locations={locations} />}
+
+      {tab === "tasks" && (
+        <EodTasks
+          me={me}
+          accessToken={accessToken}
+          location={location}
+          locations={locations}
+          recipes={recipes}
+          items={items}
+          stockMovements={stockMovements}
+          onOpenRecipe={onOpenRecipe}
+          onOpenPO={onOpenPO}
+          onViewReorder={() => setTab("reorder")}
+          onNavigateApp={onNavigateApp}
+        />
+      )}
 
       {tab === "reorder" && (
         <Reorder accessToken={accessToken} items={items} locations={locations} itemSupplierLinks={itemSupplierLinks} />
