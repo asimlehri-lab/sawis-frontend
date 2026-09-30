@@ -597,6 +597,11 @@ export default function App() {
         { value: "danger", label: "Well over target" },
       ],
     },
+    // A recipe's own allergens are the union of its ingredients' tags,
+    // computed server-side (Recipe.allergens) -- same option list as
+    // Items' own allergens facet, just matched against the recipe's
+    // already-computed array instead of a per-item tag.
+    { key: "allergens", label: "Allergens", options: allergens.map((a) => ({ value: a.id, label: a.name })) },
   ];
 
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[] | null>(null);
@@ -612,6 +617,20 @@ export default function App() {
   const [savingPO, setSavingPO] = useState(false);
   const [newPOError, setNewPOError] = useState<string | null>(null);
   const [poFilter, setPoFilter] = useState<"all" | "draft" | "sent" | "received">("all");
+  // Faceted filter (FilterBar.tsx) for the Procurement list -- status stays
+  // the existing rtabs toggle above (poFilter), same as Recipes keeps its
+  // Dish/Sub-recipe toggle separate from its own FilterBar.
+  const [poFilters, setPoFilters] = useState<FilterValues>({});
+  const poFacets: FilterFacet[] = [
+    { key: "supplier", label: "Supplier", options: suppliers.map((s) => ({ value: s.id, label: s.name })) },
+    { key: "location", label: "Location", options: locations.map((l) => ({ value: l.id, label: l.name })) },
+    {
+      key: "item",
+      label: "Item",
+      options: (items ?? []).map((it) => ({ value: it.id, label: it.name })),
+      searchThreshold: 1,
+    },
+  ];
   const [itemSupplierLinks, setItemSupplierLinks] = useState<ItemSupplierRow[]>([]);
   const [itemReceiptAliases, setItemReceiptAliases] = useState<ItemReceiptAliasRow[]>([]);
 
@@ -2012,6 +2031,11 @@ export default function App() {
                                 costBand(r.plate_food_cost_pct, defaultTargetCostPct(locations, r.menu_group === "drink" ? "drink" : "food"))
                               )
                           )
+                          .filter(
+                            (r) =>
+                              (recipeFilters.allergens ?? null) === null ||
+                              recipeFilters.allergens!.some((aId) => r.allergens.includes(aId))
+                          )
                           .filter((r) => {
                             const q = recipeSearch.trim().toLowerCase();
                             if (!q) return true;
@@ -2096,16 +2120,23 @@ export default function App() {
                 )}
 
                 {purchaseOrders && purchaseOrders.length > 0 && (
-                  <div className="rtabs">
-                    {(["all", "draft", "sent", "received"] as const).map((f) => (
-                      <button
-                        key={f}
-                        className={`rtab ${poFilter === f ? "on" : ""}`}
-                        onClick={() => setPoFilter(f)}
-                      >
-                        {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
-                      </button>
-                    ))}
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <div className="rtabs" style={{ margin: 0 }}>
+                      {(["all", "draft", "sent", "received"] as const).map((f) => (
+                        <button
+                          key={f}
+                          className={`rtab ${poFilter === f ? "on" : ""}`}
+                          onClick={() => setPoFilter(f)}
+                        >
+                          {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                    <FilterBar
+                      facets={poFacets}
+                      values={poFilters}
+                      onChange={(key, next) => setPoFilters((prev) => ({ ...prev, [key]: next }))}
+                    />
                   </div>
                 )}
 
@@ -2127,6 +2158,13 @@ export default function App() {
                       <tbody>
                         {purchaseOrders
                           .filter((po) => poFilter === "all" || po.status === poFilter)
+                          .filter((po) => (poFilters.supplier ?? null) === null || poFilters.supplier!.includes(po.supplier))
+                          .filter((po) => (poFilters.location ?? null) === null || poFilters.location!.includes(po.location))
+                          .filter(
+                            (po) =>
+                              (poFilters.item ?? null) === null ||
+                              poFilters.item!.some((itemId) => po.lines.some((l) => l.item === itemId))
+                          )
                           .map((po) => {
                             const supplier = suppliers.find((s) => s.id === po.supplier);
                             const belowMin =
