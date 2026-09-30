@@ -2135,11 +2135,18 @@ export default function App() {
             {activePage === "End of day" && accessToken && (
               <EndOfDay
                 accessToken={accessToken}
+                me={me}
                 locations={locations}
                 recipes={recipes ?? []}
                 items={items ?? []}
                 itemSupplierLinks={itemSupplierLinks}
+                stockMovements={stockMovements}
                 initialTab={eodInitialTab}
+                onOpenRecipe={(id) => {
+                  goToNav("Recipes");
+                  setSelectedRecipeId(id);
+                }}
+                onNavigateApp={(label) => goToNav(label)}
               />
             )}
 

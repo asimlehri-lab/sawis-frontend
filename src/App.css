@@ -2433,6 +2433,46 @@ input[type="file"] {
 .kpi-meter-lbl { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
 .kpi-note { font-size: 11.5px; color: var(--caution); background: var(--caution-soft); border-radius: 8px; padding: 8px 10px; margin-top: 10px; }
 
+/* End of day > Tasks tab (EodTasks.tsx) -- row styling borrows
+   .notif-item's look (border-bottom rows, clickable-button variant) but
+   without the notification dropdown's max-height, since this lives in a
+   full page card, not a popover. */
+.task-section { margin-bottom: 20px; }
+.task-section:last-child { margin-bottom: 0; }
+.task-section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.task-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.task-item:last-child { border-bottom: none; }
+.task-item-clickable {
+  width: 100%;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+}
+.task-item-clickable:last-child { border-bottom: none; }
+.task-item-clickable:hover { background: var(--bg); }
+.task-empty { padding: 10px 4px; font-size: 12.5px; color: var(--muted); margin: 0; }
+
+/* Compact per-row cost gauge -- same fill/target-marker anatomy as
+   .kpi-meter above, just smaller, so a whole list of dishes can each get
+   their own bar instead of one big hero gauge. */
+.gauge-row { flex: 1; min-width: 0; }
+.gauge-row-name { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; margin-bottom: 5px; }
+.gauge-track { height: 6px; border-radius: 4px; background: var(--bg); position: relative; overflow: hidden; }
+.gauge-fill { height: 100%; border-radius: 4px; background: var(--caution); }
+.gauge-tgt { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); opacity: 0.5; }
+
 .cmp-h { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; flex-wrap: wrap; gap: 6px; }
 .cmp-rows { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 @media (max-width: 760px) { .cmp-rows { grid-template-columns: 1fr; } }
