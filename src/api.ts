@@ -164,11 +164,31 @@ export interface CatalogItem {
   // Predicted spoilage/waste % the user sets per item -- null until set.
   // Compared against fetchItemWasteStats' actual figure on ItemDetail.
   target_waste_pct: string | null;
+  // Allergen ids this item itself contains -- tagged directly by the
+  // user (see AllergenPicker in ItemDetail.tsx). A recipe's own
+  // allergens are the union of its ingredients' tags, computed server-
+  // side (see Recipe.allergens below), never tagged per-recipe.
+  allergens: string[];
   archived: boolean;
   holdings: ItemHolding[];
   // Included so the Items list can be searched by a supplier's own item
   // code, not just by our SKU/name -- see ItemSupplierRow.supplier_sku.
   supplier_links: ItemSupplierRow[];
+}
+
+export interface Allergen {
+  id: string;
+  code: string;
+  name: string;
+  order: number;
+}
+
+// The 14 EU/UK-regulated major allergens -- fixed, global reference
+// data, not paginated per-org like everything else this app fetches.
+// Fetch once and join locally against Item.allergens / Recipe.allergens
+// rather than re-fetching per item/recipe.
+export async function fetchAllergens(accessToken: string): Promise<Allergen[]> {
+  return authedFetchAllPages<Allergen>("/api/catalog/allergens/", accessToken);
 }
 
 async function authedFetch(path: string, accessToken: string) {
@@ -407,6 +427,10 @@ export interface Recipe {
   batch_cost: number;
   per_portion_cost: number;
   plate_food_cost_pct: number | null;
+  // Computed server-side: the union of every ingredient's (and every
+  // sub-recipe's own ingredients') tagged allergens -- see
+  // Recipe.allergens() on the backend. Never set directly.
+  allergens: string[];
 }
 
 export const YIELD_UNITS = ["plate", "portion", "glass", "kg", "litre"];
@@ -951,6 +975,7 @@ export interface ItemPatch {
   base_unit?: string;
   default_supplier?: string | null;
   target_waste_pct?: string | null;
+  allergens?: string[];
   archived?: boolean;
 }
 
