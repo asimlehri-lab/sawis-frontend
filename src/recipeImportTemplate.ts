@@ -199,14 +199,14 @@ function buildReadMeSheet(wb: ExcelJS.Workbook) {
     "   as a \"new\" row (green) below them -- only item_name + base_unit are required,",
     "   everything else is optional.",
     "",
-    "   Allergens are the one exception: edit an existing row's allergens cell and",
-    "   re-upload, and that item's tags are replaced with exactly what's listed -- the way",
-    "   to bulk-tag your whole existing catalogue without opening each item one at a time.",
-    "   Comma-separated, names or codes, case-insensitive (e.g. \"Milk, gluten\"). Valid",
-    "   values: Cereals containing gluten, Crustaceans, Eggs, Fish, Peanuts, Soybeans, Milk,",
-    "   Tree nuts, Celery, Mustard, Sesame seeds, Sulphur dioxide & sulphites, Lupin,",
-    "   Molluscs. Leave blank to leave an item's tags alone; an unrecognized name is",
-    "   silently skipped.",
+    "   Allergens are the one exception: the 6 allergen_1..allergen_6 columns are each a",
+    "   real dropdown (pick from the 14 recognized allergens -- typing something else isn't",
+    "   accepted, so there's no risk of a typo not matching what's set up in SAWIS). Fill as",
+    "   many slots as an item needs, left to right, blank rest. Edit an existing row's slots",
+    "   and re-upload, and that item's tags are replaced with exactly what's picked -- the",
+    "   way to bulk-tag your whole existing catalogue without opening each item one at a",
+    "   time. Leave every slot blank to leave an item's tags alone. Tagged with more than 6",
+    "   allergens? Finish tagging it on the item's own page in SAWIS instead.",
     "",
     "2. Recipes tab",
     "   Every recipe you already have is listed here, fully filled in and grouped/shaded by",
@@ -277,10 +277,22 @@ function vatPercent(item: CatalogItem): number | "" {
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : "";
 }
 
+// How many allergen slot columns the Items tab gets -- each one is a
+// real dropdown (see ALLERGEN_LIST_COL below), so an item can be tagged
+// with anywhere from 0 to this many allergens via the sheet. 6 covers
+// every realistic dish/item comfortably; something genuinely tagged
+// with more than that is rare enough to just finish tagging on its own
+// page in SAWIS (see the column note).
+const ALLERGEN_SLOTS = 6;
+const ALLERGEN_FIRST_COL = 10; // column J, right after waste_pct
+const ALLERGEN_LIST_COL = 17; // column Q -- hidden helper list, see below
+
 function buildItemsSheet(wb: ExcelJS.Workbook, items: CatalogItem[], location: string, allergens: Allergen[]) {
   const sheet = wb.addWorksheet("Items");
+  const allergenHeaders = Array.from({ length: ALLERGEN_SLOTS }, (_, i) => `allergen_${i + 1}`);
   const headers = [
-    "status", "item_name", "base_unit", "category", "vat", "par_level", "supplier", "cost", "waste_pct", "allergens",
+    "status", "item_name", "base_unit", "category", "vat", "par_level", "supplier", "cost", "waste_pct",
+    ...allergenHeaders,
   ];
   setHeaders(sheet, headers);
   freezeHeaderRow(sheet);
@@ -288,6 +300,20 @@ function buildItemsSheet(wb: ExcelJS.Workbook, items: CatalogItem[], location: s
   // Item.allergens comes back from the API as a list of Allergen ids --
   // resolve to names once here rather than per-row.
   const allergenById = new Map(allergens.map((a) => [a.id, a]));
+  const sortedAllergens = allergens.slice().sort((a, b) => a.order - b.order);
+
+  // Hidden helper list powering the allergen_N dropdowns below -- Excel's
+  // list-type data validation needs a real cell range to pick from (same
+  // technique the Recipes/Recipe Ingredients tabs already use for their
+  // own recipe/item pickers), rather than a comma-list formula string,
+  // so re-running this with a 15th allergen someday just works. Off to
+  // the side and hidden so it doesn't clutter what the user sees.
+  sheet.getCell(1, ALLERGEN_LIST_COL).value = "Allergen reference (do not edit -- powers the dropdowns to the left)";
+  sortedAllergens.forEach((a, i) => {
+    sheet.getCell(2 + i, ALLERGEN_LIST_COL).value = a.name;
+  });
+  sheet.getColumn(ALLERGEN_LIST_COL).hidden = true;
+  const allergenListLastRow = 1 + sortedAllergens.length;
 
   const existing = items
     .filter((i) => !i.archived)
@@ -307,12 +333,14 @@ function buildItemsSheet(wb: ExcelJS.Workbook, items: CatalogItem[], location: s
     sheet.getCell(row, 7).value = link ? link.supplier_name : "";
     sheet.getCell(row, 8).value = link ? numberOrBlank(link.unit_price) : "";
     sheet.getCell(row, 9).value = numberOrBlank(item.target_waste_pct);
-    sheet.getCell(row, 10).value = (item.allergens || [])
+    const itemAllergenNames = (item.allergens || [])
       .map((id) => allergenById.get(id))
       .filter((a): a is Allergen => !!a)
       .sort((a, b) => a.order - b.order)
-      .map((a) => a.name)
-      .join(", ");
+      .map((a) => a.name);
+    for (let s = 0; s < ALLERGEN_SLOTS; s++) {
+      sheet.getCell(row, ALLERGEN_FIRST_COL + s).value = itemAllergenNames[s] || "";
+    }
     borderRow(sheet, row, headers.length);
     bandRow(sheet, row, headers.length, LIGHT);
     row++;
@@ -328,22 +356,29 @@ function buildItemsSheet(wb: ExcelJS.Workbook, items: CatalogItem[], location: s
   for (let r = 2; r <= lastItemRow; r++) {
     sheet.getCell(r, 1).dataValidation = looseListValidation('"existing,new"');
     sheet.getCell(r, 5).dataValidation = looseListValidation('"0,5,10,20"');
+    for (let s = 0; s < ALLERGEN_SLOTS; s++) {
+      sheet.getCell(r, ALLERGEN_FIRST_COL + s).dataValidation = strictListValidation(
+        `Items!$Q$2:$Q$${allergenListLastRow}`,
+        "Unknown allergen",
+        "Pick one of the 14 allergens from the dropdown -- typing something else risks it not matching what's set up in SAWIS."
+      );
+    }
   }
 
   sheet.getCell("A1").note =
     '"existing" rows are your current catalogue, pulled in automatically -- reference only, don\'t edit. Add anything genuinely new as a "new" row below.';
   sheet.getCell("B1").note =
-    "Only item_name + base_unit are required -- everything else (category/vat/par_level/supplier/cost/waste_pct/allergens) is optional, same as the old standalone Items import.";
+    "Only item_name + base_unit are required -- everything else (category/vat/par_level/supplier/cost/waste_pct/allergen_1..6) is optional, same as the old standalone Items import.";
   sheet.getCell("D1").note =
     "On \"existing\" rows, category/vat/par_level/supplier/cost/waste_pct show that item's current values (par_level for the location you've picked below) so you can see and copy them -- editing these cells has no effect on an existing item, since matching is by name only.";
   sheet.getCell("I1").note =
     "Your own predicted spoilage % for this item (e.g. 5 for 5%) -- shown on the item's own page next to the actual % calculated from your waste log. Leave blank to set it later.";
   sheet.getCell("J1").note =
-    'Comma-separated allergen names or codes, case-insensitive -- e.g. "Milk, Cereals containing gluten" or "milk,gluten" both work. Unlike every other column here, editing this cell on an "existing" row DOES take effect: it replaces that item\'s current tags with exactly what\'s listed here, so this is the way to bulk-tag your whole catalogue without opening each item one at a time. Leave blank to leave an item\'s tags alone. On a "new" row it seeds the item\'s tags at creation. A name/code that doesn\'t match one of the 14 recognized allergens is silently skipped.';
+    `Pick from the dropdown -- each of these ${ALLERGEN_SLOTS} columns (allergen_1..allergen_${ALLERGEN_SLOTS}) is a real dropdown of the 14 recognized allergens, not free text, so what you pick always matches what's set up in SAWIS. Fill as many slots as this item needs, left to right, and leave the rest blank. Unlike every other column here, these DO take effect on an "existing" row: re-uploading replaces that item's current tags with exactly what's picked across these columns, so this is the way to bulk-tag your whole catalogue without opening each item one at a time. Leave every slot blank to leave an item's tags alone. Tagged with more than ${ALLERGEN_SLOTS}? Finish tagging it on the item's own page in SAWIS instead -- only the first ${ALLERGEN_SLOTS} show here.`;
 
   sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastItemRow, column: headers.length } };
 
-  setColumnWidths(sheet, [10, 26, 11, 14, 7, 10, 16, 9, 10, 34]);
+  setColumnWidths(sheet, [10, 26, 11, 14, 7, 10, 16, 9, 10, 24, 24, 24, 24, 24, 24]);
   return { lastItemRow };
 }
 

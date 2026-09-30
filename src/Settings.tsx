@@ -897,14 +897,24 @@ function RecipeAndItemImportPanel({
     const itSupplierIdx = headerIndex(itHeader, "supplier");
     const itCostIdx = headerIndex(itHeader, "cost");
     const itWasteIdx = headerIndex(itHeader, "waste_pct");
-    const itAllergensIdx = headerIndex(itHeader, "allergens");
+    // The Items tab has 6 allergen_1..allergen_6 dropdown-slot columns
+    // (see recipeImportTemplate.ts's ALLERGEN_SLOTS) rather than one free
+    // -text "allergens" column -- non-blank slots are joined back into
+    // the same comma-separated string BulkItemInput.allergens/
+    // bulk_upsert_items already expects, so nothing downstream of this
+    // needed to change.
+    const itAllergenIdxs = Array.from({ length: 6 }, (_, i) => headerIndex(itHeader, `allergen_${i + 1}`));
     if (itNameIdx === -1 || itUnitIdx === -1) {
       return { error: 'The "Items" tab is missing its item_name or base_unit column.' };
     }
     const itemRows: BulkItemInput[] = [];
     for (const r of itemsTable.slice(1)) {
       const status = (statusIdx > -1 ? r[statusIdx] || "" : "").trim().toLowerCase();
-      const allergensRaw = itAllergensIdx > -1 ? (r[itAllergensIdx] || "").trim() : "";
+      const allergensRaw = itAllergenIdxs
+        .filter((idx) => idx > -1)
+        .map((idx) => (r[idx] || "").trim())
+        .filter(Boolean)
+        .join(", ");
       if (status !== "new" && !allergensRaw) continue;
       const name = (r[itNameIdx] || "").trim();
       const unitRaw = (r[itUnitIdx] || "").trim();
