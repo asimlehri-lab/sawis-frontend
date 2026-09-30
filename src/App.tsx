@@ -35,6 +35,8 @@ import {
   currencySymbol,
   autoFactor,
   convertToBaseUnit,
+  defaultTargetCostPct,
+  costBand,
 } from "./api";
 import type {
   Me,
@@ -71,7 +73,8 @@ import Settings from "./Settings";
 import Reports from "./Reports";
 import SearchSelect from "./SearchSelect";
 import NotificationBell from "./NotificationBell";
-import CategoryFilter from "./CategoryFilter";
+import FilterBar from "./FilterBar";
+import type { FilterFacet, FilterValues } from "./FilterBar";
 import HelpChat from "./HelpChat";
 import "./App.css";
 
@@ -510,9 +513,10 @@ export default function App() {
   // instead, since a PO genuinely belongs to one location.
   const orgCurrency = defaultCurrency(locations);
   // Distinct menu_category values actually present on the recipes list, sorted
-  // alphabetically -- fed into the Recipes CategoryFilter (see recipeCategoryFilter
-  // above). Recomputed on every render rather than memoized: this is a handful of
-  // short strings over at most a few hundred recipes, not worth the added complexity.
+  // alphabetically -- fed into the Recipes FilterBar's "category" facet (see
+  // recipeFacets below). Recomputed on every render rather than memoized: this
+  // is a handful of short strings over at most a few hundred recipes, not
+  // worth the added complexity.
   const recipeMenuCategoryOptions = Array.from(
     new Set((recipes ?? []).map((r) => r.menu_category).filter((c): c is string => !!c))
   )
@@ -546,15 +550,54 @@ export default function App() {
   // are already fully loaded, so there's no need for a backend query param.
   const [recipeSearch, setRecipeSearch] = useState("");
   const [itemSearch, setItemSearch] = useState("");
-  // Multi-select category filters for the Items/Recipes lists (CategoryFilter.tsx) --
-  // null means "no filter, show every category" (the requested default); an actual
-  // array is an explicit selection, including an empty one (nothing checked, nothing
-  // shown) -- see CategoryFilter.tsx's own comment for why that tri-state exists.
-  // Items filters by Category.id (it.category); Recipes filters by the freeform
-  // r.menu_category string, since recipes aren't linked to the Category model at all
-  // -- see CatalogItem vs Recipe in api.ts.
-  const [itemCategoryFilter, setItemCategoryFilter] = useState<string[] | null>(null);
-  const [recipeCategoryFilter, setRecipeCategoryFilter] = useState<string[] | null>(null);
+  // Faceted filters for the Items/Recipes lists (FilterBar.tsx, which
+  // retired the old single-dimension CategoryFilter.tsx). One FilterValues
+  // object per list holds every facet's own tri-state selection, keyed by
+  // facet key -- see FilterBar.tsx's own comment for what null vs an
+  // (possibly empty) array means per facet.
+  const [itemFilters, setItemFilters] = useState<FilterValues>({});
+  const [recipeFilters, setRecipeFilters] = useState<FilterValues>({});
+
+  // Items: Category (Category.id), Supplier (matches either the item's
+  // default_supplier or any of its supplier_links, since "who could I buy
+  // this from" is more useful here than just the one default), Allergens.
+  const itemFacets: FilterFacet[] = [
+    { key: "category", label: "Category", options: categories.map((c) => ({ value: c.id, label: c.name })) },
+    { key: "supplier", label: "Supplier", options: suppliers.map((s) => ({ value: s.id, label: s.name })) },
+    { key: "allergens", label: "Allergens", options: allergens.map((a) => ({ value: a.id, label: a.name })) },
+  ];
+
+  // Recipes: menu_category (freeform string, not the Category model --
+  // recipes aren't linked to Category at all, see CatalogItem vs Recipe in
+  // api.ts), Item used (search over every item name -- which recipes use
+  // ingredient X), Food/Drink (menu_group), and Cost vs target (the same
+  // 3-band good/caution/danger split the cost gauges use, via costBand()).
+  const recipeFacets: FilterFacet[] = [
+    { key: "category", label: "Category", options: recipeMenuCategoryOptions },
+    {
+      key: "item",
+      label: "Item used",
+      options: (items ?? []).map((it) => ({ value: it.id, label: it.name })),
+      searchThreshold: 1,
+    },
+    {
+      key: "group",
+      label: "Food or drink",
+      options: [
+        { value: "food", label: "Food" },
+        { value: "drink", label: "Drink" },
+      ],
+    },
+    {
+      key: "cost",
+      label: "Cost vs target",
+      options: [
+        { value: "good", label: "On target" },
+        { value: "caution", label: "Over target" },
+        { value: "danger", label: "Well over target" },
+      ],
+    },
+  ];
 
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[] | null>(null);
   const [poError, setPoError] = useState<string | null>(null);
@@ -1789,10 +1832,10 @@ export default function App() {
                     onChange={(e) => setItemSearch(e.target.value)}
                     placeholder="Search by name, SKU, or supplier code…"
                   />
-                  <CategoryFilter
-                    options={categories.map((c) => ({ value: c.id, label: c.name }))}
-                    selected={itemCategoryFilter}
-                    onChange={setItemCategoryFilter}
+                  <FilterBar
+                    facets={itemFacets}
+                    values={itemFilters}
+                    onChange={(key, next) => setItemFilters((prev) => ({ ...prev, [key]: next }))}
                   />
                   <button className="btn-ghost small" onClick={() => setShowImport(true)}>
                     ⇪ Import supplier list
@@ -1810,10 +1853,10 @@ export default function App() {
                     onChange={(e) => setRecipeSearch(e.target.value)}
                     placeholder="Search by name or POS ID…"
                   />
-                  <CategoryFilter
-                    options={recipeMenuCategoryOptions}
-                    selected={recipeCategoryFilter}
-                    onChange={setRecipeCategoryFilter}
+                  <FilterBar
+                    facets={recipeFacets}
+                    values={recipeFilters}
+                    onChange={(key, next) => setRecipeFilters((prev) => ({ ...prev, [key]: next }))}
                   />
                   <button className="btn-primary small" onClick={() => setShowNewRecipe(true)}>
                     + New recipe
@@ -1862,7 +1905,19 @@ export default function App() {
                       <tbody>
                         {items
                           .filter(
-                            (it) => itemCategoryFilter === null || itemCategoryFilter.includes(it.category ?? "")
+                            (it) => (itemFilters.category ?? null) === null || itemFilters.category!.includes(it.category ?? "")
+                          )
+                          .filter(
+                            (it) =>
+                              (itemFilters.supplier ?? null) === null ||
+                              itemFilters.supplier!.some(
+                                (sId) => it.default_supplier === sId || it.supplier_links.some((sl) => sl.supplier === sId)
+                              )
+                          )
+                          .filter(
+                            (it) =>
+                              (itemFilters.allergens ?? null) === null ||
+                              itemFilters.allergens!.some((aId) => it.allergens.includes(aId))
                           )
                           .filter((it) => {
                             const q = itemSearch.trim().toLowerCase();
@@ -1940,7 +1995,22 @@ export default function App() {
                         {recipes
                           .filter((r) => recipeFilter === "all" || r.kind === recipeFilter)
                           .filter(
-                            (r) => recipeCategoryFilter === null || recipeCategoryFilter.includes(r.menu_category)
+                            (r) => (recipeFilters.category ?? null) === null || recipeFilters.category!.includes(r.menu_category)
+                          )
+                          .filter(
+                            (r) =>
+                              (recipeFilters.item ?? null) === null ||
+                              recipeFilters.item!.some((itemId) => r.lines.some((l) => l.item === itemId))
+                          )
+                          .filter(
+                            (r) => (recipeFilters.group ?? null) === null || recipeFilters.group!.includes(r.menu_group)
+                          )
+                          .filter(
+                            (r) =>
+                              (recipeFilters.cost ?? null) === null ||
+                              recipeFilters.cost!.includes(
+                                costBand(r.plate_food_cost_pct, defaultTargetCostPct(locations, r.menu_group === "drink" ? "drink" : "food"))
+                              )
                           )
                           .filter((r) => {
                             const q = recipeSearch.trim().toLowerCase();

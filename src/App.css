@@ -420,23 +420,18 @@ h1 {
   margin: 10px;
 }
 
-/* Multi-select category filter (CategoryFilter.tsx) -- Items and Recipes
-   list headers, same anchored-popover look as .notif-panel above, but
-   built for a checklist of options rather than a notification feed. An
-   empty selection means "no filter" (see the component's own comment), so
-   .cat-filter-btn only picks up .active + the count badge once the user
-   has actually narrowed something down. */
-.cat-filter { position: relative; display: inline-flex; }
+/* FilterBar.tsx -- the faceted filter that replaced CategoryFilter on the
+   Items/Recipes list headers. Same visual language as .cat-filter above
+   (trigger button + anchored popover), plus a facet list / back-button
+   view inside the popover and a row of removable chips for active
+   facets. */
+.filter-bar { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.filter-bar-trigger-wrap { position: relative; display: inline-flex; }
 
-.cat-filter-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 0;
-}
-.cat-filter-btn.active { border-color: var(--brand); color: var(--brand); }
+.filter-bar-btn { display: inline-flex; align-items: center; gap: 6px; margin-top: 0; }
+.filter-bar-btn.active { border-color: var(--brand); color: var(--brand); }
 
-.cat-filter-count {
+.filter-bar-count {
   display: inline-grid;
   place-items: center;
   min-width: 16px;
@@ -450,9 +445,9 @@ h1 {
   line-height: 1;
 }
 
-.cat-filter-caret { font-size: 10px; color: var(--muted); }
+.filter-bar-caret { font-size: 12px; color: var(--muted); }
 
-.cat-filter-panel {
+.filter-bar-panel {
   position: absolute;
   top: calc(100% + 4px);
   left: 0;
@@ -466,7 +461,7 @@ h1 {
   overflow: hidden;
 }
 
-.cat-filter-panel-head {
+.filter-bar-panel-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -478,9 +473,39 @@ h1 {
   color: var(--muted);
 }
 
-.cat-filter-bulk { display: flex; align-items: center; gap: 10px; }
+.filter-bar-facet-list { padding: 6px 0; }
+.filter-bar-facet-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 10px;
+  padding: 9px 14px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+.filter-bar-facet-row:hover { background: var(--bg); }
+.filter-bar-facet-row-right { display: inline-flex; align-items: center; gap: 6px; }
 
-.cat-filter-link {
+.filter-bar-back {
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+
+.filter-bar-bulk { display: flex; align-items: center; gap: 10px; }
+
+.filter-bar-link {
   font-family: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -490,11 +515,11 @@ h1 {
   color: var(--brand);
   cursor: pointer;
 }
-.cat-filter-link:disabled { color: var(--muted); cursor: not-allowed; }
+.filter-bar-link:disabled { color: var(--muted); cursor: not-allowed; }
 
-.cat-filter-search-row { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+.filter-bar-search-row { padding: 8px 10px; border-bottom: 1px solid var(--border); }
 
-.cat-filter-search {
+.filter-bar-search {
   width: 100%;
   font-family: inherit;
   font-size: 13px;
@@ -504,22 +529,67 @@ h1 {
   background: var(--bg);
   color: var(--ink);
 }
-.cat-filter-search:focus { outline: none; border-color: var(--brand); }
+.filter-bar-search:focus { outline: none; border-color: var(--brand); }
 
-.cat-filter-empty { padding: 14px; font-size: 12.5px; color: var(--muted); text-align: center; }
+.filter-bar-empty { padding: 14px; font-size: 12.5px; color: var(--muted); text-align: center; }
 
-.cat-filter-list { max-height: 240px; overflow-y: auto; padding: 6px 0; }
+.filter-bar-list { max-height: 240px; overflow-y: auto; padding: 6px 0; }
 
-.cat-filter-item {
+.filter-bar-item {
+  /* This is a <label> -- the global `label { flex-direction: column }`
+     rule further down this file would otherwise stack the checkbox above
+     its text instead of beside it, since that rule targets the element
+     type and this class never overrides flex-direction on its own. */
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 9px;
   padding: 7px 14px;
   font-size: 13px;
+  font-weight: 400;
+  color: var(--ink);
   cursor: pointer;
 }
-.cat-filter-item:hover { background: var(--bg); }
-.cat-filter-item input[type="checkbox"] { margin: 0; }
+.filter-bar-item:hover { background: var(--bg); }
+.filter-bar-item input[type="checkbox"] { margin: 0; }
+
+.filter-bar-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 4px 4px 10px;
+  border-radius: 20px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 600;
+}
+.filter-bar-chip-label {
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+.filter-bar-chip-x {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0.75;
+}
+.filter-bar-chip-x:hover { opacity: 1; background: rgba(0, 0, 0, 0.08); }
 
 /* HelpChat.tsx -- the in-app help chatbot (Phase A of the help-chatbot
    phase plan). Built as a centered .modal.wide, matching
