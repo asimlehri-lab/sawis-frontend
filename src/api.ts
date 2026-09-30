@@ -340,6 +340,13 @@ export interface BulkItemInput {
   // item" rule as every other optional field here (see
   // bulk_upsert_items' own docstring on the backend).
   waste_pct?: string;
+  // Optional comma-separated allergen names or codes (case-insensitive).
+  // Unlike every other optional field here, this ONE applies to an
+  // existing item too, not just a brand-new one -- see
+  // bulk_upsert_items' own docstring on the backend. Settings.tsx's
+  // parseThreeTabWorkbook only sends an "existing" row through at all
+  // when this cell has been filled in.
+  allergens?: string;
 }
 
 export interface BulkItemImportResult {
@@ -359,6 +366,9 @@ export interface BulkItemImportResult {
   // SupplierItem price) was set or refreshed by this import's supplier/
   // cost columns.
   supplier_links_set: string[];
+  // Names of items (new or existing) whose allergen tags were set by
+  // this import's allergens column.
+  allergens_set: string[];
 }
 
 // `location` is required server-side — every imported item also gets an
@@ -518,6 +528,10 @@ export interface BulkRecipeImportResult {
   // ItemHolding at `location` yet and had one backfilled — same
   // reasoning as BulkItemImportResult.holdings_backfilled.
   holdings_backfilled: string[];
+  // Names of items (new or existing) whose allergen tags were set by
+  // this import's Items-tab allergens column — same reasoning as
+  // BulkItemImportResult.allergens_set.
+  allergens_set: string[];
 }
 
 // Backend creates any ingredient with no item_id as a brand-new Item on

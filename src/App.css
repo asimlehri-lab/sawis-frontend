@@ -2291,6 +2291,14 @@ input[type="file"] {
 }
 .allergen-badge .ai-icon { color: var(--caution); flex: none; }
 .allergen-empty { font-size: 12.5px; color: var(--muted); }
+.allergen-icons-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.allergen-icons-inline .ai-icon { color: var(--caution); display: block; }
 
 .waste-cols { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 900px) { .waste-cols { grid-template-columns: 1fr; } }

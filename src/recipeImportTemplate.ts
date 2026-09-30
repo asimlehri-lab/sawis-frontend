@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import type { CatalogItem, Recipe, ItemSupplierRow } from "./api";
+import type { Allergen, CatalogItem, Recipe, ItemSupplierRow } from "./api";
 
 // ---------------------------------------------------------------------------
 // Live, personalized Recipe + Item import template.
@@ -192,11 +192,21 @@ function buildReadMeSheet(wb: ExcelJS.Workbook) {
     "",
     "1. Items tab",
     "   \"existing\" rows (grey) are your current item catalogue, pulled in automatically,",
-    "   with their current category/vat/par_level/supplier/cost shown alongside so you can",
-    "   see and copy them -- reference only, this import never edits an existing item's own",
-    "   fields (editing those cells does nothing), it only backs an existing item's",
-    "   ingredient lines below. Add anything genuinely new as a \"new\" row (green) below them",
-    "   -- only item_name + base_unit are required, everything else is optional.",
+    "   with their current category/vat/par_level/supplier/cost/allergens shown alongside",
+    "   so you can see and copy them -- reference only for every column except allergens:",
+    "   editing category/vat/par_level/supplier/cost/etc. on an existing row does nothing,",
+    "   it only backs an existing item's ingredient lines below. Add anything genuinely new",
+    "   as a \"new\" row (green) below them -- only item_name + base_unit are required,",
+    "   everything else is optional.",
+    "",
+    "   Allergens are the one exception: edit an existing row's allergens cell and",
+    "   re-upload, and that item's tags are replaced with exactly what's listed -- the way",
+    "   to bulk-tag your whole existing catalogue without opening each item one at a time.",
+    "   Comma-separated, names or codes, case-insensitive (e.g. \"Milk, gluten\"). Valid",
+    "   values: Cereals containing gluten, Crustaceans, Eggs, Fish, Peanuts, Soybeans, Milk,",
+    "   Tree nuts, Celery, Mustard, Sesame seeds, Sulphur dioxide & sulphites, Lupin,",
+    "   Molluscs. Leave blank to leave an item's tags alone; an unrecognized name is",
+    "   silently skipped.",
     "",
     "2. Recipes tab",
     "   Every recipe you already have is listed here, fully filled in and grouped/shaded by",
@@ -267,11 +277,17 @@ function vatPercent(item: CatalogItem): number | "" {
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : "";
 }
 
-function buildItemsSheet(wb: ExcelJS.Workbook, items: CatalogItem[], location: string) {
+function buildItemsSheet(wb: ExcelJS.Workbook, items: CatalogItem[], location: string, allergens: Allergen[]) {
   const sheet = wb.addWorksheet("Items");
-  const headers = ["status", "item_name", "base_unit", "category", "vat", "par_level", "supplier", "cost", "waste_pct"];
+  const headers = [
+    "status", "item_name", "base_unit", "category", "vat", "par_level", "supplier", "cost", "waste_pct", "allergens",
+  ];
   setHeaders(sheet, headers);
   freezeHeaderRow(sheet);
+
+  // Item.allergens comes back from the API as a list of Allergen ids --
+  // resolve to names once here rather than per-row.
+  const allergenById = new Map(allergens.map((a) => [a.id, a]));
 
   const existing = items
     .filter((i) => !i.archived)
@@ -291,6 +307,12 @@ function buildItemsSheet(wb: ExcelJS.Workbook, items: CatalogItem[], location: s
     sheet.getCell(row, 7).value = link ? link.supplier_name : "";
     sheet.getCell(row, 8).value = link ? numberOrBlank(link.unit_price) : "";
     sheet.getCell(row, 9).value = numberOrBlank(item.target_waste_pct);
+    sheet.getCell(row, 10).value = (item.allergens || [])
+      .map((id) => allergenById.get(id))
+      .filter((a): a is Allergen => !!a)
+      .sort((a, b) => a.order - b.order)
+      .map((a) => a.name)
+      .join(", ");
     borderRow(sheet, row, headers.length);
     bandRow(sheet, row, headers.length, LIGHT);
     row++;
@@ -311,15 +333,17 @@ function buildItemsSheet(wb: ExcelJS.Workbook, items: CatalogItem[], location: s
   sheet.getCell("A1").note =
     '"existing" rows are your current catalogue, pulled in automatically -- reference only, don\'t edit. Add anything genuinely new as a "new" row below.';
   sheet.getCell("B1").note =
-    "Only item_name + base_unit are required -- everything else (category/vat/par_level/supplier/cost/waste_pct) is optional, same as the old standalone Items import.";
+    "Only item_name + base_unit are required -- everything else (category/vat/par_level/supplier/cost/waste_pct/allergens) is optional, same as the old standalone Items import.";
   sheet.getCell("D1").note =
     "On \"existing\" rows, category/vat/par_level/supplier/cost/waste_pct show that item's current values (par_level for the location you've picked below) so you can see and copy them -- editing these cells has no effect on an existing item, since matching is by name only.";
   sheet.getCell("I1").note =
     "Your own predicted spoilage % for this item (e.g. 5 for 5%) -- shown on the item's own page next to the actual % calculated from your waste log. Leave blank to set it later.";
+  sheet.getCell("J1").note =
+    'Comma-separated allergen names or codes, case-insensitive -- e.g. "Milk, Cereals containing gluten" or "milk,gluten" both work. Unlike every other column here, editing this cell on an "existing" row DOES take effect: it replaces that item\'s current tags with exactly what\'s listed here, so this is the way to bulk-tag your whole catalogue without opening each item one at a time. Leave blank to leave an item\'s tags alone. On a "new" row it seeds the item\'s tags at creation. A name/code that doesn\'t match one of the 14 recognized allergens is silently skipped.';
 
   sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastItemRow, column: headers.length } };
 
-  setColumnWidths(sheet, [10, 26, 11, 14, 7, 10, 16, 9, 10]);
+  setColumnWidths(sheet, [10, 26, 11, 14, 7, 10, 16, 9, 10, 34]);
   return { lastItemRow };
 }
 
@@ -465,12 +489,13 @@ function buildRecipeIngredientsSheet(
 export async function buildRecipeImportWorkbook(
   items: CatalogItem[],
   recipes: Recipe[],
-  location: string
+  location: string,
+  allergens: Allergen[]
 ): Promise<ExcelJS.Workbook> {
   const wb = new ExcelJS.Workbook();
   const entries = buildRecipeEntries(recipes);
   buildReadMeSheet(wb);
-  const { lastItemRow } = buildItemsSheet(wb, items, location);
+  const { lastItemRow } = buildItemsSheet(wb, items, location, allergens);
   const { lastRecipeRow } = buildRecipesSheet(wb, entries);
   buildRecipeIngredientsSheet(wb, entries, lastRecipeRow, lastItemRow);
   return wb;
@@ -484,9 +509,10 @@ export async function buildRecipeImportWorkbook(
 export async function downloadRecipeImportTemplate(
   items: CatalogItem[],
   recipes: Recipe[],
-  location: string
+  location: string,
+  allergens: Allergen[]
 ): Promise<void> {
-  const wb = await buildRecipeImportWorkbook(items, recipes, location);
+  const wb = await buildRecipeImportWorkbook(items, recipes, location, allergens);
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

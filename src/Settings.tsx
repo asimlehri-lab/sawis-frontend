@@ -14,7 +14,7 @@ import {
   CURRENCY_OPTIONS,
   currencySymbol,
 } from "./api";
-import type { BulkItemInput, CatalogItem, CurrencyCode, InventoryCheckSchedule, Location, Recipe } from "./api";
+import type { Allergen, BulkItemInput, CatalogItem, CurrencyCode, InventoryCheckSchedule, Location, Recipe } from "./api";
 import MenuListImportModal from "./MenuListImportModal";
 import type { ParsedMenuRow } from "./MenuListImportModal";
 import SearchSelect from "./SearchSelect";
@@ -29,6 +29,7 @@ interface Props {
   accessToken: string;
   items: CatalogItem[];
   recipes: Recipe[];
+  allergens: Allergen[];
   locations: Location[];
   // App.tsx caches `items`/`recipes` and only reloads them on demand — a
   // bulk import here changes them server-side (new items, new or
@@ -140,7 +141,7 @@ function cleanNumeric(raw: string | null): string {
   return cleaned;
 }
 
-export default function Settings({ accessToken, items, recipes, locations, onItemsChanged, onRecipesChanged }: Props) {
+export default function Settings({ accessToken, items, recipes, allergens, locations, onItemsChanged, onRecipesChanged }: Props) {
   return (
     <>
       <p className="muted" style={{ fontSize: 13, marginTop: 0, marginBottom: 16 }}>
@@ -151,6 +152,7 @@ export default function Settings({ accessToken, items, recipes, locations, onIte
         accessToken={accessToken}
         items={items}
         recipes={recipes}
+        allergens={allergens}
         locations={locations}
         onItemsChanged={onItemsChanged}
         onRecipesChanged={onRecipesChanged}
@@ -765,6 +767,7 @@ function RecipeAndItemImportPanel({
   accessToken,
   items,
   recipes,
+  allergens,
   locations,
   onItemsChanged,
   onRecipesChanged,
@@ -772,6 +775,7 @@ function RecipeAndItemImportPanel({
   accessToken: string;
   items: CatalogItem[];
   recipes: Recipe[];
+  allergens: Allergen[];
   locations: Location[];
   onItemsChanged: () => void;
   onRecipesChanged: () => void;
@@ -812,6 +816,7 @@ function RecipeAndItemImportPanel({
     updated: number;
     itemsCreated: string[];
     holdingsBackfilled: number;
+    allergensSet: number;
   } | null>(null);
 
   function matchItem(name: string): string | null {
@@ -873,9 +878,13 @@ function RecipeAndItemImportPanel({
       return rowsToTable(raw);
     };
 
-    // ---- Items tab: only "new" rows feed the request's items[] field --
-    // "existing" rows are just this org's catalogue shown back for
-    // reference, already in SAWIS, nothing to send for them.
+    // ---- Items tab: "new" rows always feed the request's items[] field.
+    // "existing" rows are normally just this org's catalogue shown back
+    // for reference, nothing to send -- EXCEPT when the allergens cell
+    // has been filled in, the one field this import can bulk-set on an
+    // already-catalogued item (see bulk_upsert_items' docstring on the
+    // backend) -- that's how a whole existing catalogue gets tagged
+    // without opening each item's own page one at a time.
     const itemsTable = sheetTable("Items");
     if (itemsTable.length < 1) return { error: 'The "Items" tab has no header row.' };
     const itHeader = itemsTable[0];
@@ -888,13 +897,15 @@ function RecipeAndItemImportPanel({
     const itSupplierIdx = headerIndex(itHeader, "supplier");
     const itCostIdx = headerIndex(itHeader, "cost");
     const itWasteIdx = headerIndex(itHeader, "waste_pct");
+    const itAllergensIdx = headerIndex(itHeader, "allergens");
     if (itNameIdx === -1 || itUnitIdx === -1) {
       return { error: 'The "Items" tab is missing its item_name or base_unit column.' };
     }
     const itemRows: BulkItemInput[] = [];
     for (const r of itemsTable.slice(1)) {
       const status = (statusIdx > -1 ? r[statusIdx] || "" : "").trim().toLowerCase();
-      if (status !== "new") continue;
+      const allergensRaw = itAllergensIdx > -1 ? (r[itAllergensIdx] || "").trim() : "";
+      if (status !== "new" && !allergensRaw) continue;
       const name = (r[itNameIdx] || "").trim();
       const unitRaw = (r[itUnitIdx] || "").trim();
       const base_unit = BASE_UNITS.find((u) => u.toLowerCase() === unitRaw.toLowerCase()) || "";
@@ -916,6 +927,7 @@ function RecipeAndItemImportPanel({
         supplier: supplier && cost ? supplier : undefined,
         cost: supplier && cost ? cost : undefined,
         waste_pct: waste_pct || undefined,
+        allergens: allergensRaw || undefined,
       });
     }
 
@@ -1281,10 +1293,18 @@ function RecipeAndItemImportPanel({
     }
     grouped.get(key)!.push(r);
   }
+  const existingItemNamesLower = new Set(items.map((i) => i.name.trim().toLowerCase()));
+  // newItemRows also carries "existing" rows sent through purely for a
+  // filled-in allergens cell (see parseThreeTabWorkbook) -- those aren't
+  // creating anything, so they're excluded from this count by checking
+  // against the org's actual current item names.
   const newItemNames = new Set([
     ...rows.filter((r) => !r.matchedItemId && r.ingredientRaw).map((r) => r.ingredientRaw.trim().toLowerCase()),
-    ...newItemRows.map((r) => r.name.trim().toLowerCase()),
+    ...newItemRows
+      .filter((r) => !existingItemNamesLower.has(r.name.trim().toLowerCase()))
+      .map((r) => r.name.trim().toLowerCase()),
   ]);
+  const allergensPreviewCount = newItemRows.filter((r) => r.allergens).length;
   const recipesByPosId = new Map(recipes.filter((r) => r.pos_id).map((r) => [r.pos_id, r]));
   const recipesByName = new Map(recipes.map((r) => [r.name.trim().toLowerCase(), r]));
 
@@ -1336,6 +1356,7 @@ function RecipeAndItemImportPanel({
         updated: res.updated,
         itemsCreated: res.items_created,
         holdingsBackfilled: res.holdings_backfilled.length,
+        allergensSet: res.allergens_set.length,
       });
       setRows([]);
       setNewItemRows([]);
@@ -1392,7 +1413,7 @@ function RecipeAndItemImportPanel({
               setConfirmingTemplateDownload(false);
               setTemplateDownloading(true);
               try {
-                await downloadRecipeImportTemplate(items, recipes, location);
+                await downloadRecipeImportTemplate(items, recipes, location, allergens);
               } finally {
                 setTemplateDownloading(false);
               }
@@ -1472,6 +1493,8 @@ function RecipeAndItemImportPanel({
             ✓ <b>{recipeOrder.length} recipe{recipeOrder.length === 1 ? "" : "s"}</b>, {rows.length} ingredient
             line{rows.length === 1 ? "" : "s"} read from {fileName}.
             {newItemNames.size > 0 && ` ${newItemNames.size} new item${newItemNames.size === 1 ? "" : "s"} will be created.`}
+            {allergensPreviewCount > 0 &&
+              ` ${allergensPreviewCount} item${allergensPreviewCount === 1 ? "" : "s"} will have allergen tags set.`}
           </div>
           <div className="table-scroll">
             <table className="tbl" style={{ marginTop: 10 }}>
@@ -1570,6 +1593,8 @@ function RecipeAndItemImportPanel({
             ` ${result.holdingsBackfilled} matched ingredient${
               result.holdingsBackfilled === 1 ? "" : "s"
             } got a stock holding added at this location.`}
+          {result.allergensSet > 0 &&
+            ` ${result.allergensSet} item${result.allergensSet === 1 ? "" : "s"} had allergen tags set.`}
         </div>
       )}
     </div>

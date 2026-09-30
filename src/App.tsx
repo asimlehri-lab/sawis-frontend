@@ -58,6 +58,7 @@ import type {
 } from "./api";
 import RecipeDetail from "./RecipeDetail";
 import ItemDetail from "./ItemDetail";
+import AllergenIcon from "./AllergenIcon";
 import Loader from "./Loader";
 import ProcurementDetail from "./ProcurementDetail";
 import SupplierDeliveries from "./SupplierDeliveries";
@@ -746,6 +747,7 @@ export default function App() {
     if (activePage === "Settings") {
       if (!items) loadItems(accessToken);
       loadRecipes(accessToken);
+      fetchAllergens(accessToken).then(setAllergens).catch(() => {});
       fetchLocations(accessToken).then(setLocations).catch(() => {});
     }
     if (activePage === "Reports") {
@@ -1938,11 +1940,21 @@ export default function App() {
                             const usedInCount = recipes.filter((other) =>
                               other.lines.some((l) => l.line_type === "recipe" && l.sub_recipe === r.id)
                             ).length;
+                            const rAllergens = allergens.filter((a) => r.allergens.includes(a.id));
                             return (
                               <tr key={r.id} className="clickable" onClick={() => setSelectedRecipeId(r.id)}>
                                 <td className="dish">
                                   {r.name || <span className="muted">Untitled</span>}
                                   <span className={`kind-tag ${r.kind}`}>{r.kind === "sub" ? "Sub-recipe" : "Dish"}</span>
+                                  {rAllergens.length > 0 && (
+                                    <span className="allergen-icons-inline">
+                                      {rAllergens.map((a) => (
+                                        <span key={a.id} title={a.name}>
+                                          <AllergenIcon code={a.code} size={14} className="ai-icon" />
+                                        </span>
+                                      ))}
+                                    </span>
+                                  )}
                                   <div className="rsub">
                                     {r.kind === "sub"
                                       ? usedInCount === 0
@@ -2122,6 +2134,7 @@ export default function App() {
                 accessToken={accessToken}
                 items={items ?? []}
                 recipes={recipes ?? []}
+                allergens={allergens}
                 locations={locations}
                 onItemsChanged={() => loadItems(accessToken)}
                 onRecipesChanged={() => loadRecipes(accessToken)}
