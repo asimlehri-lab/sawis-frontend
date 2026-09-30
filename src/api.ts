@@ -161,6 +161,9 @@ export interface CatalogItem {
   vat_rate: string | null;
   effective_vat_rate: string | null;
   default_supplier: string | null;
+  // Predicted spoilage/waste % the user sets per item -- null until set.
+  // Compared against fetchItemWasteStats' actual figure on ItemDetail.
+  target_waste_pct: string | null;
   archived: boolean;
   holdings: ItemHolding[];
   // Included so the Items list can be searched by a supplier's own item
@@ -942,6 +945,7 @@ export interface ItemPatch {
   vat_rate?: string | null;
   base_unit?: string;
   default_supplier?: string | null;
+  target_waste_pct?: string | null;
   archived?: boolean;
 }
 
@@ -1038,6 +1042,34 @@ export async function fetchOnHand(
     accessToken
   );
   return Number(data.on_hand) || 0;
+}
+
+export interface WasteTrendPoint {
+  label: string;
+  actual_waste_pct: number | null;
+}
+
+export interface ItemWasteStats {
+  item: string;
+  target_waste_pct: string | null;
+  actual_waste_pct: number | null;
+  waste_qty: string;
+  used_qty: string;
+  window_days: number;
+  // "ok" | "over" | "no_target" | "no_data"
+  status: string;
+  trend: WasteTrendPoint[];
+}
+
+// location omitted aggregates the item's waste rate across every
+// location -- see StockMovementViewSet.waste_stats' own docstring.
+export async function fetchItemWasteStats(
+  accessToken: string,
+  itemId: string,
+  locationId?: string
+): Promise<ItemWasteStats> {
+  const q = locationId ? `&location=${locationId}` : "";
+  return authedFetch(`/api/ledger/stock-movements/waste_stats/?item=${itemId}${q}`, accessToken);
 }
 
 export interface Supplier {

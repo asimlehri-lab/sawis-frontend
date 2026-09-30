@@ -16,8 +16,18 @@ import {
   formatMoney,
   defaultCurrency,
   convertToBaseUnit,
+  fetchItemWasteStats,
 } from "./api";
-import type { CatalogItem, Category, Location, ItemSupplierRow, SupplierItemRow, Supplier, Recipe } from "./api";
+import type {
+  CatalogItem,
+  Category,
+  Location,
+  ItemSupplierRow,
+  SupplierItemRow,
+  Supplier,
+  Recipe,
+  ItemWasteStats,
+} from "./api";
 
 interface Props {
   itemId: string;
@@ -183,6 +193,12 @@ export default function ItemDetail({
   // pre-filled instead of asking the user to type it in again.
   const [packQtyOverrides, setPackQtyOverrides] = useState<Record<string, string>>({});
 
+  const [wasteStats, setWasteStats] = useState<ItemWasteStats | null>(null);
+  const [wasteStatsError, setWasteStatsError] = useState<string | null>(null);
+  const [targetWasteInput, setTargetWasteInput] = useState("");
+  const [savingTargetWaste, setSavingTargetWaste] = useState(false);
+  const [targetWasteSaved, setTargetWasteSaved] = useState(false);
+
   const [archiving, setArchiving] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
@@ -195,6 +211,7 @@ export default function ItemDetail({
       .then((it) => {
         setItem(it);
         setVatPct(it.vat_rate ? (Number(it.vat_rate) * 100).toString() : "");
+        setTargetWasteInput(it.target_waste_pct ?? "");
         Promise.all(
           it.holdings.map((h) =>
             fetchOnHand(accessToken, it.id, h.location, h.department).then((qty) => [h.id, qty] as const)
@@ -222,6 +239,46 @@ export default function ItemDetail({
     if (locations.length && !newLocation) setNewLocation(locations[0].id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locations]);
+
+  useEffect(() => {
+    if (!item) return;
+    setWasteStats(null);
+    setWasteStatsError(null);
+    fetchItemWasteStats(accessToken, item.id)
+      .then(setWasteStats)
+      .catch((err) => setWasteStatsError(err instanceof Error ? err.message : "Could not load waste data."));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item?.id]);
+
+  async function handleSaveTargetWaste() {
+    if (!item) return;
+    const raw = targetWasteInput.trim();
+    setSavingTargetWaste(true);
+    setTargetWasteSaved(false);
+    try {
+      const updated = await updateItem(accessToken, item.id, { target_waste_pct: raw === "" ? null : raw });
+      setItem(updated);
+      setTargetWasteSaved(true);
+      fetchItemWasteStats(accessToken, item.id)
+        .then(setWasteStats)
+        .catch(() => {});
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save target waste %.");
+    } finally {
+      setSavingTargetWaste(false);
+    }
+  }
+
+  const wasteTargetNum = item?.target_waste_pct ? Number(item.target_waste_pct) : null;
+  const wasteScaleMax = Math.max(wasteTargetNum ? wasteTargetNum * 2.5 : 0, wasteStats?.actual_waste_pct ?? 0, 10);
+  const wasteTagInfo: { label: string; cls: string } =
+    wasteStats?.status === "over"
+      ? { label: "Investigate", cls: "bad" }
+      : wasteStats?.status === "ok"
+        ? { label: "On track", cls: "good" }
+        : wasteStats?.status === "no_target"
+          ? { label: "No target set", cls: "warn" }
+          : { label: "No data yet", cls: "warn" };
 
   const selectedCategory = categories.find((c) => c.id === item?.category);
   const categoryDefaultPct = selectedCategory ? Number(selectedCategory.default_vat_rate) * 100 : null;
@@ -721,6 +778,127 @@ export default function ItemDetail({
               <button type="button" className="open-link" onClick={() => setShowAllUsedIn((v) => !v)}>
                 {showAllUsedIn ? "Show fewer" : `+${usedInRecipes.length - USED_IN_CHIP_CAP} more`}
               </button>
+            )}
+          </>
+        )}
+      </div>
+
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>Waste</h2>
+        <p className="hint">
+          Target is your own predicted spoilage % for this item. Actual is calculated from logged waste against
+          total sales usage over the last {wasteStats?.window_days ?? 90} days.
+        </p>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+          <span className="muted" style={{ fontSize: 11 }}>
+            Target waste
+          </span>
+          <input
+            className="price-in"
+            style={{ width: 64 }}
+            type="number"
+            min="0"
+            max="100"
+            step="0.5"
+            value={targetWasteInput}
+            onChange={(e) => {
+              setTargetWasteInput(e.target.value);
+              setTargetWasteSaved(false);
+            }}
+          />
+          <span className="muted" style={{ fontSize: 11 }}>
+            %
+          </span>
+          <button
+            type="button"
+            className="btn-ghost small"
+            disabled={savingTargetWaste}
+            onClick={handleSaveTargetWaste}
+          >
+            {savingTargetWaste ? "Saving…" : "Save"}
+          </button>
+          {targetWasteSaved && (
+            <span className="muted" style={{ fontSize: 11 }}>
+              Saved
+            </span>
+          )}
+        </div>
+
+        {wasteStatsError && <p className="error">{wasteStatsError}</p>}
+        {!wasteStatsError && wasteStats === null && <p className="muted">Loading…</p>}
+        {wasteStats && wasteStats.actual_waste_pct === null && (
+          <p className="muted">No sales or waste logged for this item yet — nothing to compare against.</p>
+        )}
+        {wasteStats && wasteStats.actual_waste_pct !== null && (
+          <>
+            <div className="kpi-topline">
+              <span className="kpi-big" style={{ fontSize: 28 }}>
+                {wasteStats.actual_waste_pct.toFixed(1)}%
+              </span>
+              <span className={`tag ${wasteTagInfo.cls}`}>{wasteTagInfo.label}</span>
+            </div>
+            <div className="kpi-meter">
+              <div
+                className="kpi-meter-fill"
+                style={{
+                  width: `${Math.min((wasteStats.actual_waste_pct / wasteScaleMax) * 100, 100)}%`,
+                  background:
+                    wasteTagInfo.cls === "bad"
+                      ? "var(--caution)"
+                      : wasteTagInfo.cls === "good"
+                        ? "var(--good)"
+                        : "var(--warn)",
+                }}
+              />
+              {wasteTargetNum !== null && (
+                <div
+                  className="kpi-meter-tgt"
+                  style={{ left: `${Math.min((wasteTargetNum / wasteScaleMax) * 100, 100)}%` }}
+                />
+              )}
+            </div>
+            <div className="kpi-meter-lbl">
+              <span>0%</span>
+              <span>{wasteTargetNum !== null ? `target ${wasteTargetNum}%` : "no target set"}</span>
+              <span>{wasteScaleMax.toFixed(0)}%</span>
+            </div>
+            {wasteStats.status === "over" && (
+              <div className="kpi-note">
+                Actual waste is running above target — worth checking whether this item's storage/handling has
+                changed, its cost has increased, or the target itself needs adjusting.
+              </div>
+            )}
+            {wasteStats.trend.some((t) => t.actual_waste_pct !== null) && (
+              <>
+                <div className="trend-chart" style={{ height: 80, marginTop: 16 }}>
+                  {wasteTargetNum !== null && (
+                    <div
+                      className="trend-tgtline"
+                      style={{ bottom: `${Math.min((wasteTargetNum / wasteScaleMax) * 100, 100)}%` }}
+                    />
+                  )}
+                  {wasteStats.trend.map((t) => (
+                    <div className="trend-bar-col" key={t.label}>
+                      {t.actual_waste_pct !== null ? (
+                        <div
+                          className={`trend-bar ${
+                            wasteTargetNum !== null && t.actual_waste_pct > wasteTargetNum ? "over" : "under"
+                          }`}
+                          style={{ height: `${Math.max((t.actual_waste_pct / wasteScaleMax) * 100, 2)}%` }}
+                          title={`${t.label}: ${t.actual_waste_pct.toFixed(1)}%`}
+                        />
+                      ) : (
+                        <div className="trend-bar empty" title={`${t.label}: no data`} />
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="trend-labels">
+                  {wasteStats.trend.map((t) => (
+                    <span key={t.label}>{t.label}</span>
+                  ))}
+                </div>
+              </>
             )}
           </>
         )}
