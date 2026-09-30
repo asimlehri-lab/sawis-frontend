@@ -10,6 +10,8 @@ import {
   formatMoney,
   defaultCurrency,
   defaultTargetCostPct,
+  costBand,
+  costBandColor,
 } from "./api";
 import type { Recipe, CatalogItem, Location, Allergen } from "./api";
 import SearchSelect from "./SearchSelect";
@@ -206,7 +208,7 @@ export default function RecipeDetail({
   // note), so this falls back to the org's first location's target, same
   // convention defaultCurrency() already uses -- see defaultTargetCostPct.
   const target = defaultTargetCostPct(locations, recipe.menu_group === "drink" ? "drink" : "food");
-  const fcOver = recipe.plate_food_cost_pct !== null && recipe.plate_food_cost_pct > target;
+  const fcBand = costBand(recipe.plate_food_cost_pct, target);
   const yieldNum = Number(recipe.yield_qty) || 1;
   const menuPriceNum = recipe.menu_price ? Number(recipe.menu_price) : 0;
   // allergens (the app-wide catalogue) is already ordered by
@@ -518,7 +520,7 @@ export default function RecipeDetail({
                 Menu category is just for grouping/browsing a long menu — doesn't affect costing.
               </p>
               <div className="fc-hero">
-                <div className={`big ${fcOver ? "over" : "good"}`}>
+                <div className={`big ${fcBand === "good" ? "good" : fcBand === "caution" ? "over" : "danger"}`}>
                   {recipe.plate_food_cost_pct !== null ? `${recipe.plate_food_cost_pct.toFixed(1)}%` : "—"}
                 </div>
                 <div className="tgt">food cost / {recipe.yield_unit} · target {target}%</div>
@@ -527,10 +529,13 @@ export default function RecipeDetail({
                     className="fill"
                     style={{
                       width: `${Math.min(recipe.plate_food_cost_pct ?? 0, 100)}%`,
-                      background: fcOver ? "var(--caution)" : "var(--good)",
+                      background: costBandColor(fcBand),
                     }}
                   />
-                  <div className="tgtm" />
+                  {/* Was hardcoded at CSS's default left: 60% regardless of
+                      the real target -- positioned here to match target%
+                      on the same 0-100 scale the fill bar above uses. */}
+                  <div className="tgtm" style={{ left: `${Math.min(target, 100)}%` }} />
                 </div>
               </div>
               <div className="metric">

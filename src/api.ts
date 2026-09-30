@@ -59,6 +59,29 @@ export function defaultTargetCostPct(
   return Number.isFinite(n) ? n : 30;
 }
 
+// Cost-vs-target color banding, shared by every food/drink-cost-% gauge in
+// the app (RecipeDetail's hero, Reports'/EodReport's KPI hero, the per-dish
+// menu table badges, and End of day > Tasks' cost-breach list). Three
+// bands, not two: at/under target is fine (green), moderately over is
+// worth a glance (the same orange this app has always used for "over
+// target"), and meaningfully over -- more than 10 points past target -- is
+// a real problem, using the same red (--brick) this app already reserves
+// for danger actions and negative stock variance. A flat 10-point margin
+// rather than a relative multiplier, so a low target (e.g. a soft-drink
+// line with a 10% target) doesn't get an unreachably tight middle band.
+export type CostBand = "good" | "caution" | "danger";
+
+export function costBand(pct: number | null, target: number): CostBand {
+  if (pct === null) return "good";
+  if (pct <= target) return "good";
+  if (pct <= target + 10) return "caution";
+  return "danger";
+}
+
+export function costBandColor(band: CostBand): string {
+  return band === "good" ? "var(--good)" : band === "caution" ? "var(--caution)" : "var(--brick)";
+}
+
 // Supplier unit/pack conversion — shared by ItemDetail's "Link" flow, the
 // Scan receipt review table, and the supplier catalogue importer. A
 // supplier very often prices things in a different unit than the item is

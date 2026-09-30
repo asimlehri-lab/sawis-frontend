@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchReportsSummary, formatMoney, currencySymbol } from "./api";
+import { fetchReportsSummary, formatMoney, currencySymbol, costBand, costBandColor } from "./api";
 import type { Location, ReportsMenuRow, ReportsSummary } from "./api";
 import PasswordConfirmModal from "./PasswordConfirmModal";
 
@@ -139,7 +139,7 @@ export default function Reports({ accessToken, locations, isAdmin }: Props) {
 
 function RptKpis({ report, currency, target }: { report: ReportsSummary; currency?: string; target: number }) {
   const fc = report.food_cost_pct;
-  const fcOver = fc !== null && fc > target;
+  const fcBand = costBand(fc, target);
   const gp = report.gross_profit_pct;
   const wastePct = report.waste_pct;
   const variance = report.variance;
@@ -166,14 +166,16 @@ function RptKpis({ report, currency, target }: { report: ReportsSummary; currenc
             <div className="kv-empty">No sales yet</div>
           ) : (
             <>
-              <div className="kpi-value" style={{ color: hasZeroCostItems ? "var(--warn)" : fcOver ? "var(--caution)" : "var(--good)" }}>
+              <div className="kpi-value" style={{ color: hasZeroCostItems ? "var(--warn)" : costBandColor(fcBand) }}>
                 {fc.toFixed(1)}%
               </div>
               <div className="kpi-sub">
                 {hasZeroCostItems ? (
                   <span className="tag warn">Cost incomplete</span>
                 ) : (
-                  <span className={`tag ${fcOver ? "bad" : "good"}`}>{fcOver ? "Over target" : "On target"}</span>
+                  <span className={`tag ${fcBand === "good" ? "good" : fcBand === "caution" ? "bad" : "danger"}`}>
+                    {fcBand === "good" ? "On target" : fcBand === "caution" ? "Over target" : "Well over target"}
+                  </span>
                 )}{" "}
                 · target {target}%
               </div>
@@ -377,6 +379,8 @@ function MenuTable({
             <tbody>
               {rows.map((r) => {
                 const rowTarget = r.menu_group === "drink" ? drinkTarget : foodTarget;
+                const rowBand = costBand(r.food_cost_pct, rowTarget);
+                const rowBadgeClass = rowBand === "good" ? "b-ok" : rowBand === "caution" ? "b-low" : "b-bad";
                 return (
                 <tr key={r.recipe_id}>
                   <td className="dish">{r.name}</td>
@@ -397,7 +401,7 @@ function MenuTable({
                       </span>
                     ) : (
                       <span
-                        className={`badge ${r.food_cost_pct > rowTarget ? "b-low" : "b-ok"}`}
+                        className={`badge ${rowBadgeClass}`}
                         title={`Target: ${rowTarget}% (${r.menu_group})`}
                       >
                         {r.food_cost_pct.toFixed(1)}%

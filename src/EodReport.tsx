@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchEodReport, formatMoney } from "./api";
+import { fetchEodReport, formatMoney, costBand, costBandColor } from "./api";
 import type { EodChampionEntry, EodReport as EodReportData, Location } from "./api";
 import PeriodPicker from "./PeriodPicker";
 
@@ -221,7 +221,11 @@ export default function EodReport({ accessToken, locations }: Props) {
 function KpiHeader({ report, currency }: { report: EodReportData; currency?: string }) {
   const c = report.current;
   const fc = c.food_cost_pct;
-  const over = fc !== null && fc > 30;
+  // Note: 30 is hardcoded here, not the location's real target_food_cost_pct
+  // -- pre-existing, unrelated to the color-banding change below. Reports.tsx
+  // (which does have a location in view) reads the real per-location target;
+  // this component doesn't currently receive one as a prop.
+  const fcBand = costBand(fc, 30);
   // Same reasoning as Reports.tsx: a real dish essentially never costs £0
   // to make, so if zero_cost_items pulled food cost down, a green "On
   // target" tag would misrepresent the number as good rather than
@@ -242,7 +246,9 @@ function KpiHeader({ report, currency }: { report: EodReportData; currency?: str
               {hasZeroCostItems ? (
                 <span className="tag warn">Cost incomplete</span>
               ) : (
-                <span className={`tag ${over ? "bad" : "good"}`}>{over ? "Over target" : "On target"}</span>
+                <span className={`tag ${fcBand === "good" ? "good" : fcBand === "caution" ? "bad" : "danger"}`}>
+                  {fcBand === "good" ? "On target" : fcBand === "caution" ? "Over target" : "Well over target"}
+                </span>
               )}
             </div>
             <div className="kpi-meter">
@@ -250,7 +256,7 @@ function KpiHeader({ report, currency }: { report: EodReportData; currency?: str
                 className="kpi-meter-fill"
                 style={{
                   width: `${Math.min((fc / 50) * 100, 100)}%`,
-                  background: hasZeroCostItems ? "var(--warn)" : over ? "var(--caution)" : "var(--good)",
+                  background: hasZeroCostItems ? "var(--warn)" : costBandColor(fcBand),
                 }}
               />
               <div className="kpi-meter-tgt" style={{ left: `${(30 / 50) * 100}%` }} />

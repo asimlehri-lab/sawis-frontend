@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { fetchStockCounts } from "./api";
+import { costBand, costBandColor, fetchStockCounts } from "./api";
 import type { CatalogItem, Location, Me, Recipe, StockCountRow, StockMovementRow } from "./api";
 
 interface Props {
@@ -115,7 +115,7 @@ function ManagerTasks({
     .map((r) => {
       const target = r.menu_group === "drink" ? drinkTarget : foodTarget;
       const pct = r.plate_food_cost_pct as number;
-      return { id: r.id, name: r.name, pct, target, over: pct - target };
+      return { id: r.id, name: r.name, pct, target, over: pct - target, band: costBand(pct, target) };
     })
     .filter((r) => r.over > 0)
     .sort((a, b) => b.over - a.over);
@@ -182,7 +182,13 @@ function ManagerTasks({
                       </span>
                     </div>
                     <div className="gauge-track">
-                      <div className="gauge-fill" style={{ width: `${Math.min((r.pct / scaleMax) * 100, 100)}%` }} />
+                      <div
+                        className="gauge-fill"
+                        style={{
+                          width: `${Math.min((r.pct / scaleMax) * 100, 100)}%`,
+                          background: costBandColor(r.band),
+                        }}
+                      />
                       <div className="gauge-tgt" style={{ left: `${Math.min((r.target / scaleMax) * 100, 100)}%` }} />
                     </div>
                   </div>
