@@ -81,8 +81,8 @@ import "./App.css";
 const NAV_ITEMS = [
   "End of day",
   "Inventory",
-  "Items",
   "Procurement",
+  "Items",
   "Recipes",
   "Waste log",
   "Reports",
