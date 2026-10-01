@@ -3047,7 +3047,7 @@ export default function App() {
                                               step="any"
                                               value={row.packQty}
                                               onChange={(e) => updateScanRow(i, { packQty: e.target.value })}
-                                              style={{ width: 50 }}
+                                              style={{ width: 72 }}
                                             />{" "}
                                             {matchedItem.base_unit}
                                           </>

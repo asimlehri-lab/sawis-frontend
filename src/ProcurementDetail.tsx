@@ -1184,7 +1184,7 @@ export default function ProcurementDetail({
                                 step="any"
                                 value={addPackQty}
                                 onChange={(e) => setAddPackQty(e.target.value)}
-                                style={{ width: 50 }}
+                                style={{ width: 72 }}
                               />{" "}
                               {addItem.base_unit}
                             </>
