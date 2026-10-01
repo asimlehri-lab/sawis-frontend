@@ -13,9 +13,11 @@ import {
   formatMoney,
   autoFactor,
   convertToBaseUnit,
+  scanReceipt,
 } from "./api";
 import type { PurchaseOrder, CatalogItem, Supplier, ItemSupplierRow, Location } from "./api";
 import SearchSelect from "./SearchSelect";
+import Loader from "./Loader";
 
 interface Props {
   poId: string;
@@ -55,6 +57,53 @@ const DEPARTMENTS = [
 function formatQty(n: number): string {
   return parseFloat(n.toFixed(2)).toString();
 }
+
+// Duplicated from App.tsx's Scan receipt review (matchScore/cleanNumeric)
+// rather than imported -- same "small local helper per file" convention
+// already used throughout this codebase (see e.g. Inventory.tsx's own
+// copies for the count-sheet scan). This file already has its own
+// findKnownSupplierUnit further down (used by the manual "Add line" pack
+// conversion) -- "Scan delivery" below reuses that one rather than adding
+// a second copy. Powers "Scan delivery": matching each scanned receipt
+// line against THIS PO's own order lines, not the whole item catalogue,
+// so a photo taken while receiving a specific sent order cross-checks
+// against what was actually ordered rather than guessing a brand-new PO
+// from scratch.
+function matchScore(ours: string, raw: string): number {
+  const norm = (s: string) =>
+    s
+      .toLowerCase()
+      .replace(/[0-9]+(\.[0-9]+)?\s*(kg|g|ml|l|cl|oz|x|case|sack|class)?/g, " ")
+      .replace(/[^a-z ]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 2);
+  const a = new Set(norm(ours));
+  const b = new Set(norm(raw));
+  if (!a.size) return 0;
+  let hit = 0;
+  a.forEach((w) => {
+    if (b.has(w) || [...b].some((x) => x.startsWith(w) || w.startsWith(x))) hit++;
+  });
+  return hit / a.size;
+}
+
+function cleanNumeric(raw: string | null): string {
+  if (!raw) return "";
+  let cleaned = raw.replace(/[^0-9.,]/g, "");
+  if (!cleaned) return "";
+  const commaCount = (cleaned.match(/,/g) || []).length;
+  const lastComma = cleaned.lastIndexOf(",");
+  const lastDot = cleaned.lastIndexOf(".");
+  if (lastComma > -1 && lastDot > -1) {
+    cleaned = lastComma > lastDot ? cleaned.replace(/\./g, "").replace(",", ".") : cleaned.replace(/,/g, "");
+  } else if (commaCount === 1 && cleaned.length - lastComma - 1 === 2) {
+    cleaned = cleaned.replace(",", ".");
+  } else {
+    cleaned = cleaned.replace(/,/g, "");
+  }
+  return cleaned;
+}
+
 
 export default function ProcurementDetail({
   poId,
@@ -105,6 +154,19 @@ export default function ProcurementDetail({
   const [receiving, setReceiving] = useState(false);
   const [receiveError, setReceiveError] = useState<string | null>(null);
   const [invoiceNumberInput, setInvoiceNumberInput] = useState("");
+  // "Scan delivery" -- cross-checks a photo of what actually arrived
+  // against THIS PO's own lines (not a whole-catalogue match like the
+  // top-level Scan receipt flow), so the user can see at a glance whether
+  // the delivery matches the order that was sent, then amend by hand as
+  // usual. Per-line status drives the badges in the Receiving table below;
+  // "extra" lists anything the photo detected that isn't on this order at
+  // all (never silently dropped).
+  const [scanningDelivery, setScanningDelivery] = useState(false);
+  const [scanDeliveryError, setScanDeliveryError] = useState<string | null>(null);
+  const [deliveryScan, setDeliveryScan] = useState<{
+    lineStatus: Record<string, "match" | "diff" | "missing">;
+    extra: string[];
+  } | null>(null);
 
   const [showSend, setShowSend] = useState(false);
   const [sending, setSending] = useState(false);
@@ -204,6 +266,8 @@ export default function ProcurementDetail({
       setReceiveLines(initial);
       setReceiveError(null);
       setInvoiceNumberInput(po.invoice_number ?? "");
+      setDeliveryScan(null);
+      setScanDeliveryError(null);
       setShowReceive(true);
       return;
     }
@@ -307,6 +371,77 @@ export default function ProcurementDetail({
       setResourceError(err instanceof Error ? err.message : "Could not re-source these items.");
     } finally {
       setResourcing(false);
+    }
+  }
+
+  async function handleScanDeliveryFileSelected(file: File) {
+    if (!po) return;
+    setScanningDelivery(true);
+    setScanDeliveryError(null);
+    try {
+      const result = await scanReceipt(accessToken, file);
+      const claimed = new Set<number>();
+      const lineStatus: Record<string, "match" | "diff" | "missing"> = {};
+      const nextReceiveLines = { ...receiveLines };
+
+      po.lines.forEach((l) => {
+        let bestIdx = -1;
+        let bestScore = 0;
+        result.line_items.forEach((li, idx) => {
+          if (claimed.has(idx)) return;
+          const score = matchScore(l.item_name, li.description);
+          if (score > bestScore) {
+            bestScore = score;
+            bestIdx = idx;
+          }
+        });
+        // Same 0.34-ish floor as elsewhere isn't quite right here -- this
+        // is a closed set (this PO's own lines), not the whole catalogue,
+        // so a slightly looser threshold still means something; anything
+        // weaker than this is more likely noise than a real match.
+        if (bestIdx === -1 || bestScore < 0.34) {
+          lineStatus[l.id] = "missing";
+          return;
+        }
+        claimed.add(bestIdx);
+        const li = result.line_items[bestIdx];
+        const rawQty = Number(cleanNumeric(li.quantity)) || 0;
+        const rawPrice = Number(cleanNumeric(li.unit_price)) || 0;
+
+        // "If unit is already present then software should match and auto
+        // fill for the user" -- same remembered-pack-conversion lookup the
+        // top-level Scan receipt flow uses, so a scanned "2 Pkg" cross-
+        // checks against the real base-unit qty on this order, not a raw
+        // "2" that silently misreads as 2 of the item itself.
+        let qty = rawQty;
+        let price = rawPrice;
+        const known = findKnownSupplierUnit(l.item, po.supplier);
+        if (known?.supplierUnit) {
+          const item = items.find((it) => it.id === l.item);
+          const auto = item ? autoFactor(known.supplierUnit, item.base_unit) : null;
+          const factor = auto ?? Number(known.packQty || "1");
+          if (Number.isFinite(factor) && factor > 0) {
+            qty = rawQty * factor;
+            price = convertToBaseUnit(rawPrice, factor) ?? rawPrice;
+          }
+        }
+
+        nextReceiveLines[l.id] = { qty: formatQty(qty), price: price.toFixed(2) };
+        const qtyDiffers = Math.abs(qty - Number(l.qty)) > 0.01;
+        const priceDiffers = Math.abs(price - Number(l.unit_price)) > 0.01;
+        lineStatus[l.id] = qtyDiffers || priceDiffers ? "diff" : "match";
+      });
+
+      const extra = result.line_items
+        .filter((_, idx) => !claimed.has(idx))
+        .map((li) => li.description);
+
+      setReceiveLines(nextReceiveLines);
+      setDeliveryScan({ lineStatus, extra });
+    } catch (err) {
+      setScanDeliveryError(err instanceof Error ? err.message : "Could not scan that photo.");
+    } finally {
+      setScanningDelivery(false);
     }
   }
 
@@ -979,7 +1114,11 @@ export default function ProcurementDetail({
                 </select>
               </div>
               <div className="field">
-                <label>Qty</label>
+                <label>
+                  {addSupplierUnit && addSupplierUnit !== items.find((it) => it.id === addItemId)?.base_unit
+                    ? `Qty received (in ${addSupplierUnit})`
+                    : "Qty"}
+                </label>
                 <input
                   type="number"
                   min="0"
@@ -989,7 +1128,11 @@ export default function ProcurementDetail({
                 />
               </div>
               <div className="field">
-                <label>Unit price</label>
+                <label>
+                  {addSupplierUnit && addSupplierUnit !== items.find((it) => it.id === addItemId)?.base_unit
+                    ? `Price per ${addSupplierUnit}`
+                    : "Unit price"}
+                </label>
                 <input
                   type="number"
                   min="0"
@@ -1015,7 +1158,6 @@ export default function ProcurementDetail({
               (() => {
                 const addItem = items.find((it) => it.id === addItemId);
                 if (!addItem) return null;
-                const resolved = resolveAddLineBaseUnits(addItem);
                 return (
                   <div style={{ marginTop: 4 }}>
                     {!addPackExpanded ? (
@@ -1058,18 +1200,24 @@ export default function ProcurementDetail({
                         >
                           ✕
                         </button>
-                        {addSupplierUnit && addSupplierUnit !== addItem.base_unit && (
-                          <div className="muted">
-                            {resolved
-                              ? `→ ${resolved.qty.toFixed(2)} ${addItem.base_unit} @ ${formatMoney(
-                                  resolved.unitPrice,
-                                  currency
-                                )}/${addItem.base_unit}`
-                              : "enter a conversion to add this line"}
-                          </div>
-                        )}
                       </div>
                     )}
+                  </div>
+                );
+              })()}
+            {addItemId &&
+              (() => {
+                const addItem = items.find((it) => it.id === addItemId);
+                if (!addItem || !addSupplierUnit || addSupplierUnit === addItem.base_unit) return null;
+                const resolved = resolveAddLineBaseUnits(addItem);
+                return (
+                  <div className={`scan-row-total ${resolved ? "ok" : "warn"}`}>
+                    {resolved
+                      ? `= ${resolved.qty.toFixed(2)} ${addItem.base_unit} total @ ${formatMoney(
+                          resolved.unitPrice,
+                          currency
+                        )}/${addItem.base_unit}`
+                      : "Enter a conversion above to see the real total"}
                   </div>
                 );
               })()}
@@ -1102,6 +1250,65 @@ export default function ProcurementDetail({
               placeholder="e.g. INV-10432"
             />
           </div>
+
+          <div className="field" style={{ marginBottom: 12 }}>
+            <label>Scan delivery (optional)</label>
+            <p className="hint" style={{ marginTop: 0, marginBottom: 8 }}>
+              Take or choose a photo of what arrived and we'll check it against this order below —
+              amend by hand afterwards as usual.
+            </p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <label className="btn-ghost small" style={{ cursor: scanningDelivery ? "default" : "pointer", opacity: scanningDelivery ? 0.6 : 1 }}>
+                📷 Take photo
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  disabled={scanningDelivery}
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file) handleScanDeliveryFileSelected(file);
+                  }}
+                />
+              </label>
+              <label className="btn-ghost small" style={{ cursor: scanningDelivery ? "default" : "pointer", opacity: scanningDelivery ? 0.6 : 1 }}>
+                🖼 Choose photo
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={scanningDelivery}
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (file) handleScanDeliveryFileSelected(file);
+                  }}
+                />
+              </label>
+              {scanningDelivery && <Loader size="compact" label="Reading the photo…" />}
+            </div>
+            {scanDeliveryError && <p className="error">{scanDeliveryError}</p>}
+            {deliveryScan && (() => {
+              const matchCount = Object.values(deliveryScan.lineStatus).filter((s) => s === "match").length;
+              const diffCount = Object.values(deliveryScan.lineStatus).filter((s) => s === "diff").length;
+              const missingCount = Object.values(deliveryScan.lineStatus).filter((s) => s === "missing").length;
+              return (
+                <div className="im-note" style={{ marginTop: 10 }}>
+                  {matchCount > 0 && `${matchCount} line${matchCount === 1 ? "" : "s"} matched the order. `}
+                  {diffCount > 0 && `${diffCount} line${diffCount === 1 ? "" : "s"} differ from what was ordered — check below. `}
+                  {missingCount > 0 && `${missingCount} line${missingCount === 1 ? "" : "s"} weren't found in the photo — left as ordered. `}
+                  {deliveryScan.extra.length > 0 && (
+                    <>
+                      Also on the photo, not on this order: {deliveryScan.extra.join(", ")}.
+                    </>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+
           <div className="table-scroll">
             <table className="htbl">
               <thead>
@@ -1113,44 +1320,54 @@ export default function ProcurementDetail({
                 </tr>
               </thead>
               <tbody>
-                {po.lines.map((l) => (
-                  <tr key={l.id}>
-                    <td className="dispname">{l.item_name}</td>
-                    <td className="num muted">
-                      {Number(l.qty).toFixed(2)} @ {formatMoney(Number(l.unit_price), currency)}
-                    </td>
-                    <td className="num">
-                      <input
-                        className="par-in"
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={receiveLines[l.id]?.qty ?? l.qty}
-                        onChange={(e) =>
-                          setReceiveLines((prev) => ({
-                            ...prev,
-                            [l.id]: { qty: e.target.value, price: prev[l.id]?.price ?? l.unit_price },
-                          }))
-                        }
-                      />
-                    </td>
-                    <td className="num">
-                      <input
-                        className="par-in"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={receiveLines[l.id]?.price ?? l.unit_price}
-                        onChange={(e) =>
-                          setReceiveLines((prev) => ({
-                            ...prev,
-                            [l.id]: { qty: prev[l.id]?.qty ?? l.qty, price: e.target.value },
-                          }))
-                        }
-                      />
-                    </td>
-                  </tr>
-                ))}
+                {po.lines.map((l) => {
+                  const status = deliveryScan?.lineStatus[l.id];
+                  return (
+                    <tr key={l.id}>
+                      <td className="dispname">
+                        {l.item_name}
+                        {status === "match" && <span className="badge b-ok" style={{ marginLeft: 6 }}>✓ matches</span>}
+                        {status === "diff" && <span className="badge warn" style={{ marginLeft: 6 }}>⚠ differs</span>}
+                        {status === "missing" && <span className="badge" style={{ marginLeft: 6 }}>not in photo</span>}
+                      </td>
+                      <td className="num muted">
+                        {Number(l.qty).toFixed(2)} @ {formatMoney(Number(l.unit_price), currency)}
+                      </td>
+                      <td className="num">
+                        <input
+                          className="par-in"
+                          type="number"
+                          min="0"
+                          step="any"
+                          style={status === "diff" ? { background: "var(--caution-soft)" } : undefined}
+                          value={receiveLines[l.id]?.qty ?? l.qty}
+                          onChange={(e) =>
+                            setReceiveLines((prev) => ({
+                              ...prev,
+                              [l.id]: { qty: e.target.value, price: prev[l.id]?.price ?? l.unit_price },
+                            }))
+                          }
+                        />
+                      </td>
+                      <td className="num">
+                        <input
+                          className="par-in"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          style={status === "diff" ? { background: "var(--caution-soft)" } : undefined}
+                          value={receiveLines[l.id]?.price ?? l.unit_price}
+                          onChange={(e) =>
+                            setReceiveLines((prev) => ({
+                              ...prev,
+                              [l.id]: { qty: prev[l.id]?.qty ?? l.qty, price: e.target.value },
+                            }))
+                          }
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
