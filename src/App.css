@@ -2131,6 +2131,14 @@ input[type="file"] {
 .scan-row-card .field label { margin-bottom: 3px; }
 .scan-row-nums { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
 @media (max-width: 420px) { .scan-row-nums { grid-template-columns: 1fr; } }
+/* The real converted total for a supplier pack/unit line -- sits right
+   under the Qty/Price inputs the user just typed into (see App.tsx's
+   comment above its usage), not tucked inside the collapsed pack-settings
+   panel above where it's easy to miss. ".warn" covers the "enter a
+   conversion" prompt when the factor isn't resolvable yet. */
+.scan-row-total { margin-top: 6px; padding: 6px 10px; border-radius: 8px; font-weight: 600; font-size: 13px; }
+.scan-row-total.ok { background: var(--brand-soft); color: var(--ink); }
+.scan-row-total.warn { background: var(--caution-soft); color: var(--ink); font-weight: 500; }
 
 /* Collapsed category-total group (Scan end-of-day sales only) -- a
    plain button styled as a summary row rather than a scan-row-card, so

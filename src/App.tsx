@@ -2718,11 +2718,8 @@ export default function App() {
             {!scanResult && (
               <>
                 <p className="hint" style={{ marginTop: -8, marginBottom: 16 }}>
-                  Upload a photo of a supplier receipt or invoice. SAWIS reads it with AWS Textract
-                  and pre-fills the order for you to check and correct — nothing is saved until you
-                  confirm below. Since a receipt usually means the delivery has already arrived,
-                  confirming marks it Received straight away and updates stock and prices, the same
-                  as manually clicking "Mark as Received."
+                  Take or choose a photo of the receipt below — we'll pre-fill the order for you to
+                  check and correct.
                 </p>
                 <div className="field" style={{ marginBottom: 12 }}>
                   <label>Receipt photo</label>
@@ -3069,16 +3066,6 @@ export default function App() {
                                       >
                                         ✕
                                       </button>
-                                      {row.supplierUnit && row.supplierUnit !== matchedItem.base_unit && (
-                                        <div>
-                                          {converted
-                                            ? `→ ${converted.qty.toFixed(2)} ${matchedItem.base_unit} @ ${formatMoney(
-                                                converted.unitPrice,
-                                                orgCurrency
-                                              )}/${matchedItem.base_unit}`
-                                            : "enter a conversion to include this row"}
-                                        </div>
-                                      )}
                                     </div>
                                   )}
                                 </div>
@@ -3087,7 +3074,11 @@ export default function App() {
 
                             <div className="scan-row-nums">
                               <div className="field">
-                                <label>Qty{row.supplierUnit ? ` (${row.supplierUnit})` : ""}</label>
+                                <label>
+                                  {row.supplierUnit && row.supplierUnit !== matchedItem?.base_unit
+                                    ? `Qty received (in ${row.supplierUnit})`
+                                    : "Qty"}
+                                </label>
                                 <input
                                   type="number"
                                   min="0"
@@ -3098,7 +3089,11 @@ export default function App() {
                                 />
                               </div>
                               <div className="field">
-                                <label>Unit price</label>
+                                <label>
+                                  {row.supplierUnit && row.supplierUnit !== matchedItem?.base_unit
+                                    ? `Price per ${row.supplierUnit}`
+                                    : "Unit price"}
+                                </label>
                                 <input
                                   type="number"
                                   min="0"
@@ -3126,6 +3121,21 @@ export default function App() {
                                 />
                               </div>
                             </div>
+                            {/* The whole point of this row: once a supplier pack/unit
+                                conversion is active, show the real total right next to
+                                the Qty/Price the user just typed -- not buried inside a
+                                collapsed settings panel above, which is what made "2"
+                                read as "2 ea" instead of "2 pkg = 200 ea" in practice. */}
+                            {matchedItem && row.supplierUnit && row.supplierUnit !== matchedItem.base_unit && (
+                              <div className={`scan-row-total ${converted ? "ok" : "warn"}`}>
+                                {converted
+                                  ? `= ${converted.qty.toFixed(2)} ${matchedItem.base_unit} total @ ${formatMoney(
+                                      converted.unitPrice,
+                                      orgCurrency
+                                    )}/${matchedItem.base_unit}`
+                                  : "Enter a conversion above to see the real total"}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
