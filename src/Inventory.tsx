@@ -304,6 +304,7 @@ export default function Inventory({
           cheapestPrice={cheapestPrice}
           stockCounts={stockCounts}
           stockCountsError={stockCountsError}
+          onSectionsChanged={onSectionsChanged}
           onStockCountsChanged={() => {
             onStockCountsChanged();
             refreshOnHand();
@@ -956,6 +957,7 @@ function CountSheetsTab({
   cheapestPrice,
   stockCounts,
   stockCountsError,
+  onSectionsChanged,
   onStockCountsChanged,
 }: {
   accessToken: string;
@@ -969,6 +971,7 @@ function CountSheetsTab({
   cheapestPrice: (itemId: string) => number | null;
   stockCounts: StockCountRow[] | null;
   stockCountsError: string | null;
+  onSectionsChanged: () => void;
   onStockCountsChanged: () => void;
 }) {
   const [starting, setStarting] = useState(false);
@@ -1047,6 +1050,7 @@ function CountSheetsTab({
         onHand={onHand}
         cheapestPrice={cheapestPrice}
         onBack={() => setOpenSectionId(null)}
+        onSectionsChanged={onSectionsChanged}
         onSubmitted={() => {
           onStockCountsChanged();
           setOpenSectionId(null);
@@ -1218,6 +1222,7 @@ function CountSheet({
   onHand,
   cheapestPrice,
   onBack,
+  onSectionsChanged,
   onSubmitted,
 }: {
   accessToken: string;
@@ -1227,6 +1232,7 @@ function CountSheet({
   onHand: Record<string, number>;
   cheapestPrice: (itemId: string) => number | null;
   onBack: () => void;
+  onSectionsChanged: () => void;
   onSubmitted: () => void;
 }) {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
@@ -1396,7 +1402,13 @@ function CountSheet({
       const countedSoFar = new Set([...count.lines.map((l) => l.item), ...holdings.filter((h) => checked[h.id]).map((h) => h.itemId)]);
       const nowComplete = allItemIds.size > 0 && Array.from(allItemIds).every((id) => countedSoFar.has(id));
       if (nowComplete && section.count_cadence) {
-        markSectionCounted(accessToken, section.id).catch(() => {});
+        try {
+          await markSectionCounted(accessToken, section.id);
+          onSectionsChanged();
+        } catch {
+          // Best-effort -- the count itself already saved successfully;
+          // a missed schedule bump isn't worth surfacing as an error.
+        }
       }
       onSubmitted();
     } catch (e) {
