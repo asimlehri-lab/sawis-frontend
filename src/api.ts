@@ -1459,6 +1459,69 @@ export interface PurchaseOrder {
   // above stays ex-VAT (qty * unit_price only), matching every
   // POLine.line_total.
   total_with_vat: string;
+  attachments: POAttachmentRow[];
+}
+
+// A photo/document tied to this PO -- the receipt/invoice image a Scan
+// receipt or Scan delivery scan was taken from, or something attached by
+// hand. The file itself lives in S3 server-side; the frontend only ever
+// sees this metadata plus a short-lived download URL fetched on demand
+// (see fetchPOAttachmentDownloadUrl) -- never a direct, permanent link,
+// since the bucket holding suppliers' invoices is private.
+export interface POAttachmentRow {
+  id: string;
+  po: string;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+  source: "scan_receipt" | "scan_delivery" | "manual";
+  uploaded_by: string;
+  uploaded_by_name: string;
+  created_at: string;
+}
+
+export async function uploadPOAttachment(
+  accessToken: string,
+  poId: string,
+  file: File,
+  source: POAttachmentRow["source"]
+): Promise<POAttachmentRow> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("source", source);
+  const res = await fetch(`${API_URL}/api/procurement/purchase-orders/${poId}/attachments/`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: formData,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error((body && typeof body === "object" && body.detail) || "Could not attach that file.");
+  }
+  return res.json();
+}
+
+export async function fetchPOAttachmentDownloadUrl(accessToken: string, attachmentId: string): Promise<string> {
+  const res = await fetch(`${API_URL}/api/procurement/po-attachments/${attachmentId}/download/`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error((body && typeof body === "object" && body.detail) || "Could not open that file.");
+  }
+  const data = await res.json();
+  return data.url;
+}
+
+export async function deletePOAttachment(accessToken: string, attachmentId: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/procurement/po-attachments/${attachmentId}/`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error((body && typeof body === "object" && body.detail) || "Could not remove that attachment.");
+  }
 }
 
 export async function fetchPurchaseOrders(accessToken: string): Promise<PurchaseOrder[]> {
@@ -1750,6 +1813,7 @@ export interface WasteEventRow {
   qty: string;
   reason: string;
   logged_by: string;
+  created_at: string;
 }
 
 export async function fetchWasteEvents(accessToken: string): Promise<WasteEventRow[]> {
@@ -2108,6 +2172,9 @@ export interface Section {
   id: string;
   location: string;
   name: string;
+  count_cadence: "weekly" | "monthly" | null;
+  next_count_due: string | null;
+  last_counted_at: string | null;
 }
 
 export async function fetchSections(accessToken: string): Promise<Section[]> {
@@ -2116,7 +2183,7 @@ export async function fetchSections(accessToken: string): Promise<Section[]> {
 
 export async function createSection(
   accessToken: string,
-  input: { location: string; name: string }
+  input: { location: string; name: string; count_cadence?: "weekly" | "monthly" | null; next_count_due?: string | null }
 ): Promise<Section> {
   const res = await fetch(`${API_URL}/api/catalog/sections/`, {
     method: "POST",
@@ -2134,7 +2201,11 @@ export async function createSection(
   return res.json();
 }
 
-export async function updateSection(accessToken: string, id: string, patch: { name?: string }): Promise<Section> {
+export async function updateSection(
+  accessToken: string,
+  id: string,
+  patch: { name?: string; count_cadence?: "weekly" | "monthly" | null; next_count_due?: string | null }
+): Promise<Section> {
   const res = await fetch(`${API_URL}/api/catalog/sections/${id}/`, {
     method: "PATCH",
     headers: {
@@ -2157,6 +2228,19 @@ export async function deleteSection(accessToken: string, id: string): Promise<vo
     const msg = (body && (body.detail || body.error)) || "Could not delete this section.";
     throw new Error(msg);
   }
+}
+
+// Called once, right after CountSheetsTab finishes submitting every item
+// in a section, so next_count_due advances on its own -- the counter
+// never has to compute or re-enter the next date by hand. A no-op
+// server-side if the section has no cadence set.
+export async function markSectionCounted(accessToken: string, id: string): Promise<Section> {
+  const res = await fetch(`${API_URL}/api/catalog/sections/${id}/mark_counted/`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("Could not update this section's next check date.");
+  return res.json();
 }
 
 export interface CountAssignmentRow {

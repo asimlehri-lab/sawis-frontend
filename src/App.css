@@ -2131,6 +2131,14 @@ input[type="file"] {
 .scan-row-card .field label { margin-bottom: 3px; }
 .scan-row-nums { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
 @media (max-width: 420px) { .scan-row-nums { grid-template-columns: 1fr; } }
+/* The real converted total for a supplier pack/unit line -- sits right
+   under the Qty/Price inputs the user just typed into (see App.tsx's
+   comment above its usage), not tucked inside the collapsed pack-settings
+   panel above where it's easy to miss. ".warn" covers the "enter a
+   conversion" prompt when the factor isn't resolvable yet. */
+.scan-row-total { margin-top: 6px; padding: 6px 10px; border-radius: 8px; font-weight: 600; font-size: 13px; }
+.scan-row-total.ok { background: var(--brand-soft); color: var(--ink); }
+.scan-row-total.warn { background: var(--caution-soft); color: var(--ink); font-weight: 500; }
 
 /* Collapsed category-total group (Scan end-of-day sales only) -- a
    plain button styled as a summary row rather than a scan-row-card, so
@@ -2404,6 +2412,29 @@ input[type="file"] {
 .section-card-meta { font-size: 11.5px; color: var(--muted); }
 .section-preview { font-size: 12px; color: var(--muted); line-height: 1.6; margin-bottom: 12px; min-height: 19px; }
 .section-card-foot { display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; margin-top: 6px; }
+/* Count-in-progress section cards: the whole tile opens the count sheet
+   (see CountSheetsTab in Inventory.tsx) -- "Open sheet" used to be the
+   only click target, which was slower to hit and easy to miss on a phone. */
+.section-card-clickable { position: relative; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
+.section-card-clickable:hover { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+.section-card-clickable:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.section-card-complete { border-color: var(--good); background: var(--good-soft); }
+.section-card-overdue { border-color: var(--brick); }
+.section-card-done-check {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--good);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+}
 .open-link { background: none; border: none; color: var(--brand); font-weight: 700; font-size: 12.5px; padding: 0; cursor: pointer; font-family: inherit; }
 .open-link:hover { text-decoration: underline; }
 .open-link:disabled { color: var(--muted); cursor: not-allowed; text-decoration: none; }
@@ -2536,6 +2567,34 @@ input[type="file"] {
 .task-item-clickable:last-child { border-bottom: none; }
 .task-item-clickable:hover { background: var(--bg); }
 .task-empty { padding: 10px 4px; font-size: 12.5px; color: var(--muted); margin: 0; }
+/* Flagged-item boxes on the End of day > Tasks tab -- same square-box
+   grid language as Inventory's section cards (icon, colour-coded border,
+   whole-box click target), just smaller since each box here only ever
+   needs to carry a name and one or two stats rather than a progress bar
+   and an assignment picker. */
+.task-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(142px, 1fr)); gap: 10px; }
+.task-box {
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 11px 12px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  font-family: inherit;
+}
+.task-box-clickable { cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
+.task-box-clickable:hover { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+.task-box-clickable:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.task-box-icon { width: 24px; height: 24px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #fff; flex: none; }
+.task-box-bad { border-color: var(--caution); background: var(--caution-soft); }
+.task-box-warn { border-color: var(--warn); background: var(--warn-soft); }
+.task-box-overdue { border-color: var(--brick); background: var(--brick-soft); }
+.task-box-name { font-weight: 700; font-size: 12.5px; line-height: 1.3; }
+.task-box-meta { font-size: 11px; color: var(--muted); line-height: 1.3; }
+.task-box-stat { font-size: 11px; font-weight: 700; }
 
 /* Compact per-row cost gauge -- same fill/target-marker anatomy as
    .kpi-meter above, just smaller, so a whole list of dishes can each get

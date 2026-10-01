@@ -11,6 +11,7 @@ import {
   deleteSection,
   fetchOnHand,
   formatMoney,
+  markSectionCounted,
   scanCountSheet,
   updateCountAssignment,
   updateItemHolding,
@@ -74,6 +75,14 @@ function reasonLabel(v: string): string {
 // Purely cosmetic — no backend field for this, just a friendly guess from
 // the section's name so Manage Sections/Count Sheets don't read as a bare
 // list of grey boxes. Falls back to a neutral "store" icon.
+// "2026-10-08" -> "8 Oct", for Section.next_count_due badges/summaries.
+// The literal "T00:00:00" keeps this a local-midnight Date rather than a
+// UTC one, so the displayed day never shifts by one depending on the
+// viewer's timezone offset from UTC.
+function formatDueDate(iso: string): string {
+  return new Date(iso + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
 function sectionIcon(name: string): { emoji: string; cls: string } {
   const n = name.toLowerCase();
   if (n.includes("freez")) return { emoji: "❄", cls: "ic-freeze" };
@@ -295,6 +304,7 @@ export default function Inventory({
           cheapestPrice={cheapestPrice}
           stockCounts={stockCounts}
           stockCountsError={stockCountsError}
+          onSectionsChanged={onSectionsChanged}
           onStockCountsChanged={() => {
             onStockCountsChanged();
             refreshOnHand();
@@ -642,6 +652,8 @@ function SectionsTab({
   const [editing, setEditing] = useState<Section | null>(null);
   const [modalName, setModalName] = useState("");
   const [modalChecked, setModalChecked] = useState<Record<string, boolean>>({});
+  const [modalCadence, setModalCadence] = useState<"weekly" | "monthly" | null>(null);
+  const [modalDueDate, setModalDueDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -652,6 +664,8 @@ function SectionsTab({
     setEditing(null);
     setModalName("");
     setModalChecked({});
+    setModalCadence(null);
+    setModalDueDate("");
     setErr(null);
     setConfirmDelete(false);
     setItemSearch("");
@@ -663,6 +677,8 @@ function SectionsTab({
     setEditing(s);
     setModalName(s.name);
     setModalChecked(Object.fromEntries(holdings.filter((h) => h.section === s.id).map((h) => [h.id, true])));
+    setModalCadence(s.count_cadence);
+    setModalDueDate(s.next_count_due ?? "");
     setErr(null);
     setConfirmDelete(false);
     setItemSearch("");
@@ -670,14 +686,31 @@ function SectionsTab({
     setModalOpen(true);
   }
 
+  // Picking a cadence for the first time (there's nothing useful to
+  // schedule without SOME due date) defaults it to today, same as
+  // ticking a checkbox in the count sheet prefills with the expected
+  // value -- the counter can always move it, but there's always a
+  // sensible starting point rather than an empty picker.
+  function handleCadenceClick(value: "weekly" | "monthly") {
+    setModalCadence((c) => {
+      const next = c === value ? null : value;
+      if (next && !modalDueDate) setModalDueDate(new Date().toISOString().slice(0, 10));
+      return next;
+    });
+  }
+
   async function handleSave() {
     if (!modalName.trim() || !activeLocation) return;
     setSaving(true);
     setErr(null);
     try {
+      const schedule = {
+        count_cadence: modalCadence,
+        next_count_due: modalCadence ? modalDueDate || new Date().toISOString().slice(0, 10) : null,
+      };
       const sectionId = editing
-        ? (await updateSection(accessToken, editing.id, { name: modalName.trim() })).id
-        : (await createSection(accessToken, { location: activeLocation, name: modalName.trim() })).id;
+        ? (await updateSection(accessToken, editing.id, { name: modalName.trim(), ...schedule })).id
+        : (await createSection(accessToken, { location: activeLocation, name: modalName.trim(), ...schedule })).id;
 
       const toChange = holdings.filter((h) => (h.section === sectionId) !== !!modalChecked[h.id]);
       await Promise.all(
@@ -773,6 +806,11 @@ function SectionsTab({
               <div className="section-preview">
                 {itemsInSection.length ? itemsInSection.map((h) => h.itemName).join(" · ") : "No items assigned yet"}
               </div>
+              <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
+                {s.count_cadence
+                  ? `${s.count_cadence === "weekly" ? "Weekly" : "Monthly"} · next ${s.next_count_due ? formatDueDate(s.next_count_due) : "—"}`
+                  : "Not scheduled"}
+              </div>
               <div className="section-card-foot">
                 <button className="open-link" onClick={() => openEdit(s)}>
                   Edit section
@@ -798,6 +836,32 @@ function SectionsTab({
             <div className="field">
               <label>Section name</label>
               <input value={modalName} onChange={(e) => setModalName(e.target.value)} placeholder="e.g. Freezer no. 2" autoFocus />
+            </div>
+            <div className="field">
+              <label>Count schedule</label>
+              <div className="chip-row" style={{ marginBottom: modalCadence ? 8 : 0 }}>
+                <button
+                  type="button"
+                  className={`chip ${modalCadence === "weekly" ? "active" : ""}`}
+                  onClick={() => handleCadenceClick("weekly")}
+                >
+                  Weekly
+                </button>
+                <button
+                  type="button"
+                  className={`chip ${modalCadence === "monthly" ? "active" : ""}`}
+                  onClick={() => handleCadenceClick("monthly")}
+                >
+                  Monthly
+                </button>
+                {!modalCadence && <span className="muted" style={{ fontSize: 12, alignSelf: "center" }}>Not scheduled — count it whenever</span>}
+              </div>
+              {modalCadence && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className="muted" style={{ fontSize: 12.5 }}>Next due</span>
+                  <input type="date" value={modalDueDate} onChange={(e) => setModalDueDate(e.target.value)} style={{ width: 160 }} />
+                </div>
+              )}
             </div>
             <div className="field">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 6 }}>
@@ -893,6 +957,7 @@ function CountSheetsTab({
   cheapestPrice,
   stockCounts,
   stockCountsError,
+  onSectionsChanged,
   onStockCountsChanged,
 }: {
   accessToken: string;
@@ -906,6 +971,7 @@ function CountSheetsTab({
   cheapestPrice: (itemId: string) => number | null;
   stockCounts: StockCountRow[] | null;
   stockCountsError: string | null;
+  onSectionsChanged: () => void;
   onStockCountsChanged: () => void;
 }) {
   const [starting, setStarting] = useState(false);
@@ -984,6 +1050,7 @@ function CountSheetsTab({
         onHand={onHand}
         cheapestPrice={cheapestPrice}
         onBack={() => setOpenSectionId(null)}
+        onSectionsChanged={onSectionsChanged}
         onSubmitted={() => {
           onStockCountsChanged();
           setOpenSectionId(null);
@@ -1061,8 +1128,45 @@ function CountSheetsTab({
           const status = doneCount === 0 ? { label: "To do", cls: "" } : doneCount < itemIds.length ? { label: "In progress", cls: "b-low" } : { label: "Complete", cls: "b-ok" };
           const icon = sectionIcon(s.name);
           const assignedStaffHere = staff.find((m) => m.user === assignment?.assigned_to);
+          const today = new Date().toISOString().slice(0, 10);
+          // A scheduled section's green "Complete" state tracks the
+          // schedule itself -- counted since it last came due, and not
+          // due again yet -- rather than whatever happens to be sitting
+          // in the currently-open count's lines. That matters because one
+          // StockCount often stays open for weeks across many cadence
+          // cycles, so "has a line in the open count" can go stale: count
+          // the Fridge today, and without this it would read green
+          // forever, not just until next week's due date. A section with
+          // no cadence has no schedule to track, so it keeps the simple
+          // "every item has a line in the open count" read.
+          const isComplete = s.count_cadence
+            ? !!s.last_counted_at && !!s.next_count_due && today < s.next_count_due
+            : status.label === "Complete";
+          const overdue = !isComplete && !!s.count_cadence && !!s.next_count_due && s.next_count_due < today;
+          let dueBadge: { label: string; cls: string } | null = null;
+          if (isComplete) {
+            dueBadge = s.next_count_due ? { label: `Next check ${formatDueDate(s.next_count_due)}`, cls: "" } : null;
+          } else if (s.count_cadence && s.next_count_due) {
+            dueBadge = overdue
+              ? { label: `Overdue since ${formatDueDate(s.next_count_due)}`, cls: "warn" }
+              : { label: `Due ${formatDueDate(s.next_count_due)}`, cls: "" };
+          }
           return (
-            <div className="card section-card" key={s.id}>
+            <div
+              className={`card section-card section-card-clickable ${isComplete ? "section-card-complete" : overdue ? "section-card-overdue" : ""}`}
+              key={s.id}
+              onClick={() => itemIds.length > 0 && setOpenSectionId(s.id)}
+              role="button"
+              tabIndex={itemIds.length > 0 ? 0 : -1}
+              onKeyDown={(e) => {
+                if ((e.key === "Enter" || e.key === " ") && itemIds.length > 0) setOpenSectionId(s.id);
+              }}
+            >
+              {isComplete && (
+                <div className="section-card-done-check" title="Completed">
+                  ✓
+                </div>
+              )}
               <div className="section-card-top">
                 <div className={`section-icon ${icon.cls}`}>{icon.emoji}</div>
                 <div>
@@ -1080,7 +1184,7 @@ function CountSheetsTab({
                   {doneCount}/{itemIds.length}
                 </div>
               </div>
-              <div className="assign-row">
+              <div className="assign-row" onClick={(e) => e.stopPropagation()}>
                 <span className="assign-lbl">Assigned to</span>
                 <select
                   className="assign-select"
@@ -1100,9 +1204,11 @@ function CountSheetsTab({
                 </select>
               </div>
               <div className="section-card-foot">
-                <button className="open-link" onClick={() => setOpenSectionId(s.id)} disabled={itemIds.length === 0}>
-                  Open sheet →
-                </button>
+                {dueBadge ? (
+                  <span className={`badge ${dueBadge.cls || (isComplete ? "b-ok" : "")}`}>{dueBadge.label}</span>
+                ) : (
+                  <span />
+                )}
                 <span>
                   {status.label !== "To do" && <span className={`badge ${status.cls}`}>{status.label}</span>} <span className="pct">{pct}%</span>
                 </span>
@@ -1123,6 +1229,7 @@ function CountSheet({
   onHand,
   cheapestPrice,
   onBack,
+  onSectionsChanged,
   onSubmitted,
 }: {
   accessToken: string;
@@ -1132,6 +1239,7 @@ function CountSheet({
   onHand: Record<string, number>;
   cheapestPrice: (itemId: string) => number | null;
   onBack: () => void;
+  onSectionsChanged: () => void;
   onSubmitted: () => void;
 }) {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
@@ -1199,6 +1307,21 @@ function CountSheet({
     return num - (onHand[h.id] ?? 0);
   }
 
+  // A checked row that can't actually be saved -- empty, not a number, or
+  // negative (there's no such thing as a negative physical count). Used
+  // both to block Submit with a clear message and to flag the row itself,
+  // instead of the old behaviour of quietly dropping it with no sign
+  // anything was wrong -- see the handleSubmit comment below.
+  function invalidReason(h: FlatHolding): string | null {
+    if (!checked[h.id]) return null;
+    const q = qty[h.id];
+    if (q === undefined || q === "") return "Enter a counted quantity";
+    const num = Number(q);
+    if (!Number.isFinite(num)) return "Enter a valid number";
+    if (num < 0) return "A physical count can't be negative -- enter what's actually there";
+    return null;
+  }
+
   function handleTick(h: FlatHolding, isChecked: boolean) {
     setChecked((c) => ({ ...c, [h.id]: isChecked }));
     if (isChecked) {
@@ -1235,15 +1358,27 @@ function CountSheet({
   const pct = holdings.length ? Math.round((done / holdings.length) * 100) : 0;
 
   async function handleSubmit() {
-    setSaving(true);
     setErr(null);
+    // Never silently drop a checked row -- a counted quantity can't be
+    // negative, but quietly skipping it used to leave Submit looking
+    // successful while the section's done/total count stayed wrong with
+    // no explanation (this is what was behind sections getting stuck
+    // showing e.g. "3/13" after a full count was submitted). Block and
+    // say exactly which items need a real number instead.
+    const problems = holdings.filter((h) => invalidReason(h));
+    if (problems.length > 0) {
+      setErr(
+        `${problems.length} item${problems.length === 1 ? "" : "s"} need a valid, non-negative count before this can be submitted: ${problems
+          .map((h) => h.itemName)
+          .join(", ")}`
+      );
+      return;
+    }
+    setSaving(true);
     try {
       for (const h of holdings) {
         if (!checked[h.id]) continue;
-        const q = qty[h.id];
-        if (q === undefined || q === "") continue;
-        const countedQty = Number(q);
-        if (!Number.isFinite(countedQty) || countedQty < 0) continue;
+        const countedQty = Number(qty[h.id]);
         const varQty = variance(h);
         const line = await createCountLine(accessToken, {
           count: count.id,
@@ -1263,6 +1398,23 @@ function CountSheet({
             source_type: "count_line",
             source_id: line.id,
           });
+        }
+      }
+      // If this submission (combined with anything already counted on
+      // this open count) finishes every item in the section, advance its
+      // schedule -- best-effort, since the count itself already saved
+      // successfully and a missed schedule bump isn't worth surfacing as
+      // an error to whoever's counting.
+      const allItemIds = new Set(holdings.map((h) => h.itemId));
+      const countedSoFar = new Set([...count.lines.map((l) => l.item), ...holdings.filter((h) => checked[h.id]).map((h) => h.itemId)]);
+      const nowComplete = allItemIds.size > 0 && Array.from(allItemIds).every((id) => countedSoFar.has(id));
+      if (nowComplete && section.count_cadence) {
+        try {
+          await markSectionCounted(accessToken, section.id);
+          onSectionsChanged();
+        } catch {
+          // Best-effort -- the count itself already saved successfully;
+          // a missed schedule bump isn't worth surfacing as an error.
         }
       }
       onSubmitted();
@@ -1358,6 +1510,7 @@ function CountSheet({
           const off = varQty !== null && Math.abs(varQty) > 0.001;
           const hasNote = !!(reason[h.id] || note[h.id]);
           const isOpen = openNoteId === h.id;
+          const invalid = invalidReason(h);
           const btnCls = hasNote ? "note-btn-sm has" : off ? "note-btn-sm need" : "note-btn-sm";
           const btnTxt = hasNote ? "💬 note" : off ? "+ why?" : "+ note";
           const scanConf = scanConfidence[h.id];
@@ -1385,11 +1538,24 @@ function CountSheet({
                   disabled={!checked[h.id]}
                   value={qty[h.id] ?? ""}
                   onChange={(e) => handleQtyChange(h, e.target.value)}
-                  style={{ width: 96, fontFamily: "monospace", textAlign: "right", border: "1.5px solid var(--border)", borderRadius: 8, padding: "8px 10px" }}
+                  style={{
+                    width: 96,
+                    fontFamily: "monospace",
+                    textAlign: "right",
+                    border: invalid ? "1.5px solid var(--warn)" : "1.5px solid var(--border)",
+                    background: invalid ? "var(--warn-soft)" : undefined,
+                    borderRadius: 8,
+                    padding: "8px 10px",
+                  }}
                 />
                 <span className="cunit muted" style={{ fontSize: 12.5, minWidth: 40 }}>
                   {h.baseUnit}
                 </span>
+                {invalid && (
+                  <span className="badge warn" title={invalid}>
+                    ⚠ {invalid}
+                  </span>
+                )}
                 <span className={`cvar ${varQty === null ? "v-none" : off ? (varQty < 0 ? "v-short" : "v-over") : "v-ok"}`} style={{ minWidth: 100, textAlign: "right", fontFamily: "monospace", fontSize: 12.5, fontWeight: 700 }}>
                   {varQty === null ? "—" : !off ? "✓ matches" : `${varQty > 0 ? "+" : "−"}${Math.abs(varQty).toFixed(2)} ${h.baseUnit}`}
                 </span>

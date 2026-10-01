@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { costBand, costBandColor, fetchNotifications, fetchStockCounts } from "./api";
-import type { AppNotification, CatalogItem, Location, Me, Recipe, StockCountRow, StockMovementRow } from "./api";
+import type { AppNotification, CatalogItem, CostBand, Location, Me, Recipe, StockCountRow, StockMovementRow } from "./api";
 
 interface Props {
   me: Me;
@@ -53,6 +53,13 @@ const sectionHeadStyle: React.CSSProperties = {
 
 function locationNameOf(locations: Location[], id: string): string {
   return locations.find((l) => l.id === id)?.name ?? "Unknown location";
+}
+
+// Tinted background to pair with costBandColor()'s solid border/icon
+// colour, same "soft fill + solid border" treatment Inventory's section
+// cards use for their own complete/overdue states.
+function bandSoftColor(band: CostBand): string {
+  return band === "good" ? "var(--good-soft)" : band === "caution" ? "var(--caution-soft)" : "var(--brick-soft)";
 }
 
 // The End of day > Tasks tab -- role-gated "what SAWIS has found and needs
@@ -217,39 +224,37 @@ function ManagerTasks({
         {costBreaches.length === 0 ? (
           <p className="task-empty">Every dish is within its food/drink-cost target.</p>
         ) : (
-          <div className="task-list">
-            {costBreaches.slice(0, 8).map((r) => {
+          <div className="task-grid">
+            {costBreaches.slice(0, 11).map((r) => {
               const scaleMax = Math.max(r.target * 2, 50);
               return (
                 <button
                   key={r.id}
                   type="button"
-                  className="task-item task-item-clickable"
+                  className="task-box task-box-clickable"
+                  style={{ borderColor: costBandColor(r.band), background: bandSoftColor(r.band) }}
                   onClick={() => onOpenRecipe(r.id)}
                 >
-                  <div className="gauge-row">
-                    <div className="gauge-row-name">
-                      <b>{r.name}</b>
-                      <span className="muted">
-                        {r.pct.toFixed(1)}% · target {r.target}%
-                      </span>
-                    </div>
-                    <div className="gauge-track">
-                      <div
-                        className="gauge-fill"
-                        style={{
-                          width: `${Math.min((r.pct / scaleMax) * 100, 100)}%`,
-                          background: costBandColor(r.band),
-                        }}
-                      />
-                      <div className="gauge-tgt" style={{ left: `${Math.min((r.target / scaleMax) * 100, 100)}%` }} />
-                    </div>
+                  <div className="task-box-icon" style={{ background: costBandColor(r.band) }}>💰</div>
+                  <div className="task-box-name">{r.name}</div>
+                  <div className="task-box-meta">
+                    {r.pct.toFixed(1)}% · target {r.target}%
+                  </div>
+                  <div className="gauge-track">
+                    <div
+                      className="gauge-fill"
+                      style={{
+                        width: `${Math.min((r.pct / scaleMax) * 100, 100)}%`,
+                        background: costBandColor(r.band),
+                      }}
+                    />
+                    <div className="gauge-tgt" style={{ left: `${Math.min((r.target / scaleMax) * 100, 100)}%` }} />
                   </div>
                 </button>
               );
             })}
-            {costBreaches.length > 8 && (
-              <div className="task-empty">+{costBreaches.length - 8} more over target — see Recipes for the full list.</div>
+            {costBreaches.length > 11 && (
+              <div className="task-empty">+{costBreaches.length - 11} more over target — see Recipes for the full list.</div>
             )}
           </div>
         )}
@@ -266,19 +271,18 @@ function ManagerTasks({
           <p className="task-empty">Nothing is below par right now.</p>
         ) : (
           <>
-            <div className="task-list">
-              {belowPar.slice(0, 8).map((a) => (
-                <div key={a.key} className="task-item">
-                  <div>
-                    <b>{a.itemName}</b>
-                    <span className="muted"> · {a.locationName}</span>
-                  </div>
-                  <span className="muted" style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
+            <div className="task-grid">
+              {belowPar.slice(0, 11).map((a) => (
+                <button key={a.key} type="button" className="task-box task-box-clickable task-box-bad" onClick={onViewReorder}>
+                  <div className="task-box-icon" style={{ background: "var(--caution)" }}>📦</div>
+                  <div className="task-box-name">{a.itemName}</div>
+                  <div className="task-box-meta">{a.locationName}</div>
+                  <div className="task-box-stat" style={{ color: "var(--caution)" }}>
                     {a.onHand.toFixed(2)} / {a.parLevel} {a.baseUnit}
-                  </span>
-                </div>
+                  </div>
+                </button>
               ))}
-              {belowPar.length > 8 && <div className="task-empty">+{belowPar.length - 8} more below par.</div>}
+              {belowPar.length > 11 && <div className="task-empty">+{belowPar.length - 11} more below par.</div>}
             </div>
             <button type="button" className="btn-ghost small" style={{ marginTop: 10 }} onClick={onViewReorder}>
               Go to reorder list →
@@ -297,24 +301,33 @@ function ManagerTasks({
         {upcomingDeliveries.length === 0 ? (
           <p className="task-empty">Nothing expected in the next {NOTIF_WINDOW_FUTURE_DAYS} days.</p>
         ) : (
-          <div className="task-list">
-            {upcomingDeliveries.map((n) => (
-              <button
-                key={n.id}
-                type="button"
-                className="task-item task-item-clickable"
-                onClick={() => n.purchase_order && onOpenPO(n.purchase_order)}
-              >
-                <div>
-                  <b>{n.po_number || "Delivery"}</b>
-                  <span className="muted"> · {n.location_name}</span>
-                  {n.supplier_name && <span className="muted"> · {n.supplier_name}</span>}
-                </div>
-                <span className="muted" style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
-                  {fmtRelativeDay(n.relevant_date)}
-                </span>
-              </button>
-            ))}
+          <div className="task-grid">
+            {upcomingDeliveries.slice(0, 11).map((n) => {
+              const days = daysFromToday(n.relevant_date);
+              const boxCls = days < 0 ? "task-box-overdue" : days <= 1 ? "task-box-warn" : "";
+              const iconBg = days < 0 ? "var(--brick)" : days <= 1 ? "var(--warn)" : "var(--muted)";
+              return (
+                <button
+                  key={n.id}
+                  type="button"
+                  className={`task-box task-box-clickable ${boxCls}`}
+                  onClick={() => n.purchase_order && onOpenPO(n.purchase_order)}
+                >
+                  <div className="task-box-icon" style={{ background: iconBg }}>🚚</div>
+                  <div className="task-box-name">{n.po_number || "Delivery"}</div>
+                  <div className="task-box-meta">
+                    {n.location_name}
+                    {n.supplier_name && ` · ${n.supplier_name}`}
+                  </div>
+                  <div className="task-box-stat" style={{ color: iconBg }}>
+                    {fmtRelativeDay(n.relevant_date)}
+                  </div>
+                </button>
+              );
+            })}
+            {upcomingDeliveries.length > 11 && (
+              <div className="task-empty">+{upcomingDeliveries.length - 11} more expected soon.</div>
+            )}
           </div>
         )}
       </section>
@@ -394,23 +407,26 @@ function StaffTasks({
         {myAssignments.length === 0 ? (
           <p className="task-empty">Nothing assigned to you right now.</p>
         ) : (
-          <div className="task-list">
-            {myAssignments.map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                className="task-item task-item-clickable"
-                onClick={() => onNavigateApp("Inventory")}
-              >
-                <div>
-                  <b>{a.section_name}</b>
-                  <span className="muted"> · {a.locationName}</span>
-                </div>
-                <span className={`tag ${a.status === "in_progress" ? "warn" : "bad"}`}>
-                  {a.status === "in_progress" ? "In progress" : "To do"}
-                </span>
-              </button>
-            ))}
+          <div className="task-grid">
+            {myAssignments.map((a) => {
+              const inProgress = a.status === "in_progress";
+              const iconBg = inProgress ? "var(--warn)" : "var(--caution)";
+              return (
+                <button
+                  key={a.id}
+                  type="button"
+                  className={`task-box task-box-clickable ${inProgress ? "task-box-warn" : "task-box-bad"}`}
+                  onClick={() => onNavigateApp("Inventory")}
+                >
+                  <div className="task-box-icon" style={{ background: iconBg }}>🧮</div>
+                  <div className="task-box-name">{a.section_name}</div>
+                  <div className="task-box-meta">{a.locationName}</div>
+                  <div className="task-box-stat" style={{ color: iconBg }}>
+                    {inProgress ? "In progress" : "To do"}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </section>
@@ -425,23 +441,27 @@ function StaffTasks({
         {upcomingChecks.length === 0 ? (
           <p className="task-empty">No inventory check due in the next {NOTIF_WINDOW_FUTURE_DAYS} days.</p>
         ) : (
-          <div className="task-list">
-            {upcomingChecks.map((n) => (
-              <button
-                key={n.id}
-                type="button"
-                className="task-item task-item-clickable"
-                onClick={() => onNavigateApp("Inventory")}
-              >
-                <div>
-                  <b>Inventory check due</b>
-                  <span className="muted"> · {n.location_name}</span>
-                </div>
-                <span className="muted" style={{ fontSize: 11.5, whiteSpace: "nowrap" }}>
-                  {fmtRelativeDay(n.relevant_date)}
-                </span>
-              </button>
-            ))}
+          <div className="task-grid">
+            {upcomingChecks.map((n) => {
+              const days = daysFromToday(n.relevant_date);
+              const boxCls = days < 0 ? "task-box-overdue" : days <= 1 ? "task-box-warn" : "";
+              const iconBg = days < 0 ? "var(--brick)" : days <= 1 ? "var(--warn)" : "var(--muted)";
+              return (
+                <button
+                  key={n.id}
+                  type="button"
+                  className={`task-box task-box-clickable ${boxCls}`}
+                  onClick={() => onNavigateApp("Inventory")}
+                >
+                  <div className="task-box-icon" style={{ background: iconBg }}>🧮</div>
+                  <div className="task-box-name">Inventory check due</div>
+                  <div className="task-box-meta">{n.location_name}</div>
+                  <div className="task-box-stat" style={{ color: iconBg }}>
+                    {fmtRelativeDay(n.relevant_date)}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         )}
       </section>
