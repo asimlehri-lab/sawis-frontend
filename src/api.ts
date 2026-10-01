@@ -2171,6 +2171,8 @@ export interface Section {
   id: string;
   location: string;
   name: string;
+  count_cadence: "weekly" | "monthly" | null;
+  next_count_due: string | null;
 }
 
 export async function fetchSections(accessToken: string): Promise<Section[]> {
@@ -2179,7 +2181,7 @@ export async function fetchSections(accessToken: string): Promise<Section[]> {
 
 export async function createSection(
   accessToken: string,
-  input: { location: string; name: string }
+  input: { location: string; name: string; count_cadence?: "weekly" | "monthly" | null; next_count_due?: string | null }
 ): Promise<Section> {
   const res = await fetch(`${API_URL}/api/catalog/sections/`, {
     method: "POST",
@@ -2197,7 +2199,11 @@ export async function createSection(
   return res.json();
 }
 
-export async function updateSection(accessToken: string, id: string, patch: { name?: string }): Promise<Section> {
+export async function updateSection(
+  accessToken: string,
+  id: string,
+  patch: { name?: string; count_cadence?: "weekly" | "monthly" | null; next_count_due?: string | null }
+): Promise<Section> {
   const res = await fetch(`${API_URL}/api/catalog/sections/${id}/`, {
     method: "PATCH",
     headers: {
@@ -2220,6 +2226,19 @@ export async function deleteSection(accessToken: string, id: string): Promise<vo
     const msg = (body && (body.detail || body.error)) || "Could not delete this section.";
     throw new Error(msg);
   }
+}
+
+// Called once, right after CountSheetsTab finishes submitting every item
+// in a section, so next_count_due advances on its own -- the counter
+// never has to compute or re-enter the next date by hand. A no-op
+// server-side if the section has no cadence set.
+export async function markSectionCounted(accessToken: string, id: string): Promise<Section> {
+  const res = await fetch(`${API_URL}/api/catalog/sections/${id}/mark_counted/`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("Could not update this section's next check date.");
+  return res.json();
 }
 
 export interface CountAssignmentRow {

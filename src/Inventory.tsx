@@ -11,6 +11,7 @@ import {
   deleteSection,
   fetchOnHand,
   formatMoney,
+  markSectionCounted,
   scanCountSheet,
   updateCountAssignment,
   updateItemHolding,
@@ -74,6 +75,14 @@ function reasonLabel(v: string): string {
 // Purely cosmetic — no backend field for this, just a friendly guess from
 // the section's name so Manage Sections/Count Sheets don't read as a bare
 // list of grey boxes. Falls back to a neutral "store" icon.
+// "2026-10-08" -> "8 Oct", for Section.next_count_due badges/summaries.
+// The literal "T00:00:00" keeps this a local-midnight Date rather than a
+// UTC one, so the displayed day never shifts by one depending on the
+// viewer's timezone offset from UTC.
+function formatDueDate(iso: string): string {
+  return new Date(iso + "T00:00:00").toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
+
 function sectionIcon(name: string): { emoji: string; cls: string } {
   const n = name.toLowerCase();
   if (n.includes("freez")) return { emoji: "❄", cls: "ic-freeze" };
@@ -642,6 +651,8 @@ function SectionsTab({
   const [editing, setEditing] = useState<Section | null>(null);
   const [modalName, setModalName] = useState("");
   const [modalChecked, setModalChecked] = useState<Record<string, boolean>>({});
+  const [modalCadence, setModalCadence] = useState<"weekly" | "monthly" | null>(null);
+  const [modalDueDate, setModalDueDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -652,6 +663,8 @@ function SectionsTab({
     setEditing(null);
     setModalName("");
     setModalChecked({});
+    setModalCadence(null);
+    setModalDueDate("");
     setErr(null);
     setConfirmDelete(false);
     setItemSearch("");
@@ -663,6 +676,8 @@ function SectionsTab({
     setEditing(s);
     setModalName(s.name);
     setModalChecked(Object.fromEntries(holdings.filter((h) => h.section === s.id).map((h) => [h.id, true])));
+    setModalCadence(s.count_cadence);
+    setModalDueDate(s.next_count_due ?? "");
     setErr(null);
     setConfirmDelete(false);
     setItemSearch("");
@@ -670,14 +685,31 @@ function SectionsTab({
     setModalOpen(true);
   }
 
+  // Picking a cadence for the first time (there's nothing useful to
+  // schedule without SOME due date) defaults it to today, same as
+  // ticking a checkbox in the count sheet prefills with the expected
+  // value -- the counter can always move it, but there's always a
+  // sensible starting point rather than an empty picker.
+  function handleCadenceClick(value: "weekly" | "monthly") {
+    setModalCadence((c) => {
+      const next = c === value ? null : value;
+      if (next && !modalDueDate) setModalDueDate(new Date().toISOString().slice(0, 10));
+      return next;
+    });
+  }
+
   async function handleSave() {
     if (!modalName.trim() || !activeLocation) return;
     setSaving(true);
     setErr(null);
     try {
+      const schedule = {
+        count_cadence: modalCadence,
+        next_count_due: modalCadence ? modalDueDate || new Date().toISOString().slice(0, 10) : null,
+      };
       const sectionId = editing
-        ? (await updateSection(accessToken, editing.id, { name: modalName.trim() })).id
-        : (await createSection(accessToken, { location: activeLocation, name: modalName.trim() })).id;
+        ? (await updateSection(accessToken, editing.id, { name: modalName.trim(), ...schedule })).id
+        : (await createSection(accessToken, { location: activeLocation, name: modalName.trim(), ...schedule })).id;
 
       const toChange = holdings.filter((h) => (h.section === sectionId) !== !!modalChecked[h.id]);
       await Promise.all(
@@ -773,6 +805,11 @@ function SectionsTab({
               <div className="section-preview">
                 {itemsInSection.length ? itemsInSection.map((h) => h.itemName).join(" · ") : "No items assigned yet"}
               </div>
+              <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
+                {s.count_cadence
+                  ? `${s.count_cadence === "weekly" ? "Weekly" : "Monthly"} · next ${s.next_count_due ? formatDueDate(s.next_count_due) : "—"}`
+                  : "Not scheduled"}
+              </div>
               <div className="section-card-foot">
                 <button className="open-link" onClick={() => openEdit(s)}>
                   Edit section
@@ -798,6 +835,32 @@ function SectionsTab({
             <div className="field">
               <label>Section name</label>
               <input value={modalName} onChange={(e) => setModalName(e.target.value)} placeholder="e.g. Freezer no. 2" autoFocus />
+            </div>
+            <div className="field">
+              <label>Count schedule</label>
+              <div className="chip-row" style={{ marginBottom: modalCadence ? 8 : 0 }}>
+                <button
+                  type="button"
+                  className={`chip ${modalCadence === "weekly" ? "active" : ""}`}
+                  onClick={() => handleCadenceClick("weekly")}
+                >
+                  Weekly
+                </button>
+                <button
+                  type="button"
+                  className={`chip ${modalCadence === "monthly" ? "active" : ""}`}
+                  onClick={() => handleCadenceClick("monthly")}
+                >
+                  Monthly
+                </button>
+                {!modalCadence && <span className="muted" style={{ fontSize: 12, alignSelf: "center" }}>Not scheduled — count it whenever</span>}
+              </div>
+              {modalCadence && (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span className="muted" style={{ fontSize: 12.5 }}>Next due</span>
+                  <input type="date" value={modalDueDate} onChange={(e) => setModalDueDate(e.target.value)} style={{ width: 160 }} />
+                </div>
+              )}
             </div>
             <div className="field">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 6 }}>
@@ -1061,8 +1124,38 @@ function CountSheetsTab({
           const status = doneCount === 0 ? { label: "To do", cls: "" } : doneCount < itemIds.length ? { label: "In progress", cls: "b-low" } : { label: "Complete", cls: "b-ok" };
           const icon = sectionIcon(s.name);
           const assignedStaffHere = staff.find((m) => m.user === assignment?.assigned_to);
+          const isComplete = status.label === "Complete";
+          // Scheduling badge -- completed sections show when they're next
+          // due again (nothing to show if the section has no cadence
+          // set); an unfinished section whose due date has passed shows
+          // clearly as overdue rather than looking the same as one with
+          // no schedule at all.
+          const today = new Date().toISOString().slice(0, 10);
+          const overdue = !isComplete && !!s.next_count_due && s.next_count_due < today;
+          let dueBadge: { label: string; cls: string } | null = null;
+          if (isComplete) {
+            dueBadge = s.count_cadence && s.next_count_due ? { label: `Next check ${formatDueDate(s.next_count_due)}`, cls: "" } : null;
+          } else if (s.count_cadence && s.next_count_due) {
+            dueBadge = overdue
+              ? { label: `Overdue since ${formatDueDate(s.next_count_due)}`, cls: "warn" }
+              : { label: `Due ${formatDueDate(s.next_count_due)}`, cls: "" };
+          }
           return (
-            <div className="card section-card" key={s.id}>
+            <div
+              className={`card section-card section-card-clickable ${isComplete ? "section-card-complete" : overdue ? "section-card-overdue" : ""}`}
+              key={s.id}
+              onClick={() => itemIds.length > 0 && setOpenSectionId(s.id)}
+              role="button"
+              tabIndex={itemIds.length > 0 ? 0 : -1}
+              onKeyDown={(e) => {
+                if ((e.key === "Enter" || e.key === " ") && itemIds.length > 0) setOpenSectionId(s.id);
+              }}
+            >
+              {isComplete && (
+                <div className="section-card-done-check" title="Completed">
+                  ✓
+                </div>
+              )}
               <div className="section-card-top">
                 <div className={`section-icon ${icon.cls}`}>{icon.emoji}</div>
                 <div>
@@ -1080,7 +1173,7 @@ function CountSheetsTab({
                   {doneCount}/{itemIds.length}
                 </div>
               </div>
-              <div className="assign-row">
+              <div className="assign-row" onClick={(e) => e.stopPropagation()}>
                 <span className="assign-lbl">Assigned to</span>
                 <select
                   className="assign-select"
@@ -1100,9 +1193,11 @@ function CountSheetsTab({
                 </select>
               </div>
               <div className="section-card-foot">
-                <button className="open-link" onClick={() => setOpenSectionId(s.id)} disabled={itemIds.length === 0}>
-                  Open sheet →
-                </button>
+                {dueBadge ? (
+                  <span className={`badge ${dueBadge.cls || (isComplete ? "b-ok" : "")}`}>{dueBadge.label}</span>
+                ) : (
+                  <span />
+                )}
                 <span>
                   {status.label !== "To do" && <span className={`badge ${status.cls}`}>{status.label}</span>} <span className="pct">{pct}%</span>
                 </span>
@@ -1291,6 +1386,17 @@ function CountSheet({
             source_id: line.id,
           });
         }
+      }
+      // If this submission (combined with anything already counted on
+      // this open count) finishes every item in the section, advance its
+      // schedule -- best-effort, since the count itself already saved
+      // successfully and a missed schedule bump isn't worth surfacing as
+      // an error to whoever's counting.
+      const allItemIds = new Set(holdings.map((h) => h.itemId));
+      const countedSoFar = new Set([...count.lines.map((l) => l.item), ...holdings.filter((h) => checked[h.id]).map((h) => h.itemId)]);
+      const nowComplete = allItemIds.size > 0 && Array.from(allItemIds).every((id) => countedSoFar.has(id));
+      if (nowComplete && section.count_cadence) {
+        markSectionCounted(accessToken, section.id).catch(() => {});
       }
       onSubmitted();
     } catch (e) {
