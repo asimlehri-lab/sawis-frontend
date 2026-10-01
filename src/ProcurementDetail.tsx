@@ -598,7 +598,9 @@ export default function ProcurementDetail({
     if (!Number.isFinite(supplierUnitPriceNum)) return null;
     const factor = supplierUnitPriceNum / unitPriceNum;
     if (!Number.isFinite(factor) || factor <= 0) return null;
-    return { supplierUnit: link.supplier_unit, packQty: String(factor) };
+    // Same float-division rounding as App.tsx's own copy -- capped to 2dp,
+    // a pack size a human reads and edits, not a raw stored cost figure.
+    return { supplierUnit: link.supplier_unit, packQty: String(parseFloat(factor.toFixed(2))) };
   }
 
   function handleAddItemSelect(itemId: string) {

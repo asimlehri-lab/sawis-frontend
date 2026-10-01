@@ -249,7 +249,12 @@ function findKnownSupplierUnit(
   if (!Number.isFinite(supplierUnitPriceNum)) return null;
   const factor = supplierUnitPriceNum / unitPriceNum;
   if (!Number.isFinite(factor) || factor <= 0) return null;
-  return { supplierUnit: link.supplier_unit, packQty: String(factor) };
+  // Back-calculating a factor from two stored prices (rather than reading one
+  // taught directly) routinely lands on something like 99.99999999999999 from
+  // plain float division -- capped to 2dp for the same reason every other
+  // quantity in this app is (see formatQty), since this is a pack size a
+  // human reads and edits, not a raw stored cost figure.
+  return { supplierUnit: link.supplier_unit, packQty: String(parseFloat(factor.toFixed(2))) };
 }
 
 // Same normalisation as the backend's _normalize_description_key
