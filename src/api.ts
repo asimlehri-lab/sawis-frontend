@@ -1459,6 +1459,69 @@ export interface PurchaseOrder {
   // above stays ex-VAT (qty * unit_price only), matching every
   // POLine.line_total.
   total_with_vat: string;
+  attachments: POAttachmentRow[];
+}
+
+// A photo/document tied to this PO -- the receipt/invoice image a Scan
+// receipt or Scan delivery scan was taken from, or something attached by
+// hand. The file itself lives in S3 server-side; the frontend only ever
+// sees this metadata plus a short-lived download URL fetched on demand
+// (see fetchPOAttachmentDownloadUrl) -- never a direct, permanent link,
+// since the bucket holding suppliers' invoices is private.
+export interface POAttachmentRow {
+  id: string;
+  po: string;
+  original_filename: string;
+  content_type: string;
+  size_bytes: number;
+  source: "scan_receipt" | "scan_delivery" | "manual";
+  uploaded_by: string;
+  uploaded_by_name: string;
+  created_at: string;
+}
+
+export async function uploadPOAttachment(
+  accessToken: string,
+  poId: string,
+  file: File,
+  source: POAttachmentRow["source"]
+): Promise<POAttachmentRow> {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("source", source);
+  const res = await fetch(`${API_URL}/api/procurement/purchase-orders/${poId}/attachments/`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: formData,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error((body && typeof body === "object" && body.detail) || "Could not attach that file.");
+  }
+  return res.json();
+}
+
+export async function fetchPOAttachmentDownloadUrl(accessToken: string, attachmentId: string): Promise<string> {
+  const res = await fetch(`${API_URL}/api/procurement/po-attachments/${attachmentId}/download/`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error((body && typeof body === "object" && body.detail) || "Could not open that file.");
+  }
+  const data = await res.json();
+  return data.url;
+}
+
+export async function deletePOAttachment(accessToken: string, attachmentId: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/procurement/po-attachments/${attachmentId}/`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error((body && typeof body === "object" && body.detail) || "Could not remove that attachment.");
+  }
 }
 
 export async function fetchPurchaseOrders(accessToken: string): Promise<PurchaseOrder[]> {

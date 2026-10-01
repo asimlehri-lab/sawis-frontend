@@ -23,6 +23,7 @@ import {
   createPOLine,
   receivePurchaseOrder,
   scanReceipt,
+  uploadPOAttachment,
   fetchItemSuppliers,
   fetchItemReceiptAliases,
   fetchWasteEvents,
@@ -644,6 +645,11 @@ export default function App() {
   // "Scan receipt" section further down for the review modal itself.
   const [showScanReceipt, setShowScanReceipt] = useState(false);
   const [scanFileName, setScanFileName] = useState<string | null>(null);
+  // The actual File, kept alongside its name -- needed once the PO this
+  // scan produces actually exists, to attach the original photo to it
+  // (see markScannedPOReceived below). scanFileName alone was enough for
+  // the review banner, this wasn't needed before attachments existed.
+  const [scanFile, setScanFile] = useState<File | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<ScannedReceipt | null>(null);
@@ -1200,6 +1206,7 @@ export default function App() {
 
   function resetScan() {
     setScanFileName(null);
+    setScanFile(null);
     setScanError(null);
     setScanResult(null);
     setScanSupplierId("");
@@ -1276,6 +1283,7 @@ export default function App() {
   async function handleScanFileSelected(file: File) {
     if (!accessToken) return;
     setScanFileName(file.name);
+    setScanFile(file);
     setScanError(null);
     setScanResult(null);
     setScanRows([]);
@@ -1431,6 +1439,16 @@ export default function App() {
     // that changes it, so the very next scan sees it.
     fetchItemSuppliers(accessToken as string).then(setItemSupplierLinks).catch(() => {});
     fetchItemReceiptAliases(accessToken as string).then(setItemReceiptAliases).catch(() => {});
+
+    // The PO is now real and received -- attach the original scanned
+    // photo to it. This is the one point every success path (matched-
+    // existing-PO, new-PO, and the retry-receive path) converges on, so
+    // it only needs wiring once here rather than in all three call sites.
+    // Best-effort: a failed upload doesn't undo the receive the user is
+    // waiting on, just quietly skips the save.
+    if (scanFile) {
+      uploadPOAttachment(accessToken as string, po.id, scanFile, "scan_receipt").catch(() => {});
+    }
   }
 
   async function handleCreatePOFromScan() {

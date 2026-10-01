@@ -14,6 +14,9 @@ import {
   autoFactor,
   convertToBaseUnit,
   scanReceipt,
+  uploadPOAttachment,
+  fetchPOAttachmentDownloadUrl,
+  deletePOAttachment,
 } from "./api";
 import type { PurchaseOrder, CatalogItem, Supplier, ItemSupplierRow, Location } from "./api";
 import SearchSelect from "./SearchSelect";
@@ -41,6 +44,11 @@ const STATUS_LABEL: Record<PurchaseOrder["status"], string> = {
   received: "Received",
   amended: "Amended",
 };
+const ATTACHMENT_SOURCE_LABEL: Record<"scan_receipt" | "scan_delivery" | "manual", string> = {
+  scan_receipt: "Scan receipt",
+  scan_delivery: "Scan delivery",
+  manual: "Attached by hand",
+};
 const DEPARTMENTS = [
   { value: "kitchen", label: "Kitchen" },
   { value: "bar", label: "Bar" },
@@ -56,6 +64,14 @@ const DEPARTMENTS = [
 // POLine/ItemSupplier keep more internally for accurate costing.
 function formatQty(n: number): string {
   return parseFloat(n.toFixed(2)).toString();
+}
+
+// "1.2 MB" / "480 KB" / "900 B" -- attachments are photos/PDFs, not
+// something a user needs byte-precision on, just a sanity-check size.
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 // Duplicated from App.tsx's Scan receipt review (matchScore/cleanNumeric)
@@ -167,6 +183,15 @@ export default function ProcurementDetail({
     lineStatus: Record<string, "match" | "diff" | "missing">;
     extra: string[];
   } | null>(null);
+
+  // Attachments -- the PO's own photo/document trail (receipt/invoice
+  // images, or anything attached by hand). The list itself lives on `po.
+  // attachments` (nested by the backend), so no separate fetch/state for
+  // the list -- these three just track in-flight per-action UI state.
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [openingAttachmentId, setOpeningAttachmentId] = useState<string | null>(null);
+  const [deletingAttachmentId, setDeletingAttachmentId] = useState<string | null>(null);
 
   const [showSend, setShowSend] = useState(false);
   const [sending, setSending] = useState(false);
@@ -438,10 +463,65 @@ export default function ProcurementDetail({
 
       setReceiveLines(nextReceiveLines);
       setDeliveryScan({ lineStatus, extra });
+
+      uploadPOAttachment(accessToken, po.id, file, "scan_delivery")
+        .then((attachment) => setPo((prev) => (prev ? { ...prev, attachments: [attachment, ...prev.attachments] } : prev)))
+        .catch(() => {
+          // Attachment storage is a bonus, not a blocker -- the scan
+          // review above already worked and is what the user is waiting
+          // on. A quiet skip here (e.g. attachments not configured on the
+          // server yet) shouldn't interrupt that.
+        });
     } catch (err) {
       setScanDeliveryError(err instanceof Error ? err.message : "Could not scan that photo.");
     } finally {
       setScanningDelivery(false);
+    }
+  }
+
+  async function handleManualAttachmentFile(file: File) {
+    if (!po) return;
+    setUploadingAttachment(true);
+    setAttachmentError(null);
+    try {
+      const attachment = await uploadPOAttachment(accessToken, po.id, file, "manual");
+      setPo((prev) => (prev ? { ...prev, attachments: [attachment, ...prev.attachments] } : prev));
+    } catch (err) {
+      setAttachmentError(err instanceof Error ? err.message : "Could not attach that file.");
+    } finally {
+      setUploadingAttachment(false);
+    }
+  }
+
+  async function handleOpenAttachment(attachmentId: string) {
+    setOpeningAttachmentId(attachmentId);
+    setAttachmentError(null);
+    try {
+      const url = await fetchPOAttachmentDownloadUrl(accessToken, attachmentId);
+      // Opened in a new tab rather than navigated to directly -- this is a
+      // short-lived presigned S3 URL (see the backend's download action),
+      // so there's nothing to bookmark or share; a tab is just a viewer.
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      setAttachmentError(err instanceof Error ? err.message : "Could not open that file.");
+    } finally {
+      setOpeningAttachmentId(null);
+    }
+  }
+
+  async function handleDeleteAttachment(attachmentId: string) {
+    if (!po) return;
+    setDeletingAttachmentId(attachmentId);
+    setAttachmentError(null);
+    try {
+      await deletePOAttachment(accessToken, attachmentId);
+      setPo((prev) =>
+        prev ? { ...prev, attachments: prev.attachments.filter((a) => a.id !== attachmentId) } : prev
+      );
+    } catch (err) {
+      setAttachmentError(err instanceof Error ? err.message : "Could not remove that attachment.");
+    } finally {
+      setDeletingAttachmentId(null);
     }
   }
 
@@ -993,6 +1073,65 @@ export default function ProcurementDetail({
             <div className="ro">{formatMoney(Number(po.total_with_vat), currency)}</div>
           </div>
         </div>
+      </div>
+
+      <div className="card">
+        <h2>Attachments</h2>
+        <p className="hint" style={{ marginTop: -4, marginBottom: 12 }}>
+          Receipt/invoice photos from scanning this order, plus anything attached by hand -- kept
+          here for the full record (e.g. handing a PO and its invoice to an accountant).
+        </p>
+        {po.attachments.length === 0 ? (
+          <p className="muted">No attachments yet.</p>
+        ) : (
+          <div className="task-list" style={{ marginBottom: 12 }}>
+            {po.attachments.map((a) => (
+              <div key={a.id} className="task-item">
+                <div>
+                  <b>{a.original_filename || "Attachment"}</b>
+                  <span className="muted">
+                    {" "}
+                    · {ATTACHMENT_SOURCE_LABEL[a.source]} · {formatBytes(a.size_bytes)} · {a.uploaded_by_name}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn-ghost small"
+                    onClick={() => handleOpenAttachment(a.id)}
+                    disabled={openingAttachmentId === a.id}
+                  >
+                    {openingAttachmentId === a.id ? "Opening…" : "Open"}
+                  </button>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      className="btn-ghost small"
+                      onClick={() => handleDeleteAttachment(a.id)}
+                      disabled={deletingAttachmentId === a.id}
+                    >
+                      {deletingAttachmentId === a.id ? "Removing…" : "Remove"}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <label className="btn-ghost small" style={{ cursor: uploadingAttachment ? "default" : "pointer", opacity: uploadingAttachment ? 0.6 : 1 }}>
+          {uploadingAttachment ? "Attaching…" : "+ Attach a file"}
+          <input
+            type="file"
+            disabled={uploadingAttachment}
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) handleManualAttachmentFile(file);
+            }}
+          />
+        </label>
+        {attachmentError && <p className="error">{attachmentError}</p>}
       </div>
 
       <div className="card">
