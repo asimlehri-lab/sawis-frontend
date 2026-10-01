@@ -2173,6 +2173,7 @@ export interface Section {
   name: string;
   count_cadence: "weekly" | "monthly" | null;
   next_count_due: string | null;
+  last_counted_at: string | null;
 }
 
 export async function fetchSections(accessToken: string): Promise<Section[]> {

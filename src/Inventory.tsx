@@ -1128,17 +1128,24 @@ function CountSheetsTab({
           const status = doneCount === 0 ? { label: "To do", cls: "" } : doneCount < itemIds.length ? { label: "In progress", cls: "b-low" } : { label: "Complete", cls: "b-ok" };
           const icon = sectionIcon(s.name);
           const assignedStaffHere = staff.find((m) => m.user === assignment?.assigned_to);
-          const isComplete = status.label === "Complete";
-          // Scheduling badge -- completed sections show when they're next
-          // due again (nothing to show if the section has no cadence
-          // set); an unfinished section whose due date has passed shows
-          // clearly as overdue rather than looking the same as one with
-          // no schedule at all.
           const today = new Date().toISOString().slice(0, 10);
-          const overdue = !isComplete && !!s.next_count_due && s.next_count_due < today;
+          // A scheduled section's green "Complete" state tracks the
+          // schedule itself -- counted since it last came due, and not
+          // due again yet -- rather than whatever happens to be sitting
+          // in the currently-open count's lines. That matters because one
+          // StockCount often stays open for weeks across many cadence
+          // cycles, so "has a line in the open count" can go stale: count
+          // the Fridge today, and without this it would read green
+          // forever, not just until next week's due date. A section with
+          // no cadence has no schedule to track, so it keeps the simple
+          // "every item has a line in the open count" read.
+          const isComplete = s.count_cadence
+            ? !!s.last_counted_at && !!s.next_count_due && today < s.next_count_due
+            : status.label === "Complete";
+          const overdue = !isComplete && !!s.count_cadence && !!s.next_count_due && s.next_count_due < today;
           let dueBadge: { label: string; cls: string } | null = null;
           if (isComplete) {
-            dueBadge = s.count_cadence && s.next_count_due ? { label: `Next check ${formatDueDate(s.next_count_due)}`, cls: "" } : null;
+            dueBadge = s.next_count_due ? { label: `Next check ${formatDueDate(s.next_count_due)}`, cls: "" } : null;
           } else if (s.count_cadence && s.next_count_due) {
             dueBadge = overdue
               ? { label: `Overdue since ${formatDueDate(s.next_count_due)}`, cls: "warn" }
