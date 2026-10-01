@@ -1813,6 +1813,7 @@ export interface WasteEventRow {
   qty: string;
   reason: string;
   logged_by: string;
+  created_at: string;
 }
 
 export async function fetchWasteEvents(accessToken: string): Promise<WasteEventRow[]> {

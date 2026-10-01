@@ -176,7 +176,7 @@ export default function WasteLog({
       reason: ev.reason,
       unitCost: cost,
       value: Number(ev.qty) * cost,
-      occurredAt: mv?.occurred_at ?? null,
+      occurredAt: ev.created_at,
     };
   });
 
