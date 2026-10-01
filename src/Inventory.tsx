@@ -1199,6 +1199,21 @@ function CountSheet({
     return num - (onHand[h.id] ?? 0);
   }
 
+  // A checked row that can't actually be saved -- empty, not a number, or
+  // negative (there's no such thing as a negative physical count). Used
+  // both to block Submit with a clear message and to flag the row itself,
+  // instead of the old behaviour of quietly dropping it with no sign
+  // anything was wrong -- see the handleSubmit comment below.
+  function invalidReason(h: FlatHolding): string | null {
+    if (!checked[h.id]) return null;
+    const q = qty[h.id];
+    if (q === undefined || q === "") return "Enter a counted quantity";
+    const num = Number(q);
+    if (!Number.isFinite(num)) return "Enter a valid number";
+    if (num < 0) return "A physical count can't be negative -- enter what's actually there";
+    return null;
+  }
+
   function handleTick(h: FlatHolding, isChecked: boolean) {
     setChecked((c) => ({ ...c, [h.id]: isChecked }));
     if (isChecked) {
@@ -1235,15 +1250,27 @@ function CountSheet({
   const pct = holdings.length ? Math.round((done / holdings.length) * 100) : 0;
 
   async function handleSubmit() {
-    setSaving(true);
     setErr(null);
+    // Never silently drop a checked row -- a counted quantity can't be
+    // negative, but quietly skipping it used to leave Submit looking
+    // successful while the section's done/total count stayed wrong with
+    // no explanation (this is what was behind sections getting stuck
+    // showing e.g. "3/13" after a full count was submitted). Block and
+    // say exactly which items need a real number instead.
+    const problems = holdings.filter((h) => invalidReason(h));
+    if (problems.length > 0) {
+      setErr(
+        `${problems.length} item${problems.length === 1 ? "" : "s"} need a valid, non-negative count before this can be submitted: ${problems
+          .map((h) => h.itemName)
+          .join(", ")}`
+      );
+      return;
+    }
+    setSaving(true);
     try {
       for (const h of holdings) {
         if (!checked[h.id]) continue;
-        const q = qty[h.id];
-        if (q === undefined || q === "") continue;
-        const countedQty = Number(q);
-        if (!Number.isFinite(countedQty) || countedQty < 0) continue;
+        const countedQty = Number(qty[h.id]);
         const varQty = variance(h);
         const line = await createCountLine(accessToken, {
           count: count.id,
@@ -1358,6 +1385,7 @@ function CountSheet({
           const off = varQty !== null && Math.abs(varQty) > 0.001;
           const hasNote = !!(reason[h.id] || note[h.id]);
           const isOpen = openNoteId === h.id;
+          const invalid = invalidReason(h);
           const btnCls = hasNote ? "note-btn-sm has" : off ? "note-btn-sm need" : "note-btn-sm";
           const btnTxt = hasNote ? "💬 note" : off ? "+ why?" : "+ note";
           const scanConf = scanConfidence[h.id];
@@ -1385,11 +1413,24 @@ function CountSheet({
                   disabled={!checked[h.id]}
                   value={qty[h.id] ?? ""}
                   onChange={(e) => handleQtyChange(h, e.target.value)}
-                  style={{ width: 96, fontFamily: "monospace", textAlign: "right", border: "1.5px solid var(--border)", borderRadius: 8, padding: "8px 10px" }}
+                  style={{
+                    width: 96,
+                    fontFamily: "monospace",
+                    textAlign: "right",
+                    border: invalid ? "1.5px solid var(--warn)" : "1.5px solid var(--border)",
+                    background: invalid ? "var(--warn-soft)" : undefined,
+                    borderRadius: 8,
+                    padding: "8px 10px",
+                  }}
                 />
                 <span className="cunit muted" style={{ fontSize: 12.5, minWidth: 40 }}>
                   {h.baseUnit}
                 </span>
+                {invalid && (
+                  <span className="badge warn" title={invalid}>
+                    ⚠ {invalid}
+                  </span>
+                )}
                 <span className={`cvar ${varQty === null ? "v-none" : off ? (varQty < 0 ? "v-short" : "v-over") : "v-ok"}`} style={{ minWidth: 100, textAlign: "right", fontFamily: "monospace", fontSize: 12.5, fontWeight: 700 }}>
                   {varQty === null ? "—" : !off ? "✓ matches" : `${varQty > 0 ? "+" : "−"}${Math.abs(varQty).toFixed(2)} ${h.baseUnit}`}
                 </span>
