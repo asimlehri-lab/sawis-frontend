@@ -12,6 +12,8 @@ interface Props {
   onBack: () => void;
   onOpenPO: (id: string) => void;
   onNewPO: (supplierId: string, expectedDateISO: string) => void;
+  // View-only (staff): contact fields locked, no "new purchase order" buttons.
+  readOnly?: boolean;
   onSupplierUpdated: (updated: Supplier) => void;
 }
 
@@ -32,6 +34,7 @@ export default function SupplierDeliveries({
   onBack,
   onOpenPO,
   onNewPO,
+  readOnly = false,
   onSupplierUpdated,
 }: Props) {
   const supplier = suppliers.find((s) => s.id === supplierId);
@@ -132,7 +135,9 @@ export default function SupplierDeliveries({
       </p>
 
       {saveError && <p className="error">{saveError}</p>}
+      {readOnly && <p className="ro-banner">View only — changes to suppliers need a manager or admin.</p>}
 
+      <fieldset className="ro-fieldset" disabled={readOnly}>
       <div className="card">
         <h2>Contact & terms</h2>
         <div className="fgrid fgrid-2">
@@ -196,12 +201,16 @@ export default function SupplierDeliveries({
         </div>
       </div>
 
+      </fieldset>
+
       <div className="card">
         <div className="content-head" style={{ marginBottom: open.length ? 18 : 0 }}>
           <h2 style={{ margin: 0 }}>Open orders</h2>
-          <button className="btn-ghost small" onClick={() => onNewPO(supplierId, nextISO)}>
-            + New purchase order
-          </button>
+          {!readOnly && (
+            <button className="btn-ghost small" onClick={() => onNewPO(supplierId, nextISO)}>
+              + New purchase order
+            </button>
+          )}
         </div>
 
         {open.length === 0 ? (
@@ -211,9 +220,11 @@ export default function SupplierDeliveries({
                 ? `No purchase order yet for the next delivery (${nextLabel}).`
                 : "No open purchase orders for this supplier."}
             </p>
-            <button className="btn-primary small" onClick={() => onNewPO(supplierId, nextISO)}>
-              + New purchase order{nextLabel ? ` for ${nextLabel}` : ""}
-            </button>
+            {!readOnly && (
+              <button className="btn-primary small" onClick={() => onNewPO(supplierId, nextISO)}>
+                + New purchase order{nextLabel ? ` for ${nextLabel}` : ""}
+              </button>
+            )}
           </div>
         ) : (
           <div className="table-scroll">

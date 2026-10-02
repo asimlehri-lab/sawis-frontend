@@ -26,6 +26,10 @@ interface Props {
   poId: string;
   accessToken: string;
   isAdmin: boolean;
+  // Staff: can read the order and receive it (and attach the delivery
+  // photo), but not place, edit, send, re-source or delete it. The backend
+  // enforces the same split.
+  readOnly?: boolean;
   items: CatalogItem[];
   suppliers: Supplier[];
   itemSupplierLinks: ItemSupplierRow[];
@@ -125,6 +129,7 @@ export default function ProcurementDetail({
   poId,
   accessToken,
   isAdmin,
+  readOnly = false,
   items,
   suppliers,
   itemSupplierLinks,
@@ -872,8 +877,15 @@ export default function ProcurementDetail({
       </p>
 
       {error && <p className="error">{error}</p>}
+      {readOnly && (
+        <p className="ro-banner">
+          {po.status === "sent"
+            ? "Placing and editing orders is for managers — you can receive this delivery below."
+            : "View only — placing and editing orders is for managers."}
+        </p>
+      )}
 
-      {belowMin && supplier?.min_order_value && (
+      {belowMin && !readOnly && supplier?.min_order_value && (
         <div className="minwarn">
           <div>
             <b>
@@ -940,12 +952,12 @@ export default function ProcurementDetail({
             </div>
           ))}
         </div>
-        {nextStatus && (
+        {nextStatus && (!readOnly || nextStatus === "received") && (
           <button className="btn-primary small" onClick={handleAdvance} disabled={advancing}>
             {advancing ? "Saving…" : `Mark as ${STATUS_LABEL[nextStatus]}`}
           </button>
         )}
-        {po.status === "sent" && (
+        {po.status === "sent" && !readOnly && (
           <button
             className="btn-ghost"
             style={{ marginTop: nextStatus ? 8 : 0 }}
@@ -1041,6 +1053,7 @@ export default function ProcurementDetail({
             This order was re-sourced — its items now live on new draft purchase orders.
           </p>
         )}
+        <fieldset className="ro-fieldset" disabled={readOnly}>
         <div className="fgrid" style={{ marginTop: 16 }}>
           <div className="field">
             <label>PO number</label>
@@ -1073,6 +1086,7 @@ export default function ProcurementDetail({
             <div className="ro">{formatMoney(Number(po.total_with_vat), currency)}</div>
           </div>
         </div>
+        </fieldset>
       </div>
 
       <div className="card">
@@ -1134,6 +1148,7 @@ export default function ProcurementDetail({
         {attachmentError && <p className="error">{attachmentError}</p>}
       </div>
 
+      <fieldset className="ro-fieldset" disabled={readOnly}>
       <div className="card">
         <h2>Order lines</h2>
         <div className="table-scroll">
@@ -1375,6 +1390,7 @@ export default function ProcurementDetail({
           </p>
         )}
       </div>
+      </fieldset>
 
       {showReceive && (
         <div className="card">

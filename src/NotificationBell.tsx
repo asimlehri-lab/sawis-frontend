@@ -39,6 +39,9 @@ interface Props {
   suppliers: Supplier[];
   accessToken: string;
   onViewReorder: () => void;
+  // Reordering is a manager job -- staff still see the low-stock alert but
+  // not the link into the order-creating Reorder tab.
+  canReorder: boolean;
   onOpenPO: (id: string) => void;
   onOpenSupplier: (id: string) => void;
 }
@@ -101,6 +104,7 @@ export default function NotificationBell({
   suppliers,
   accessToken,
   onViewReorder,
+  canReorder,
   onOpenPO,
   onOpenSupplier,
 }: Props) {
@@ -216,16 +220,18 @@ export default function NotificationBell({
                       </div>
                     ))}
                   </div>
-                  <button
-                    type="button"
-                    className="btn-ghost small notif-view-btn"
-                    onClick={() => {
-                      setOpen(false);
-                      onViewReorder();
-                    }}
-                  >
-                    View reorder list →
-                  </button>
+                  {canReorder && (
+                    <button
+                      type="button"
+                      className="btn-ghost small notif-view-btn"
+                      onClick={() => {
+                        setOpen(false);
+                        onViewReorder();
+                      }}
+                    >
+                      View reorder list →
+                    </button>
+                  )}
                 </>
               )}
 

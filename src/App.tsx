@@ -1777,6 +1777,7 @@ export default function App() {
                 stockMovements={stockMovements}
                 suppliers={suppliers}
                 accessToken={accessToken}
+                canReorder={canManage(me)}
                 onViewReorder={() => goToNav("End of day", { eodTab: "reorder" })}
                 onOpenPO={(id) => {
                   goToNav("Procurement");
@@ -1846,6 +1847,7 @@ export default function App() {
             poId={selectedPOId}
             accessToken={accessToken}
             isAdmin={me.memberships.some((m) => m.role === "admin")}
+            readOnly={!canManage(me)}
             items={items ?? []}
             suppliers={suppliers}
             itemSupplierLinks={itemSupplierLinks}
@@ -1860,6 +1862,7 @@ export default function App() {
         ) : activePage === "Procurement" && selectedSupplierId && accessToken ? (
           <SupplierDeliveries
             supplierId={selectedSupplierId}
+            readOnly={!canManage(me)}
             accessToken={accessToken}
             suppliers={suppliers}
             purchaseOrders={purchaseOrders ?? []}
@@ -1922,22 +1925,26 @@ export default function App() {
               )}
               {activePage === "Procurement" && (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button
-                    className="btn-ghost small"
-                    onClick={() => {
-                      setSelectedPOId(null);
-                      setSelectedSupplierId(null);
-                      setShowSupplierList(true);
-                    }}
-                  >
-                    🏬 Suppliers
-                  </button>
-                  <button className="btn-ghost small" onClick={() => setShowScanReceipt(true)}>
-                    📷 Scan receipt
-                  </button>
-                  <button className="btn-primary small" onClick={() => setShowNewPO(true)}>
-                    + New purchase order
-                  </button>
+                  {canManage(me) && (
+                    <>
+                      <button
+                        className="btn-ghost small"
+                        onClick={() => {
+                          setSelectedPOId(null);
+                          setSelectedSupplierId(null);
+                          setShowSupplierList(true);
+                        }}
+                      >
+                        🏬 Suppliers
+                      </button>
+                      <button className="btn-ghost small" onClick={() => setShowScanReceipt(true)}>
+                        📷 Scan receipt
+                      </button>
+                      <button className="btn-primary small" onClick={() => setShowNewPO(true)}>
+                        + New purchase order
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>

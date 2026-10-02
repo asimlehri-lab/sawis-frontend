@@ -184,7 +184,7 @@ export default function EndOfDay({
     (m) => m.role === "admin" || m.role === "manager" || m.role === "finance"
   );
   const [tab, setTab] = useState<"overview" | "reorder" | "tasks">(
-    isManagerOrAbove ? (initialTab ?? "overview") : initialTab === "reorder" ? "reorder" : "tasks"
+    isManagerOrAbove ? (initialTab ?? "overview") : "tasks"
   );
   const [location, setLocation] = useState(locations[0]?.id ?? "");
   // locations loads asynchronously (App.tsx only fetches it once activePage
@@ -686,9 +686,11 @@ export default function EndOfDay({
         <button className={`rtab ${tab === "tasks" ? "on" : ""}`} onClick={() => setTab("tasks")}>
           Actions
         </button>
-        <button className={`rtab ${tab === "reorder" ? "on" : ""}`} onClick={() => setTab("reorder")}>
-          Reorder
-        </button>
+        {isManagerOrAbove && (
+          <button className={`rtab ${tab === "reorder" ? "on" : ""}`} onClick={() => setTab("reorder")}>
+            Reorder
+          </button>
+        )}
       </div>
 
       {tab === "overview" && isManagerOrAbove && <EodReport accessToken={accessToken} locations={locations} />}
@@ -710,7 +712,7 @@ export default function EndOfDay({
         />
       )}
 
-      {tab === "reorder" && (
+      {tab === "reorder" && isManagerOrAbove && (
         <Reorder accessToken={accessToken} items={items} locations={locations} itemSupplierLinks={itemSupplierLinks} />
       )}
 
