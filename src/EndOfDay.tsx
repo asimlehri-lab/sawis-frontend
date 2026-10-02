@@ -30,6 +30,9 @@ interface Props {
   // Tasks tab's upcoming-deliveries rows. Same callback shape as
   // NotificationBell's own onOpenPO in App.tsx.
   onOpenPO: (id: string) => void;
+  // Opens an Item's detail page (Items tab) -- used by the Tasks tab's
+  // "Latest updates" news rows for new/updated items.
+  onOpenItem: (id: string) => void;
   // Cross-page nav for the Tasks tab (e.g. "Inventory" for an assigned
   // count, "Waste log" for the reminder) -- same goToNav App.tsx already
   // uses for its own sidebar.
@@ -172,6 +175,7 @@ export default function EndOfDay({
   initialTab,
   onOpenRecipe,
   onOpenPO,
+  onOpenItem,
   onNavigateApp,
 }: Props) {
   const [tab, setTab] = useState<"overview" | "reorder" | "tasks">(initialTab ?? "overview");
@@ -689,6 +693,7 @@ export default function EndOfDay({
           stockMovements={stockMovements}
           onOpenRecipe={onOpenRecipe}
           onOpenPO={onOpenPO}
+          onOpenItem={onOpenItem}
           onViewReorder={() => setTab("reorder")}
           onNavigateApp={onNavigateApp}
         />

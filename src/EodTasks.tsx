@@ -1,6 +1,17 @@
 import { useEffect, useState } from "react";
-import { costBand, costBandColor, fetchNotifications, fetchStockCounts } from "./api";
-import type { AppNotification, CatalogItem, CostBand, Location, Me, Recipe, StockCountRow, StockMovementRow } from "./api";
+import { costBand, costBandColor, fetchActivityFeed, fetchNotifications, fetchSections, fetchStockCounts } from "./api";
+import type {
+  ActivityEvent,
+  AppNotification,
+  CatalogItem,
+  CostBand,
+  Location,
+  Me,
+  Recipe,
+  Section,
+  StockCountRow,
+  StockMovementRow,
+} from "./api";
 
 interface Props {
   me: Me;
@@ -12,6 +23,7 @@ interface Props {
   stockMovements: StockMovementRow[];
   onOpenRecipe: (id: string) => void;
   onOpenPO: (id: string) => void;
+  onOpenItem: (id: string) => void;
   onViewReorder: () => void;
   onNavigateApp: (label: string) => void;
 }
@@ -62,6 +74,61 @@ function bandSoftColor(band: CostBand): string {
   return band === "good" ? "var(--good-soft)" : band === "caution" ? "var(--caution-soft)" : "var(--brick-soft)";
 }
 
+function localDateStr(d: Date = new Date()): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function fmtShortDate(iso: string): string {
+  return new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+function timeAgo(iso: string): string {
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} h ago`;
+  const days = Math.round(hrs / 24);
+  return days === 1 ? "yesterday" : `${days} days ago`;
+}
+
+type FeedFilter = "all" | "waste" | "items" | "recipes";
+
+function feedFilterOf(kind: ActivityEvent["kind"]): Exclude<FeedFilter, "all"> {
+  if (kind === "waste_logged") return "waste";
+  return kind.startsWith("recipe") ? "recipes" : "items";
+}
+
+const FEED_KIND_LABEL: Record<ActivityEvent["kind"], string> = {
+  waste_logged: "Waste logged",
+  item_created: "New item",
+  item_updated: "Item updated",
+  recipe_created: "New recipe",
+  recipe_updated: "Recipe updated",
+};
+
+const FEED_KIND_ICON: Record<ActivityEvent["kind"], string> = {
+  waste_logged: "🗑️",
+  item_created: "📦",
+  item_updated: "✏️",
+  recipe_created: "🍽️",
+  recipe_updated: "✏️",
+};
+
+const FEED_COLLAPSED_COUNT = 6;
+const LIVE_REFRESH_MS = 60000;
+
+type CheckState = "overdue" | "progress" | "due" | "upcoming" | "done";
+const CHECK_STATE_ORDER: Record<CheckState, number> = { overdue: 0, progress: 1, due: 2, upcoming: 3, done: 4 };
+const CHECK_CHIP_CLASS: Record<CheckState, string> = {
+  overdue: "danger",
+  progress: "warn",
+  due: "warn",
+  upcoming: "muted",
+  done: "good",
+};
+const ASSIGNMENT_RANK = { complete: 0, to_do: 1, in_progress: 2 } as const;
+
 // The End of day > Tasks tab -- role-gated "what SAWIS has found and needs
 // action" overview, per the brief given 2026-09-30: not a manually-authored
 // checklist template, but a live read of real system state, auto-resolving
@@ -90,6 +157,7 @@ export default function EodTasks({
   stockMovements,
   onOpenRecipe,
   onOpenPO,
+  onOpenItem,
   onViewReorder,
   onNavigateApp,
 }: Props) {
@@ -107,6 +175,7 @@ export default function EodTasks({
 
   return isManagerOrAbove ? (
     <ManagerTasks
+      accessToken={accessToken}
       locations={locations}
       location={location}
       recipes={recipes}
@@ -115,7 +184,9 @@ export default function EodTasks({
       notifications={notifications}
       onOpenRecipe={onOpenRecipe}
       onOpenPO={onOpenPO}
+      onOpenItem={onOpenItem}
       onViewReorder={onViewReorder}
+      onNavigateApp={onNavigateApp}
     />
   ) : (
     <StaffTasks
@@ -131,6 +202,7 @@ export default function EodTasks({
 }
 
 function ManagerTasks({
+  accessToken,
   location,
   locations,
   recipes,
@@ -139,8 +211,11 @@ function ManagerTasks({
   notifications,
   onOpenRecipe,
   onOpenPO,
+  onOpenItem,
   onViewReorder,
+  onNavigateApp,
 }: {
+  accessToken: string;
   location: string;
   locations: Location[];
   recipes: Recipe[];
@@ -149,7 +224,9 @@ function ManagerTasks({
   notifications: AppNotification[];
   onOpenRecipe: (id: string) => void;
   onOpenPO: (id: string) => void;
+  onOpenItem: (id: string) => void;
   onViewReorder: () => void;
+  onNavigateApp: (label: string) => void;
 }) {
   // Delivery reminders (Phase 3 notifications, generated daily server-side
   // from each PurchaseOrder's expected_date) -- ordering/financial in
@@ -207,12 +284,310 @@ function ManagerTasks({
     )
     .sort((a, b) => a.onHand - a.parLevel - (b.onHand - b.parLevel));
 
+  // Live data for the Overview tiles + Latest updates list below. Polled
+  // once a minute while this tab is open so it reads as a live board; the
+  // tiles themselves auto-resolve (they're recomputed from current state),
+  // and the news list ages off server-side after 7 days.
+  const [activity, setActivity] = useState<ActivityEvent[] | null>(null);
+  const [sections, setSections] = useState<Section[]>([]);
+  const [stockCounts, setStockCounts] = useState<StockCountRow[]>([]);
+  const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
+  const [feedExpanded, setFeedExpanded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    function load() {
+      fetchActivityFeed(accessToken)
+        .then((r) => !cancelled && setActivity(r))
+        .catch(() => !cancelled && setActivity((prev) => prev ?? []));
+      fetchSections(accessToken)
+        .then((r) => !cancelled && setSections(r))
+        .catch(() => {});
+      fetchStockCounts(accessToken)
+        .then((r) => !cancelled && setStockCounts(r))
+        .catch(() => {});
+    }
+    load();
+    const timer = window.setInterval(load, LIVE_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [accessToken]);
+
+  // --- Deliveries tile ---
+  const deliveryTone = upcomingDeliveries.some((n) => daysFromToday(n.relevant_date) < 0)
+    ? "danger"
+    : upcomingDeliveries.some((n) => daysFromToday(n.relevant_date) <= 1)
+      ? "warn"
+      : upcomingDeliveries.length
+        ? ""
+        : "good";
+
+  // --- Inventory checks tile ---
+  // Same "checked" rule the Inventory count-sheet cards use: a section with
+  // a schedule is checked until its next_count_due arrives, independent of
+  // how long the underlying StockCount session stays open.
+  const todayStr = localDateStr();
+  const assignmentBySection = new Map<string, StockCountRow["assignments"][number]>();
+  stockCounts
+    .filter((c) => c.status === "open")
+    .forEach((c) =>
+      c.assignments.forEach((a) => {
+        const prev = assignmentBySection.get(a.section);
+        if (!prev || ASSIGNMENT_RANK[a.status] > ASSIGNMENT_RANK[prev.status]) assignmentBySection.set(a.section, a);
+      })
+    );
+  const checkLines = sections
+    .flatMap((s) => {
+      const a = assignmentBySection.get(s.id);
+      const live = a && a.status !== "complete" ? a : undefined;
+      const due = s.count_cadence && s.next_count_due ? s.next_count_due : null;
+      if (!due && !live) return [];
+      const checked = !!due && !!s.last_counted_at && todayStr < due;
+      const overdue = !!due && !checked && due < todayStr;
+      const dueSoon = !!due && !checked && !overdue && daysFromToday(due) <= 3;
+      let state: CheckState;
+      let chip: string;
+      if (checked) {
+        state = "done";
+        chip = `✓ Checked · next ${fmtShortDate(due as string)}`;
+      } else if (overdue) {
+        state = "overdue";
+        chip = `Overdue since ${fmtShortDate(due as string)}`;
+      } else if (live?.status === "in_progress") {
+        state = "progress";
+        chip = "In progress";
+      } else if (live || dueSoon) {
+        state = "due";
+        chip = due ? `Due ${fmtShortDate(due)}` : "To do";
+      } else {
+        state = "upcoming";
+        chip = `Next ${fmtShortDate(due as string)}`;
+      }
+      return [
+        {
+          id: s.id,
+          name: s.name,
+          locationName: locations.length > 1 ? locationNameOf(locations, s.location) : null,
+          assignee: a?.assigned_to_name ?? null,
+          state,
+          chip,
+        },
+      ];
+    })
+    .sort((a, b) => CHECK_STATE_ORDER[a.state] - CHECK_STATE_ORDER[b.state] || a.name.localeCompare(b.name));
+  const checkTone = checkLines.some((l) => l.state === "overdue")
+    ? "danger"
+    : checkLines.some((l) => l.state === "progress" || l.state === "due")
+      ? "warn"
+      : checkLines.length > 0 && checkLines.every((l) => l.state === "done")
+        ? "good"
+        : "";
+  const checkNeedsAction = checkLines.filter((l) => l.state !== "done" && l.state !== "upcoming").length;
+
+  // --- Latest updates ---
+  const feed = activity ?? [];
+  const feedCount = (f: FeedFilter) => (f === "all" ? feed.length : feed.filter((e) => feedFilterOf(e.kind) === f).length);
+  const filteredFeed = feed.filter((e) => feedFilter === "all" || feedFilterOf(e.kind) === feedFilter);
+  const visibleFeed = feedExpanded ? filteredFeed : filteredFeed.slice(0, FEED_COLLAPSED_COUNT);
+  function feedTarget(e: ActivityEvent): (() => void) | null {
+    if (e.target_type === "waste") return () => onNavigateApp("Waste log");
+    if (e.target_type === "item") return items.some((i) => i.id === e.target_id) ? () => onOpenItem(e.target_id) : null;
+    return recipes.some((r) => r.id === e.target_id) ? () => onOpenRecipe(e.target_id) : null;
+  }
+
   return (
     <div>
       <p className="muted" style={{ marginTop: -4, marginBottom: 16, fontSize: 12.5 }}>
         What SAWIS has found that needs your attention — staff don't see this tab's contents, since it's cost and
         ordering data. Nothing here needs dismissing by hand: an item drops off the moment the number behind it does.
       </p>
+
+      <section className="task-section">
+        <div className="task-section-head">
+          <h2 style={sectionHeadStyle}>Overview</h2>
+          <span className="live-badge">
+            <span className="live-dot" aria-hidden="true" />
+            Live
+          </span>
+        </div>
+        <div className="ov-grid">
+          <div className={`ov-tile ${deliveryTone ? `ov-${deliveryTone}` : ""}`}>
+            <div className="ov-head">
+              <span className="ov-icon">🚚</span>
+              <span className="ov-title">Deliveries</span>
+              <span className="ov-count">{upcomingDeliveries.length}</span>
+            </div>
+            {upcomingDeliveries.length === 0 ? (
+              <p className="ov-empty">Nothing expected in the next {NOTIF_WINDOW_FUTURE_DAYS} days.</p>
+            ) : (
+              <div className="ov-lines">
+                {upcomingDeliveries.slice(0, 3).map((n) => {
+                  const days = daysFromToday(n.relevant_date);
+                  const tone = days < 0 ? "danger" : days <= 1 ? "warn" : "muted";
+                  return (
+                    <button
+                      key={n.id}
+                      type="button"
+                      className="ov-line"
+                      onClick={() => n.purchase_order && onOpenPO(n.purchase_order)}
+                    >
+                      <span className="ov-line-main">
+                        <b>{n.po_number || "Delivery"}</b>
+                        <span className="ov-line-sub">
+                          {[n.supplier_name, n.location_name].filter(Boolean).join(" · ")}
+                        </span>
+                      </span>
+                      <span className={`ov-chip ov-chip-${tone}`}>{fmtRelativeDay(n.relevant_date)}</span>
+                    </button>
+                  );
+                })}
+                {upcomingDeliveries.length > 3 && (
+                  <span className="ov-more">+{upcomingDeliveries.length - 3} more expected</span>
+                )}
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            className={`ov-tile ov-tile-button ${belowPar.length ? "ov-bad" : "ov-good"}`}
+            onClick={onViewReorder}
+          >
+            <div className="ov-head">
+              <span className="ov-icon">📦</span>
+              <span className="ov-title">Below par</span>
+              <span className="ov-count">{belowPar.length}</span>
+            </div>
+            {belowPar.length === 0 ? (
+              <p className="ov-empty">Everything is at or above par.</p>
+            ) : (
+              <>
+                <div className="ov-big">
+                  {belowPar.length}
+                  <span> {belowPar.length === 1 ? "item" : "items"} to reorder</span>
+                </div>
+                <div className="ov-line-sub">
+                  {belowPar
+                    .slice(0, 3)
+                    .map((a) => a.itemName)
+                    .join(", ")}
+                  {belowPar.length > 3 ? ` +${belowPar.length - 3} more` : ""}
+                </div>
+                <span className="ov-cta">Go to reorder list →</span>
+              </>
+            )}
+          </button>
+
+          <div className={`ov-tile ${checkTone ? `ov-${checkTone}` : ""}`}>
+            <div className="ov-head">
+              <span className="ov-icon">🧮</span>
+              <span className="ov-title">Inventory checks</span>
+              <span className="ov-count">{checkNeedsAction}</span>
+            </div>
+            {checkLines.length === 0 ? (
+              <p className="ov-empty">No checks scheduled or assigned right now.</p>
+            ) : (
+              <div className="ov-lines">
+                {checkLines.slice(0, 4).map((l) => (
+                  <button key={l.id} type="button" className="ov-line" onClick={() => onNavigateApp("Inventory")}>
+                    <span className="ov-line-main">
+                      <b>{l.name}</b>
+                      <span className="ov-line-sub">
+                        {[l.locationName, l.assignee ? l.assignee : "Unassigned"].filter(Boolean).join(" · ")}
+                      </span>
+                    </span>
+                    <span className={`ov-chip ov-chip-${CHECK_CHIP_CLASS[l.state]}`}>{l.chip}</span>
+                  </button>
+                ))}
+                {checkLines.length > 4 && <span className="ov-more">+{checkLines.length - 4} more sections</span>}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="card task-section">
+        <div className="task-section-head">
+          <h2 style={sectionHeadStyle}>Latest updates</h2>
+          <span className="muted" style={{ fontSize: 11.5 }}>
+            Last 7 days
+          </span>
+        </div>
+        <div className="chip-row" style={{ marginBottom: 10 }}>
+          {(
+            [
+              ["all", "All"],
+              ["waste", "Waste"],
+              ["items", "Items"],
+              ["recipes", "Recipes"],
+            ] as [FeedFilter, string][]
+          ).map(([f, label]) => (
+            <button
+              key={f}
+              type="button"
+              className={`chip ${feedFilter === f ? "active" : ""}`}
+              onClick={() => {
+                setFeedFilter(f);
+                setFeedExpanded(false);
+              }}
+            >
+              {label} ({feedCount(f)})
+            </button>
+          ))}
+        </div>
+        {activity === null ? (
+          <p className="task-empty">Loading latest updates…</p>
+        ) : filteredFeed.length === 0 ? (
+          <p className="task-empty">
+            {feedFilter === "all" ? "Nothing new in the last 7 days." : "Nothing in this category in the last 7 days."}
+          </p>
+        ) : (
+          <>
+            <div className="feed-list">
+              {visibleFeed.map((e) => {
+                const open = feedTarget(e);
+                const body = (
+                  <>
+                    <span className={`feed-ic feed-ic-${feedFilterOf(e.kind)}`} aria-hidden="true">
+                      {FEED_KIND_ICON[e.kind]}
+                    </span>
+                    <span className="feed-main">
+                      <span className="feed-kind">{FEED_KIND_LABEL[e.kind]}</span>
+                      <span className="feed-title">{e.title}</span>
+                      <span className="feed-detail">{e.detail}</span>
+                    </span>
+                    <span className="feed-meta">
+                      <span className="feed-time">{timeAgo(e.occurred_at)}</span>
+                      {e.actor_name && <span className="feed-actor">{e.actor_name}</span>}
+                    </span>
+                  </>
+                );
+                return open ? (
+                  <button key={e.id} type="button" className="feed-row feed-row-clickable" onClick={open}>
+                    {body}
+                  </button>
+                ) : (
+                  <div key={e.id} className="feed-row">
+                    {body}
+                  </div>
+                );
+              })}
+            </div>
+            {filteredFeed.length > FEED_COLLAPSED_COUNT && (
+              <button
+                type="button"
+                className="btn-ghost small"
+                style={{ marginTop: 10 }}
+                onClick={() => setFeedExpanded((v) => !v)}
+              >
+                {feedExpanded ? "Show fewer" : `Show ${filteredFeed.length - FEED_COLLAPSED_COUNT} more`}
+              </button>
+            )}
+          </>
+        )}
+      </section>
 
       <section className="card task-section">
         <div className="task-section-head">
@@ -255,78 +630,6 @@ function ManagerTasks({
             })}
             {costBreaches.length > 11 && (
               <div className="task-empty">+{costBreaches.length - 11} more over target — see Recipes for the full list.</div>
-            )}
-          </div>
-        )}
-      </section>
-
-      <section className="card task-section">
-        <div className="task-section-head">
-          <h2 style={sectionHeadStyle}>Items below par</h2>
-          <span className={`tag ${belowPar.length ? "bad" : "good"}`}>
-            {belowPar.length ? `${belowPar.length} to reorder` : "All stocked"}
-          </span>
-        </div>
-        {belowPar.length === 0 ? (
-          <p className="task-empty">Nothing is below par right now.</p>
-        ) : (
-          <>
-            <div className="task-grid">
-              {belowPar.slice(0, 11).map((a) => (
-                <button key={a.key} type="button" className="task-box task-box-clickable task-box-bad" onClick={onViewReorder}>
-                  <div className="task-box-icon" style={{ background: "var(--caution)" }}>📦</div>
-                  <div className="task-box-name">{a.itemName}</div>
-                  <div className="task-box-meta">{a.locationName}</div>
-                  <div className="task-box-stat" style={{ color: "var(--caution)" }}>
-                    {a.onHand.toFixed(2)} / {a.parLevel} {a.baseUnit}
-                  </div>
-                </button>
-              ))}
-              {belowPar.length > 11 && <div className="task-empty">+{belowPar.length - 11} more below par.</div>}
-            </div>
-            <button type="button" className="btn-ghost small" style={{ marginTop: 10 }} onClick={onViewReorder}>
-              Go to reorder list →
-            </button>
-          </>
-        )}
-      </section>
-
-      <section className="card task-section">
-        <div className="task-section-head">
-          <h2 style={sectionHeadStyle}>Upcoming deliveries</h2>
-          <span className={`tag ${upcomingDeliveries.length ? "warn" : "good"}`}>
-            {upcomingDeliveries.length ? `${upcomingDeliveries.length} due soon` : "None due soon"}
-          </span>
-        </div>
-        {upcomingDeliveries.length === 0 ? (
-          <p className="task-empty">Nothing expected in the next {NOTIF_WINDOW_FUTURE_DAYS} days.</p>
-        ) : (
-          <div className="task-grid">
-            {upcomingDeliveries.slice(0, 11).map((n) => {
-              const days = daysFromToday(n.relevant_date);
-              const boxCls = days < 0 ? "task-box-overdue" : days <= 1 ? "task-box-warn" : "";
-              const iconBg = days < 0 ? "var(--brick)" : days <= 1 ? "var(--warn)" : "var(--muted)";
-              return (
-                <button
-                  key={n.id}
-                  type="button"
-                  className={`task-box task-box-clickable ${boxCls}`}
-                  onClick={() => n.purchase_order && onOpenPO(n.purchase_order)}
-                >
-                  <div className="task-box-icon" style={{ background: iconBg }}>🚚</div>
-                  <div className="task-box-name">{n.po_number || "Delivery"}</div>
-                  <div className="task-box-meta">
-                    {n.location_name}
-                    {n.supplier_name && ` · ${n.supplier_name}`}
-                  </div>
-                  <div className="task-box-stat" style={{ color: iconBg }}>
-                    {fmtRelativeDay(n.relevant_date)}
-                  </div>
-                </button>
-              );
-            })}
-            {upcomingDeliveries.length > 11 && (
-              <div className="task-empty">+{upcomingDeliveries.length - 11} more expected soon.</div>
             )}
           </div>
         )}

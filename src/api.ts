@@ -1816,6 +1816,31 @@ export interface WasteEventRow {
   created_at: string;
 }
 
+// One line in the End of day > Tasks "Latest updates" news list --
+// GET /api/catalog/activity/ (manager/admin/finance only). Item/recipe
+// created-or-edited rows come from the backend's CatalogActivity log
+// (repeat edits the same day are already merged server-side); waste_logged
+// rows are read straight from the waste table, so count-sheet auto-logged
+// waste appears too.
+export interface ActivityEvent {
+  id: string;
+  kind: "item_created" | "item_updated" | "recipe_created" | "recipe_updated" | "waste_logged";
+  target_type: "item" | "recipe" | "waste";
+  target_id: string;
+  title: string;
+  detail: string;
+  actor_name: string | null;
+  occurred_at: string;
+}
+
+export async function fetchActivityFeed(accessToken: string, days = 7): Promise<ActivityEvent[]> {
+  const res = await fetch(`${API_URL}/api/catalog/activity/?days=${days}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("Could not load the latest updates.");
+  return res.json();
+}
+
 export async function fetchWasteEvents(accessToken: string): Promise<WasteEventRow[]> {
   return authedFetchAllPages<WasteEventRow>("/api/ledger/waste-events/", accessToken);
 }

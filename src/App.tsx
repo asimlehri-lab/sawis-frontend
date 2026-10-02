@@ -2281,6 +2281,10 @@ export default function App() {
                   goToNav("Procurement");
                   setSelectedPOId(id);
                 }}
+                onOpenItem={(id) => {
+                  goToNav("Items");
+                  setSelectedItemId(id);
+                }}
                 onNavigateApp={(label) => goToNav(label)}
               />
             )}
