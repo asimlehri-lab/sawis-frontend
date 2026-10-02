@@ -670,10 +670,10 @@ export default function EndOfDay({
 
       <div className="rtabs" style={{ marginBottom: 16 }}>
         <button className={`rtab ${tab === "overview" ? "on" : ""}`} onClick={() => setTab("overview")}>
-          Overview
+          Sales
         </button>
         <button className={`rtab ${tab === "tasks" ? "on" : ""}`} onClick={() => setTab("tasks")}>
-          Tasks
+          Actions
         </button>
         <button className={`rtab ${tab === "reorder" ? "on" : ""}`} onClick={() => setTab("reorder")}>
           Reorder

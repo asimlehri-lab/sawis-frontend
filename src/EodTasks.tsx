@@ -406,7 +406,7 @@ function ManagerTasks({
 
       <section className="task-section">
         <div className="task-section-head">
-          <h2 style={sectionHeadStyle}>Overview</h2>
+          <h2 style={sectionHeadStyle}>Needs attention</h2>
           <span className="live-badge">
             <span className="live-dot" aria-hidden="true" />
             Live
