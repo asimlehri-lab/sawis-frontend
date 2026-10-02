@@ -178,7 +178,14 @@ export default function EndOfDay({
   onOpenItem,
   onNavigateApp,
 }: Props) {
-  const [tab, setTab] = useState<"overview" | "reorder" | "tasks">(initialTab ?? "overview");
+  // Sales (and importing sales) is manager-only data -- the backend 403s it
+  // for staff, so staff land on Actions and never see the Sales tab at all.
+  const isManagerOrAbove = me.memberships.some(
+    (m) => m.role === "admin" || m.role === "manager" || m.role === "finance"
+  );
+  const [tab, setTab] = useState<"overview" | "reorder" | "tasks">(
+    isManagerOrAbove ? (initialTab ?? "overview") : initialTab === "reorder" ? "reorder" : "tasks"
+  );
   const [location, setLocation] = useState(locations[0]?.id ?? "");
   // locations loads asynchronously (App.tsx only fetches it once activePage
   // becomes "End of day" -- see the effect keyed on activePage there) -- if
@@ -580,6 +587,7 @@ export default function EndOfDay({
 
   return (
     <>
+      {isManagerOrAbove && (
       <div className="eod-head">
         <div className="eod-import">
           {locations.length > 1 && (
@@ -657,6 +665,7 @@ export default function EndOfDay({
           </div>
         </div>
       </div>
+      )}
 
       {showScanTest && (
         <ScanEodSales
@@ -669,9 +678,11 @@ export default function EndOfDay({
       )}
 
       <div className="rtabs" style={{ marginBottom: 16 }}>
-        <button className={`rtab ${tab === "overview" ? "on" : ""}`} onClick={() => setTab("overview")}>
-          Sales
-        </button>
+        {isManagerOrAbove && (
+          <button className={`rtab ${tab === "overview" ? "on" : ""}`} onClick={() => setTab("overview")}>
+            Sales
+          </button>
+        )}
         <button className={`rtab ${tab === "tasks" ? "on" : ""}`} onClick={() => setTab("tasks")}>
           Actions
         </button>
@@ -680,7 +691,7 @@ export default function EndOfDay({
         </button>
       </div>
 
-      {tab === "overview" && <EodReport accessToken={accessToken} locations={locations} />}
+      {tab === "overview" && isManagerOrAbove && <EodReport accessToken={accessToken} locations={locations} />}
 
       {tab === "tasks" && (
         <EodTasks

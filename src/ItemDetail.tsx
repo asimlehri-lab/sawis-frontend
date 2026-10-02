@@ -35,6 +35,9 @@ interface Props {
   itemId: string;
   accessToken: string;
   userEmail: string;
+  // View-only (staff): every field/button inside is disabled; the backend
+  // refuses the writes regardless.
+  readOnly?: boolean;
   categories: Category[];
   allergens: Allergen[];
   locations: Location[];
@@ -129,6 +132,7 @@ export default function ItemDetail({
   itemId,
   accessToken,
   userEmail,
+  readOnly = false,
   categories,
   allergens,
   locations,
@@ -569,6 +573,8 @@ export default function ItemDetail({
         ← All items
       </button>
 
+      {readOnly && <p className="ro-banner">View only — changes to items need a manager or admin.</p>}
+      <fieldset className="ro-fieldset" disabled={readOnly}>
       <div className="detail-head">
         <input
           className="name-edit"
@@ -800,21 +806,39 @@ export default function ItemDetail({
           <>
             <div className="chip-row" style={{ marginBottom: usedInRecipes.length > USED_IN_CHIP_CAP ? 4 : 0 }}>
               {visibleUsedIn.map((r) => (
-                <button
+                <span
                   key={r.id}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   className="chip"
                   title={`${r.kind === "sub" ? "Sub-recipe" : "Dish"}${r.menu_category ? " · " + r.menu_category : ""}`}
                   onClick={() => onOpenRecipe?.(r.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onOpenRecipe?.(r.id);
+                    }
+                  }}
                 >
                   {r.name}
-                </button>
+                </span>
               ))}
             </div>
             {usedInRecipes.length > USED_IN_CHIP_CAP && (
-              <button type="button" className="open-link" onClick={() => setShowAllUsedIn((v) => !v)}>
+              <span
+                role="button"
+                tabIndex={0}
+                className="open-link"
+                onClick={() => setShowAllUsedIn((v) => !v)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setShowAllUsedIn((v) => !v);
+                  }
+                }}
+              >
                 {showAllUsedIn ? "Show fewer" : `+${usedInRecipes.length - USED_IN_CHIP_CAP} more`}
-              </button>
+              </span>
             )}
           </>
         )}
@@ -1140,6 +1164,8 @@ export default function ItemDetail({
           </div>
         )}
       </div>
+
+      </fieldset>
 
       {showUnitModal && (
         <div className="modal-backdrop" onClick={() => setShowUnitModal(false)}>

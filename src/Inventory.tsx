@@ -223,6 +223,9 @@ export default function Inventory({
 
   const sectionsHere = sections.filter((s) => s.location === activeLocation);
   const staffHere = memberships.filter((m) => m.location === activeLocation || m.location === null);
+  // Managing sections (create/rename/delete, which items live in each) is a
+  // manager job; staff just count. The backend enforces the same split.
+  const canManage = me.memberships.some((m) => m.role === "admin" || m.role === "manager" || m.role === "finance");
 
   function refreshOnHand() {
     setRefreshTick((t) => t + 1);
@@ -232,7 +235,7 @@ export default function Inventory({
     <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
         <div className="rtabs">
-          {(["live", "count", "sections"] as const).map((t) => (
+          {(canManage ? (["live", "count", "sections"] as const) : (["live", "count"] as const)).map((t) => (
             <button key={t} className={`rtab ${tab === t ? "on" : ""}`} onClick={() => setTab(t)}>
               {t === "live" ? "Live stock" : t === "count" ? "Count sheets" : "Manage sections"}
             </button>
@@ -276,7 +279,7 @@ export default function Inventory({
         />
       )}
 
-      {locations.length > 0 && tab === "sections" && (
+      {locations.length > 0 && tab === "sections" && canManage && (
         <SectionsTab
           accessToken={accessToken}
           activeLocation={activeLocation}

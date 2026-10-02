@@ -79,6 +79,13 @@ import type { FilterFacet, FilterValues } from "./FilterBar";
 import HelpChat from "./HelpChat";
 import "./App.css";
 
+// admin / manager / finance -- everyone except plain staff. Mirrors the
+// backend's IsManagerOrAbove (the real enforcement); used here only to stop
+// showing staff pages and buttons the server would refuse anyway.
+function canManage(me: { memberships: { role: string }[] }): boolean {
+  return me.memberships.some((m) => m.role === "admin" || m.role === "manager" || m.role === "finance");
+}
+
 const NAV_ITEMS = [
   "End of day",
   "Inventory",
@@ -1712,7 +1719,7 @@ export default function App() {
           </div>
         </div>
         <nav>
-          {NAV_ITEMS.map((label) => (
+          {NAV_ITEMS.filter((label) => label !== "Reports" || canManage(me)).map((label) => (
             <button
               key={label}
               className={`nav-btn ${activePage === label ? "active" : ""}`}
@@ -1787,6 +1794,7 @@ export default function App() {
         {activePage === "Recipes" && selectedRecipeId && accessToken ? (
           <RecipeDetail
             recipeId={selectedRecipeId}
+            readOnly={!canManage(me)}
             accessToken={accessToken}
             items={items ?? []}
             allRecipes={recipes ?? []}
@@ -1802,6 +1810,7 @@ export default function App() {
             itemId={selectedItemId}
             accessToken={accessToken}
             userEmail={me.email}
+            readOnly={!canManage(me)}
             categories={categories}
             allergens={allergens}
             locations={locations}
@@ -1879,12 +1888,16 @@ export default function App() {
                     values={itemFilters}
                     onChange={(key, next) => setItemFilters((prev) => ({ ...prev, [key]: next }))}
                   />
-                  <button className="btn-ghost small" onClick={() => setShowImport(true)}>
-                    ⇪ Import supplier list
-                  </button>
-                  <button className="btn-primary small" onClick={() => setShowNewItem(true)}>
-                    + New item
-                  </button>
+                  {canManage(me) && (
+                    <>
+                      <button className="btn-ghost small" onClick={() => setShowImport(true)}>
+                        ⇪ Import supplier list
+                      </button>
+                      <button className="btn-primary small" onClick={() => setShowNewItem(true)}>
+                        + New item
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
               {activePage === "Recipes" && (
@@ -1900,9 +1913,11 @@ export default function App() {
                     values={recipeFilters}
                     onChange={(key, next) => setRecipeFilters((prev) => ({ ...prev, [key]: next }))}
                   />
-                  <button className="btn-primary small" onClick={() => setShowNewRecipe(true)}>
-                    + New recipe
-                  </button>
+                  {canManage(me) && (
+                    <button className="btn-primary small" onClick={() => setShowNewRecipe(true)}>
+                      + New recipe
+                    </button>
+                  )}
                 </div>
               )}
               {activePage === "Procurement" && (
@@ -2301,7 +2316,7 @@ export default function App() {
               />
             )}
 
-            {activePage === "Reports" && accessToken && (
+            {activePage === "Reports" && accessToken && canManage(me) && (
               <Reports
                 accessToken={accessToken}
                 locations={locations}

@@ -19,6 +19,9 @@ import AllergenIcon from "./AllergenIcon";
 
 interface Props {
   recipeId: string;
+  // View-only (staff): every field/button inside is disabled; the backend
+  // refuses the writes regardless.
+  readOnly?: boolean;
   accessToken: string;
   items: CatalogItem[];
   allRecipes: Recipe[];
@@ -35,6 +38,7 @@ interface Props {
 
 export default function RecipeDetail({
   recipeId,
+  readOnly = false,
   accessToken,
   items,
   allRecipes,
@@ -222,6 +226,8 @@ export default function RecipeDetail({
         ← All recipes
       </button>
 
+      {readOnly && <p className="ro-banner">View only — changes to recipes need a manager or admin.</p>}
+      <fieldset className="ro-fieldset" disabled={readOnly}>
       <div className="detail-head">
         <input
           className="name-edit"
@@ -563,6 +569,7 @@ export default function RecipeDetail({
           )}
         </div>
       </div>
+      </fieldset>
     </div>
   );
 }
