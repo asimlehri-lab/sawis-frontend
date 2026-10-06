@@ -660,7 +660,7 @@ export default function App() {
   ];
 
   // The Recipes list as currently filtered and searched -- one place, so
-  // the table below and "Print" always agree on what is
+  // the table below and "Print sheet" always agree on what is
   // "showing now".
   const shownRecipes = (recipes ?? [])
     .filter((r) => recipeFilter === "all" || r.kind === recipeFilter)
@@ -2017,7 +2017,7 @@ export default function App() {
                     onClick={() => setShowAllergenSheet(true)}
                     disabled={!recipes || recipes.length === 0}
                   >
-                    🖨 Print
+                    🖨 Print sheet
                   </button>
                   {canManage(me) && (
                     <button className="btn-primary small" onClick={() => setShowNewRecipe(true)}>

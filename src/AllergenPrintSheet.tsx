@@ -289,7 +289,7 @@ export default function AllergenPrintSheet({
     <>
       <div className="modal-backdrop" onClick={onClose}>
         <div className="modal allergen-print-modal" onClick={(e) => e.stopPropagation()}>
-          <h2>Print</h2>
+          <h2>Print sheet</h2>
           <p className="hint">
             Choose what goes on the sheet. Costs and prices are never printed, so it is safe to hand to any team
             member.
