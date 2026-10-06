@@ -26,7 +26,10 @@ function topicMatches(topic: HelpTopic, query: string): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
   if (topic.title.toLowerCase().includes(q)) return true;
-  return topic.keywords.some((k) => k.includes(q) || q.includes(k));
+  if (topic.keywords.some((k) => k.includes(q) || q.includes(k))) return true;
+  // Also match the words of a question itself, so typing "password" or
+  // "print" finds the right topic even when it isn't one of the keywords.
+  return topic.questions.some((item) => item.q.toLowerCase().includes(q));
 }
 
 // The in-app help chatbot -- Phase A of the help-chatbot phase plan (see
