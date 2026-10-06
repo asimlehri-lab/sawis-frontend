@@ -88,6 +88,29 @@ function canManage(me: { memberships: { role: string }[] }): boolean {
   return me.memberships.some((m) => m.role === "admin" || m.role === "manager" || m.role === "finance");
 }
 
+// "Allergen status" filter, shared by Items and Recipes. Four buckets that
+// are deliberately not collapsed into "allergen / non-allergen": an item
+// nobody has reviewed with no tags is NOT the same as one a person confirmed
+// has none, and the filter must not blur that.
+const ALLERGEN_STATUS_OPTIONS = [
+  { value: "has", label: "Contains allergens" },
+  { value: "may", label: "May contain only" },
+  { value: "none", label: "No allergens (confirmed)" },
+  { value: "unchecked", label: "Not checked yet" },
+];
+
+function allergenStatusOfItem(it: CatalogItem): string {
+  if (it.allergens.length > 0) return "has";
+  if (it.may_contain_allergens.length > 0) return "may";
+  return it.allergen_review_status === "confirmed" ? "none" : "unchecked";
+}
+
+function allergenStatusOfRecipe(r: Recipe): string {
+  if (r.allergens.length > 0) return "has";
+  if (r.may_contain.length > 0) return "may";
+  return r.unreviewed_item_count === 0 ? "none" : "unchecked";
+}
+
 const NAV_ITEMS = [
   "End of day",
   "Inventory",
@@ -583,6 +606,7 @@ export default function App() {
     { key: "category", label: "Category", options: categories.map((c) => ({ value: c.id, label: c.name })) },
     { key: "supplier", label: "Supplier", options: suppliers.map((s) => ({ value: s.id, label: s.name })) },
     { key: "allergens", label: "Allergens", options: allergens.map((a) => ({ value: a.id, label: a.name })) },
+    { key: "astatus", label: "Allergen status", options: ALLERGEN_STATUS_OPTIONS },
     // Whether a person has confirmed the item's allergens (see
     // CatalogItem.allergen_needs_review) -- what the Actions tab's
     // allergen tile links to.
@@ -631,6 +655,8 @@ export default function App() {
     // Items' own allergens facet, just matched against the recipe's
     // already-computed array instead of a per-item tag.
     { key: "allergens", label: "Allergens", options: allergens.map((a) => ({ value: a.id, label: a.name })) },
+    // "Not checked yet" = some ingredient's allergens aren't confirmed.
+    { key: "astatus", label: "Allergen status", options: ALLERGEN_STATUS_OPTIONS },
   ];
 
   // The Recipes list as currently filtered and searched -- one place, so
@@ -656,6 +682,9 @@ export default function App() {
       (r) =>
         (recipeFilters.allergens ?? null) === null ||
         recipeFilters.allergens!.some((aId) => r.allergens.includes(aId))
+    )
+    .filter(
+      (r) => (recipeFilters.astatus ?? null) === null || recipeFilters.astatus!.includes(allergenStatusOfRecipe(r))
     )
     .filter((r) => {
       const q = recipeSearch.trim().toLowerCase();
@@ -2056,6 +2085,11 @@ export default function App() {
                             (it) =>
                               (itemFilters.allergens ?? null) === null ||
                               itemFilters.allergens!.some((aId) => it.allergens.includes(aId))
+                          )
+                          .filter(
+                            (it) =>
+                              (itemFilters.astatus ?? null) === null ||
+                              itemFilters.astatus!.includes(allergenStatusOfItem(it))
                           )
                           .filter(
                             (it) =>
