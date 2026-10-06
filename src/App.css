@@ -2297,6 +2297,15 @@ input[type="file"] {
   .allergen-print .ap-tag svg { color: #000; flex: none; }
   .allergen-print .ap-none { color: #333; font-style: italic; }
   .allergen-print .ap-warn { font-weight: 700; }
+  .allergen-print .ap-section { margin-bottom: 14px; }
+  .allergen-print .ap-recipe { break-inside: avoid; border-bottom: 1px solid #bbb; padding: 8px 0 10px; }
+  .allergen-print .ap-recipe-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 14px; }
+  .allergen-print .ap-yield { font-size: 12px; color: #333; }
+  .allergen-print .ap-ing { margin-top: 4px; width: auto; }
+  .allergen-print .ap-ing td { border: none; padding: 1px 14px 1px 0; font-size: 12.5px; vertical-align: top; }
+  .allergen-print .ap-qty { white-space: nowrap; font-weight: 700; }
+  .allergen-print .ap-sub { color: #444; font-style: italic; }
+  .allergen-print .ap-recipe-allergens { margin-top: 6px; }
   .allergen-print .ap-foot { margin-top: 18px; font-size: 11px; color: #333; border-top: 1px solid #999; padding-top: 8px; }
   .allergen-print.allergen-card h1 { font-size: 34px; margin-bottom: 4px; }
   .allergen-print.allergen-card .ap-card-body { margin-top: 24px; }
