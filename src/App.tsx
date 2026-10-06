@@ -63,6 +63,7 @@ import RecipeDetail from "./RecipeDetail";
 import ItemDetail from "./ItemDetail";
 import AllergenIcon from "./AllergenIcon";
 import AllergenPrintSheet from "./AllergenPrintSheet";
+import AllergenReview from "./AllergenReview";
 import Loader from "./Loader";
 import ProcurementDetail from "./ProcurementDetail";
 import SupplierDeliveries from "./SupplierDeliveries";
@@ -540,6 +541,9 @@ export default function App() {
   const [supplierItems, setSupplierItems] = useState<SupplierItemRow[]>([]);
 
   const [showImport, setShowImport] = useState(false);
+  // The allergen review screen (queue / by dish), shown in place of the
+  // Items list; see AllergenReview.tsx.
+  const [showAllergenReview, setShowAllergenReview] = useState(false);
   const [importSupplier, setImportSupplier] = useState("");
   const [importRows, setImportRows] = useState<
     { name: string; unit: string; price: string; base_qty_per_unit?: string }[]
@@ -1007,6 +1011,7 @@ export default function App() {
     setSelectedRecipeId(null);
     setSelectedItemId(null);
     setShowImport(false);
+    setShowAllergenReview(false);
     setSelectedPOId(null);
     setSelectedSupplierId(null);
     setShowNewPO(false);
@@ -1903,6 +1908,19 @@ export default function App() {
               selectedSupplierId ? `← ${suppliers.find((s) => s.id === selectedSupplierId)?.name ?? "supplier"}` : undefined
             }
           />
+        ) : activePage === "Items" && showAllergenReview && accessToken ? (
+          <AllergenReview
+            items={items ?? []}
+            recipes={recipes ?? []}
+            allergens={allergens}
+            accessToken={accessToken}
+            onBack={() => setShowAllergenReview(false)}
+            onChanged={() => {
+              loadItems(accessToken);
+              loadRecipes(accessToken);
+            }}
+            onOpenItem={(id) => setSelectedItemId(id)}
+          />
         ) : activePage === "Procurement" && selectedSupplierId && accessToken ? (
           <SupplierDeliveries
             supplierId={selectedSupplierId}
@@ -1937,6 +1955,11 @@ export default function App() {
                   />
                   {canManage(me) && (
                     <>
+                      <button className="btn-ghost small" onClick={() => setShowAllergenReview(true)}>
+                        ⚠ Review allergens
+                        {(items ?? []).filter((it) => !it.archived && it.allergen_needs_review).length > 0 &&
+                          ` (${(items ?? []).filter((it) => !it.archived && it.allergen_needs_review).length})`}
+                      </button>
                       <button className="btn-ghost small" onClick={() => setShowImport(true)}>
                         ⇪ Import supplier list
                       </button>
@@ -2339,7 +2362,7 @@ export default function App() {
                 onNavigateApp={(label) => goToNav(label)}
                 onReviewAllergens={() => {
                   goToNav("Items");
-                  setItemFilters({ review: ["needs"] });
+                  setShowAllergenReview(true);
                 }}
                 onItemsChanged={() => loadItems(accessToken)}
               />

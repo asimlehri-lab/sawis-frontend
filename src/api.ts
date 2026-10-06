@@ -1076,6 +1076,21 @@ export async function reviewItemAllergens(
   return postJson(`/api/catalog/items/${id}/review/`, accessToken, body, "Could not confirm the allergens.");
 }
 
+// Confirm many items at once (the review screen). An entry with only an id
+// confirms the item as it currently stands. All or nothing server-side.
+export async function bulkReviewItems(
+  accessToken: string,
+  reviews: { id: string; allergens?: string[]; may_contain_allergens?: string[] }[]
+): Promise<CatalogItem[]> {
+  const res = await postJson<{ items: CatalogItem[] }>(
+    "/api/catalog/items/bulk_review/",
+    accessToken,
+    { reviews },
+    "Could not confirm those items."
+  );
+  return res.items;
+}
+
 export async function resolveAllergenSuggestion(
   accessToken: string,
   id: string,
