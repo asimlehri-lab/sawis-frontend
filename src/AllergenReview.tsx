@@ -11,7 +11,8 @@ import type { Allergen, CatalogItem, Recipe } from "./api";
 //               ("Looks right"); items it found nothing for are a tick list,
 //               because "nothing found from the name" is NOT "no allergens"
 //               and a person has to look at each one (there is deliberately
-//               no select-all there).
+//               no plain select-all there; after a search you can tick what
+//               is shown, and add one allergen to everything ticked).
 //   By dish  -- pick a dish and confirm its ingredients together, so the
 //               dish ends up with no unchecked ingredients (no dagger on
 //               its printed card).
@@ -263,6 +264,10 @@ export default function AllergenReview({
   const [dishId, setDishId] = useState<string | null>(null);
   const [dishOnlyOpen, setDishOnlyOpen] = useState(true);
   const [lastTicked, setLastTicked] = useState<string | null>(null);
+  // "Add allergen to ticked items" panel.
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkPick, setBulkPick] = useState<string[]>([]);
+  const [bulkLevel, setBulkLevel] = useState<"contains" | "may">("contains");
 
   const view = (it: CatalogItem): CatalogItem => local[it.id] ?? it;
   const itemsById = useMemo(() => new Map(items.map((it) => [it.id, it])), [items]);
@@ -374,6 +379,34 @@ export default function AllergenReview({
     });
     setLastTicked(id);
   }
+
+  // Ticks everything currently shown, so after searching "syrup" the whole
+  // run is one click. Only what is on screen is ticked, never what a
+  // person can't see.
+  function tickAllShown() {
+    setTicked((prev) => new Set([...prev, ...shownB.map((i) => i.id)]));
+  }
+
+  // Adds the chosen allergen(s) to every ticked item and confirms them.
+  // Anything already tagged on the item is kept.
+  function applyBulkAllergen() {
+    if (bulkPick.length === 0) return;
+    const reviews = [...ticked].map((id) => {
+      const it = itemsById.get(id);
+      const cur = it ? view(it) : null;
+      const contains = new Set(cur?.allergens ?? []);
+      const may = new Set(cur?.may_contain_allergens ?? []);
+      bulkPick.forEach((a) => (bulkLevel === "contains" ? contains : may).add(a));
+      contains.forEach((a) => may.delete(a));
+      return { id, allergens: [...contains], may_contain_allergens: [...may] };
+    });
+    confirm(reviews).then(() => {
+      setBulkOpen(false);
+      setBulkPick([]);
+    });
+  }
+
+  const hiddenTicked = [...ticked].filter((id) => !shownB.some((i) => i.id === id)).length;
 
   const recentItems = recent
     .map((id) => itemsById.get(id))
@@ -505,11 +538,17 @@ export default function AllergenReview({
             <section className="ar-section">
               <div className="ar-section-head">
                 <h2>Nothing found from the name ({nothing.length})</h2>
+                {q && shownB.length > 0 && (
+                  <button type="button" className="btn-ghost small" onClick={tickAllShown} disabled={busy}>
+                    Tick all {shownB.length} shown
+                  </button>
+                )}
               </div>
               <p className="hint">
                 These names didn't match the word list. That does <b>not</b> mean they're allergen-free — you know the
-                product, SAWIS doesn't. Tick the ones that genuinely have no allergens (shift-click ticks a run), or open
-                Edit to tag one.
+                product, SAWIS doesn't. Tick the ones you want to handle together (shift-click ticks a run; search for a
+                word like “syrup” to tick everything matching it). Then confirm them as “no allergens”, or add an
+                allergen to all of them. Or open Edit to tag one on its own.
               </p>
               <div className="ar-list">
                 {shownB.map((it) =>
@@ -527,20 +566,101 @@ export default function AllergenReview({
                 </button>
               )}
               {ticked.size > 0 && (
-                <div className="ar-bar">
-                  <span>{ticked.size} ticked</span>
-                  <button
-                    type="button"
-                    className="btn-primary small"
-                    disabled={busy}
-                    onClick={() =>
-                      confirm(
-                        [...ticked].map((id) => ({ id, allergens: [], may_contain_allergens: [] }))
-                      )
-                    }
-                  >
-                    {busy ? "Saving…" : `Confirm ${ticked.size}: no allergens`}
-                  </button>
+                <div className="ar-bulk-wrap">
+                  {bulkOpen && (
+                    <div className="ar-bulk" role="group" aria-label="Add an allergen to the ticked items">
+                      <div className="ar-bulk-title">
+                        Add to {ticked.size} ticked {ticked.size === 1 ? "item" : "items"}
+                      </div>
+                      <div className="ar-bulk-level">
+                        <label className="check-row">
+                          <input
+                            type="radio"
+                            name="ar-bulk-level"
+                            checked={bulkLevel === "contains"}
+                            onChange={() => setBulkLevel("contains")}
+                          />
+                          Contains
+                        </label>
+                        <label className="check-row">
+                          <input
+                            type="radio"
+                            name="ar-bulk-level"
+                            checked={bulkLevel === "may"}
+                            onChange={() => setBulkLevel("may")}
+                          />
+                          May contain
+                        </label>
+                      </div>
+                      <div className="ar-tags ar-pick">
+                        {allergens.map((a) => (
+                          <button
+                            key={a.id}
+                            type="button"
+                            className={`ar-tag ${bulkPick.includes(a.id) ? "on" : ""}`}
+                            aria-pressed={bulkPick.includes(a.id)}
+                            disabled={busy}
+                            onClick={() => setBulkPick(toggle(bulkPick, a.id))}
+                          >
+                            <AllergenIcon code={a.code} size={14} />
+                            {a.name}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="ar-bulk-actions">
+                        <button type="button" className="btn-ghost small" onClick={() => setBulkOpen(false)}>
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-primary small"
+                          disabled={busy || bulkPick.length === 0}
+                          onClick={applyBulkAllergen}
+                        >
+                          {busy ? "Saving…" : `Add and confirm ${ticked.size}`}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  <div className="ar-bar">
+                    <span>
+                      {ticked.size} ticked
+                      {hiddenTicked > 0 && ` (${hiddenTicked} hidden by your search)`}
+                    </span>
+                    <div className="ar-bar-actions">
+                      <button
+                        type="button"
+                        className="ar-bar-link"
+                        disabled={busy}
+                        onClick={() => {
+                          setTicked(new Set());
+                          setBulkOpen(false);
+                        }}
+                      >
+                        Clear
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ghost small ar-bar-btn"
+                        disabled={busy}
+                        onClick={() => setBulkOpen(!bulkOpen)}
+                      >
+                        Add allergen…
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-primary small"
+                        disabled={busy}
+                        onClick={() =>
+                          confirm(
+                            [...ticked].map((id) => ({ id, allergens: [], may_contain_allergens: [] }))
+                          )
+                        }
+                      >
+                        {busy ? "Saving…" : `Confirm ${ticked.size}: no allergens`}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </section>
