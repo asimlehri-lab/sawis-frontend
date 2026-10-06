@@ -62,6 +62,7 @@ import type {
 import RecipeDetail from "./RecipeDetail";
 import ItemDetail from "./ItemDetail";
 import AllergenIcon from "./AllergenIcon";
+import AllergenPrintSheet from "./AllergenPrintSheet";
 import Loader from "./Loader";
 import ProcurementDetail from "./ProcurementDetail";
 import SupplierDeliveries from "./SupplierDeliveries";
@@ -578,6 +579,17 @@ export default function App() {
     { key: "category", label: "Category", options: categories.map((c) => ({ value: c.id, label: c.name })) },
     { key: "supplier", label: "Supplier", options: suppliers.map((s) => ({ value: s.id, label: s.name })) },
     { key: "allergens", label: "Allergens", options: allergens.map((a) => ({ value: a.id, label: a.name })) },
+    // Whether a person has confirmed the item's allergens (see
+    // CatalogItem.allergen_needs_review) -- what the Actions tab's
+    // allergen tile links to.
+    {
+      key: "review",
+      label: "Allergen review",
+      options: [
+        { value: "needs", label: "Needs checking" },
+        { value: "confirmed", label: "Confirmed" },
+      ],
+    },
   ];
 
   // Recipes: menu_category (freeform string, not the Category model --
@@ -616,6 +628,37 @@ export default function App() {
     // already-computed array instead of a per-item tag.
     { key: "allergens", label: "Allergens", options: allergens.map((a) => ({ value: a.id, label: a.name })) },
   ];
+
+  // The Recipes list as currently filtered and searched -- one place, so
+  // the table below and "Print allergen sheet" always agree on what is
+  // "showing now".
+  const shownRecipes = (recipes ?? [])
+    .filter((r) => recipeFilter === "all" || r.kind === recipeFilter)
+    .filter((r) => (recipeFilters.category ?? null) === null || recipeFilters.category!.includes(r.menu_category))
+    .filter(
+      (r) =>
+        (recipeFilters.item ?? null) === null ||
+        recipeFilters.item!.some((itemId) => r.lines.some((l) => l.item === itemId))
+    )
+    .filter((r) => (recipeFilters.group ?? null) === null || recipeFilters.group!.includes(r.menu_group))
+    .filter(
+      (r) =>
+        (recipeFilters.cost ?? null) === null ||
+        recipeFilters.cost!.includes(
+          costBand(r.plate_food_cost_pct, defaultTargetCostPct(locations, r.menu_group === "drink" ? "drink" : "food"))
+        )
+    )
+    .filter(
+      (r) =>
+        (recipeFilters.allergens ?? null) === null ||
+        recipeFilters.allergens!.some((aId) => r.allergens.includes(aId))
+    )
+    .filter((r) => {
+      const q = recipeSearch.trim().toLowerCase();
+      if (!q) return true;
+      return (r.name ?? "").toLowerCase().includes(q) || r.pos_id.toLowerCase().includes(q);
+    });
+  const [showAllergenSheet, setShowAllergenSheet] = useState(false);
 
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[] | null>(null);
   const [poError, setPoError] = useState<string | null>(null);
@@ -1800,6 +1843,7 @@ export default function App() {
             items={items ?? []}
             allRecipes={recipes ?? []}
             allergens={allergens}
+            venue={me.org.name}
             locations={locations}
             onBack={() => setSelectedRecipeId(null)}
             onChanged={() => loadRecipes(accessToken)}
@@ -1916,6 +1960,13 @@ export default function App() {
                     values={recipeFilters}
                     onChange={(key, next) => setRecipeFilters((prev) => ({ ...prev, [key]: next }))}
                   />
+                  <button
+                    className="btn-ghost small"
+                    onClick={() => setShowAllergenSheet(true)}
+                    disabled={!recipes || recipes.length === 0}
+                  >
+                    🖨 Allergen sheet
+                  </button>
                   {canManage(me) && (
                     <button className="btn-primary small" onClick={() => setShowNewRecipe(true)}>
                       + New recipe
@@ -1983,6 +2034,11 @@ export default function App() {
                               (itemFilters.allergens ?? null) === null ||
                               itemFilters.allergens!.some((aId) => it.allergens.includes(aId))
                           )
+                          .filter(
+                            (it) =>
+                              (itemFilters.review ?? null) === null ||
+                              itemFilters.review!.some((v) => (v === "needs" ? it.allergen_needs_review : !it.allergen_needs_review))
+                          )
                           .filter((it) => {
                             const q = itemSearch.trim().toLowerCase();
                             if (!q) return true;
@@ -2005,6 +2061,11 @@ export default function App() {
                                         <AllergenIcon code={a.code} size={14} className="ai-icon" />
                                       </span>
                                     ))}
+                                  </span>
+                                )}
+                                {canManage(me) && it.allergen_needs_review && (
+                                  <span className="allergen-review-badge" title="Allergens not confirmed yet">
+                                    Check allergens
                                   </span>
                                 )}
                               </td>
@@ -2056,39 +2117,7 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {recipes
-                          .filter((r) => recipeFilter === "all" || r.kind === recipeFilter)
-                          .filter(
-                            (r) => (recipeFilters.category ?? null) === null || recipeFilters.category!.includes(r.menu_category)
-                          )
-                          .filter(
-                            (r) =>
-                              (recipeFilters.item ?? null) === null ||
-                              recipeFilters.item!.some((itemId) => r.lines.some((l) => l.item === itemId))
-                          )
-                          .filter(
-                            (r) => (recipeFilters.group ?? null) === null || recipeFilters.group!.includes(r.menu_group)
-                          )
-                          .filter(
-                            (r) =>
-                              (recipeFilters.cost ?? null) === null ||
-                              recipeFilters.cost!.includes(
-                                costBand(r.plate_food_cost_pct, defaultTargetCostPct(locations, r.menu_group === "drink" ? "drink" : "food"))
-                              )
-                          )
-                          .filter(
-                            (r) =>
-                              (recipeFilters.allergens ?? null) === null ||
-                              recipeFilters.allergens!.some((aId) => r.allergens.includes(aId))
-                          )
-                          .filter((r) => {
-                            const q = recipeSearch.trim().toLowerCase();
-                            if (!q) return true;
-                            return (
-                              (r.name ?? "").toLowerCase().includes(q) ||
-                              r.pos_id.toLowerCase().includes(q)
-                            );
-                          })
+                        {shownRecipes
                           .map((r) => {
                             const usedInCount = recipes.filter((other) =>
                               other.lines.some((l) => l.line_type === "recipe" && l.sub_recipe === r.id)
@@ -2308,6 +2337,11 @@ export default function App() {
                   setSelectedItemId(id);
                 }}
                 onNavigateApp={(label) => goToNav(label)}
+                onReviewAllergens={() => {
+                  goToNav("Items");
+                  setItemFilters({ review: ["needs"] });
+                }}
+                onItemsChanged={() => loadItems(accessToken)}
               />
             )}
 
@@ -2398,6 +2432,16 @@ export default function App() {
             </form>
           </div>
         </div>
+      )}
+
+      {showAllergenSheet && recipes && (
+        <AllergenPrintSheet
+          shown={shownRecipes}
+          all={recipes}
+          allergens={allergens}
+          venue={me.org.name}
+          onClose={() => setShowAllergenSheet(false)}
+        />
       )}
 
       {showNewRecipe && (

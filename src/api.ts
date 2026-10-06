@@ -192,11 +192,39 @@ export interface CatalogItem {
   // allergens are the union of its ingredients' tags, computed server-
   // side (see Recipe.allergens below), never tagged per-recipe.
   allergens: string[];
+  // "May contain": cross-contact the supplier or kitchen can't rule out.
+  // Kept apart from `allergens` (contains); if an allergen is in both,
+  // contains wins wherever it is shown.
+  may_contain_allergens: string[];
+  // unreviewed = nobody has looked (NOT the same as "has none"),
+  // auto = tags came from the word list and a person hasn't confirmed,
+  // confirmed = a person confirmed the set (possibly "none").
+  allergen_review_status: AllergenReviewStatus;
+  allergen_reviewed_at: string | null;
+  allergen_reviewed_by_name: string | null;
+  // Suggestions still open: pending (needs a person) or applied (the word
+  // list added the tag and it awaits confirmation).
+  allergen_suggestions: AllergenSuggestion[];
+  // Not confirmed, or confirmed but with a suggestion still pending --
+  // the one flag the Items list, its filter and the Actions tile share.
+  allergen_needs_review: boolean;
   archived: boolean;
   holdings: ItemHolding[];
   // Included so the Items list can be searched by a supplier's own item
   // code, not just by our SKU/name -- see ItemSupplierRow.supplier_sku.
   supplier_links: ItemSupplierRow[];
+}
+
+export type AllergenReviewStatus = "unreviewed" | "auto" | "confirmed";
+
+export interface AllergenSuggestion {
+  id: string;
+  allergen: string;
+  level: "contains" | "may_contain";
+  source: "rules" | "ai" | "label";
+  confidence: "high" | "low";
+  reason: string;
+  status: "pending" | "applied";
 }
 
 export interface Allergen {
@@ -464,6 +492,16 @@ export interface Recipe {
   // sub-recipe's own ingredients') tagged allergens -- see
   // Recipe.allergens() on the backend. Never set directly.
   allergens: string[];
+  // This recipe's own "may contain" (a shared fryer, say) -- the one
+  // allergen field on a recipe that IS set directly.
+  may_contain_allergens: string[];
+  // Computed: every ingredient's may-contain plus this recipe's own,
+  // minus anything already in `allergens` (contains wins).
+  may_contain: string[];
+  // How many distinct ingredients (sub-recipes included) a person hasn't
+  // confirmed the allergens of. Anything above 0 means the allergen list
+  // above may be incomplete -- never present it as an all-clear.
+  unreviewed_item_count: number;
 }
 
 export const YIELD_UNITS = ["plate", "portion", "glass", "kg", "litre"];
@@ -605,6 +643,8 @@ export interface RecipePatch {
   menu_group?: "food" | "drink";
   pos_id?: string;
   menu_category?: string;
+  // This recipe's own "may contain" (cross-contact in the kitchen).
+  may_contain_allergens?: string[];
 }
 
 export async function updateRecipe(accessToken: string, id: string, patch: RecipePatch): Promise<Recipe> {
@@ -1014,6 +1054,53 @@ export interface ItemPatch {
   target_waste_pct?: string | null;
   allergens?: string[];
   archived?: boolean;
+}
+
+async function postJson<T>(path: string, accessToken: string, body: unknown, failure: string): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(failure);
+  return res.json();
+}
+
+// A person confirms an item's allergens. Omit a list to leave it as it is;
+// both empty is the explicit "reviewed, no allergens".
+export async function reviewItemAllergens(
+  accessToken: string,
+  id: string,
+  body: { allergens?: string[]; may_contain_allergens?: string[] }
+): Promise<CatalogItem> {
+  return postJson(`/api/catalog/items/${id}/review/`, accessToken, body, "Could not confirm the allergens.");
+}
+
+export async function resolveAllergenSuggestion(
+  accessToken: string,
+  id: string,
+  suggestion: string,
+  decision: "accept" | "dismiss"
+): Promise<CatalogItem> {
+  return postJson(
+    `/api/catalog/items/${id}/resolve_suggestion/`,
+    accessToken,
+    { suggestion, decision },
+    "Could not update that suggestion."
+  );
+}
+
+export interface SuggestAllergensResult {
+  items: number;
+  items_changed: number;
+  tags_added: number;
+  suggestions: number;
+}
+
+// Runs the word list over every item in the organisation. Adds tags only
+// to items nobody has confirmed; everything else becomes a suggestion.
+export async function runAllergenWordList(accessToken: string): Promise<SuggestAllergensResult> {
+  return postJson("/api/catalog/items/suggest_allergens/", accessToken, {}, "Could not check your items.");
 }
 
 export async function updateItem(accessToken: string, id: string, patch: ItemPatch): Promise<CatalogItem> {

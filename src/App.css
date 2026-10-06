@@ -2284,6 +2284,24 @@ input[type="file"] {
      to read, not blank sheets to hand out) -- just avoid an awkward
      mid-table split across a page boundary. */
   .print-report-section { break-inside: avoid; margin-bottom: 20px; }
+  /* Allergen sheet / card (AllergenPrintSheet.tsx). Black and white safe:
+     everything is words plus an outline icon, nothing relies on colour. */
+  .allergen-print .ap-meta { color: #444; margin-bottom: 14px; }
+  .allergen-print .ap-tbl { margin-top: 4px; }
+  .allergen-print .ap-tbl td { border: none; border-bottom: 1px solid #bbb; vertical-align: top; padding: 7px 8px; }
+  .allergen-print .ap-tbl tr { break-inside: avoid; }
+  .allergen-print .ap-name { width: 34%; font-weight: 700; font-size: 13.5px; }
+  .allergen-print .ap-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 2px 0; font-size: 12.5px; }
+  .allergen-print .ap-label { font-weight: 700; }
+  .allergen-print .ap-tag { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .allergen-print .ap-tag svg { color: #000; flex: none; }
+  .allergen-print .ap-none { color: #333; font-style: italic; }
+  .allergen-print .ap-warn { font-weight: 700; }
+  .allergen-print .ap-foot { margin-top: 18px; font-size: 11px; color: #333; border-top: 1px solid #999; padding-top: 8px; }
+  .allergen-print.allergen-card h1 { font-size: 34px; margin-bottom: 4px; }
+  .allergen-print.allergen-card .ap-card-body { margin-top: 24px; }
+  .allergen-print.allergen-card .ap-line { font-size: 20px; margin: 10px 0; gap: 8px 22px; }
+  .allergen-print.allergen-card .ap-foot { font-size: 12.5px; margin-top: 40px; }
 }
 
 .deliv-strip { margin-bottom: 16px; }
@@ -2379,6 +2397,46 @@ input[type="file"] {
   vertical-align: middle;
 }
 .allergen-icons-inline .ai-icon { color: var(--caution); display: block; }
+
+/* Allergen review (item page) */
+.allergen-card-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin-bottom: 6px; }
+.allergen-status { font-size: 12px; font-weight: 700; padding: 4px 11px; border-radius: 999px; }
+.allergen-status-good { background: var(--good-soft); color: var(--good); }
+.allergen-status-warn { background: var(--caution-soft); color: var(--caution); }
+.allergen-status-muted { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+.allergen-sub { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 700; margin: 14px 0 8px; }
+.allergen-suggest-list { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 6px; }
+.allergen-suggest { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--caution-soft); }
+.allergen-suggest .ai-icon { color: var(--caution); flex: none; }
+.allergen-suggest-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.allergen-suggest-sub { font-size: 12px; color: var(--muted); }
+.allergen-suggest-actions { display: flex; gap: 6px; flex: none; }
+.allergen-review-badge {
+  display: inline-block; margin-left: 8px; vertical-align: middle;
+  font-size: 10.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+  background: var(--caution-soft); color: var(--caution); white-space: nowrap;
+}
+.allergen-chip:disabled { opacity: 0.45; cursor: not-allowed; }
+.allergen-chip-may.active { background: var(--caution-soft); border-color: var(--caution); border-style: dashed; color: var(--caution); }
+.allergen-confirm-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.allergen-unsaved { font-size: 12px; color: var(--caution); font-weight: 600; }
+@media (max-width: 600px) {
+  .allergen-suggest { flex-wrap: wrap; }
+  .allergen-suggest-actions { width: 100%; }
+}
+
+/* Print allergen sheet: options dialog (on screen) */
+.allergen-print-modal { max-width: 560px; max-height: 90vh; overflow-y: auto; }
+.allergen-print-modal .field { margin-bottom: 14px; }
+.allergen-print-modal .hint { font-size: 12.5px; color: var(--muted); margin: 0 0 14px; line-height: 1.45; }
+.field .check-row, .check-row { display: flex; align-items: center; gap: 9px; font-size: 13.5px; font-weight: 500; text-transform: none; letter-spacing: 0; color: var(--ink); padding: 3px 0; margin: 0; cursor: pointer; }
+.field .check-row input, .check-row input { width: auto; flex: none; margin: 0; }
+.allergen-warning { font-size: 12.5px; color: var(--caution); background: var(--caution-soft); border-radius: 10px; padding: 8px 12px; margin: 0 0 12px; }
+.allergen-block { margin-bottom: 18px; display: flex; flex-direction: column; gap: 8px; }
+.allergen-may-label { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.allergen-badge-may { border-style: dashed; }
+.allergen-own { margin-top: 2px; }
+.allergen-own summary { cursor: pointer; font-size: 12.5px; font-weight: 600; color: var(--muted); }
 
 .waste-cols { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 900px) { .waste-cols { grid-template-columns: 1fr; } }
@@ -2637,6 +2695,7 @@ input[type="file"] {
 .ov-big { font-size: 26px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .ov-big span { font-size: 12.5px; font-weight: 600; color: var(--muted); }
 .ov-cta { font-size: 12px; font-weight: 700; color: var(--brand); margin-top: auto; }
+.ov-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
 .ov-lines { display: flex; flex-direction: column; gap: 6px; }
 .ov-line {
   display: flex;

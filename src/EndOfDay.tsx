@@ -33,6 +33,8 @@ interface Props {
   // Opens an Item's detail page (Items tab) -- used by the Tasks tab's
   // "Latest updates" news rows for new/updated items.
   onOpenItem: (id: string) => void;
+  onReviewAllergens: () => void;
+  onItemsChanged: () => void;
   // Cross-page nav for the Tasks tab (e.g. "Inventory" for an assigned
   // count, "Waste log" for the reminder) -- same goToNav App.tsx already
   // uses for its own sidebar.
@@ -176,6 +178,8 @@ export default function EndOfDay({
   onOpenRecipe,
   onOpenPO,
   onOpenItem,
+  onReviewAllergens,
+  onItemsChanged,
   onNavigateApp,
 }: Props) {
   // Sales (and importing sales) is manager-only data -- the backend 403s it
@@ -707,6 +711,8 @@ export default function EndOfDay({
           onOpenRecipe={onOpenRecipe}
           onOpenPO={onOpenPO}
           onOpenItem={onOpenItem}
+          onReviewAllergens={onReviewAllergens}
+          onItemsChanged={onItemsChanged}
           onViewReorder={() => setTab("reorder")}
           onNavigateApp={onNavigateApp}
         />

@@ -16,6 +16,7 @@ import {
 import type { Recipe, CatalogItem, Location, Allergen } from "./api";
 import SearchSelect from "./SearchSelect";
 import AllergenIcon from "./AllergenIcon";
+import { AllergenSheetBody } from "./AllergenPrintSheet";
 
 interface Props {
   recipeId: string;
@@ -26,6 +27,8 @@ interface Props {
   items: CatalogItem[];
   allRecipes: Recipe[];
   allergens: Allergen[];
+  // Printed on the allergen card.
+  venue: string;
   locations: Location[];
   onBack: () => void;
   onChanged: () => void;
@@ -43,6 +46,7 @@ export default function RecipeDetail({
   items,
   allRecipes,
   allergens,
+  venue,
   locations,
   onBack,
   onChanged,
@@ -219,6 +223,18 @@ export default function RecipeDetail({
   // Allergen.Meta.ordering server-side -- filtering it preserves that
   // same order, so the badge row doesn't need its own sort.
   const recipeAllergens = allergens.filter((a) => recipe.allergens.includes(a.id));
+  const recipeMay = allergens.filter((a) => recipe.may_contain.includes(a.id));
+  const unchecked = recipe.unreviewed_item_count;
+
+  // The recipe's OWN may-contain (shared fryer, shared surface) -- ticking
+  // an allergen the ingredients already contain is pointless, so those
+  // chips are disabled; saves straight away, like every other field here.
+  function toggleOwnMay(allergenId: string) {
+    const cur = recipe!.may_contain_allergens;
+    saveField({
+      may_contain_allergens: cur.includes(allergenId) ? cur.filter((id) => id !== allergenId) : [...cur, allergenId],
+    });
+  }
 
   return (
     <div>
@@ -244,20 +260,86 @@ export default function RecipeDetail({
           : "Ingredient costs pull live from inventory and any sub-recipes used."}
       </p>
 
-      <div className="allergen-badge-row" style={{ marginBottom: 18 }}>
-        {recipeAllergens.length > 0 ? (
-          recipeAllergens.map((a) => (
-            <span key={a.id} className="allergen-badge" title={a.name}>
-              <AllergenIcon code={a.code} size={15} className="ai-icon" />
-              {a.name}
+      </fieldset>
+
+      {/* Outside the read-only fieldset on purpose: staff can't edit, but
+          they can read the allergens and print the card. */}
+      <div className="allergen-block">
+        <div className="allergen-badge-row">
+          {recipeAllergens.length > 0 ? (
+            <>
+              <span className="allergen-may-label">Contains</span>
+              {recipeAllergens.map((a) => (
+                <span key={a.id} className="allergen-badge" title={a.name}>
+                  <AllergenIcon code={a.code} size={15} className="ai-icon" />
+                  {a.name}
+                </span>
+              ))}
+            </>
+          ) : unchecked === 0 ? (
+            <span className="allergen-empty">
+              No allergens — every ingredient's allergens have been confirmed.
             </span>
-          ))
-        ) : (
-          <span className="allergen-empty">
-            No allergens tagged on this recipe's ingredients yet — tag them on each item's own page.
-          </span>
+          ) : (
+            <span className="allergen-empty">No allergens recorded yet.</span>
+          )}
+        </div>
+        {recipeMay.length > 0 && (
+          <div className="allergen-badge-row">
+            <span className="allergen-may-label">May contain</span>
+            {recipeMay.map((a) => (
+              <span key={a.id} className="allergen-badge allergen-badge-may" title={a.name}>
+                <AllergenIcon code={a.code} size={15} className="ai-icon" />
+                {a.name}
+              </span>
+            ))}
+          </div>
         )}
+        {unchecked > 0 && (
+          <p className="allergen-warning" style={{ margin: 0 }}>
+            {unchecked} {unchecked === 1 ? "ingredient hasn't" : "ingredients haven't"} had{" "}
+            {unchecked === 1 ? "its" : "their"} allergens confirmed yet, so this list may be incomplete — it is not an
+            all-clear.
+          </p>
+        )}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <button type="button" className="btn-ghost small" onClick={() => window.print()}>
+            🖨 Print allergen card
+          </button>
+        </div>
+        {!readOnly && (
+          <details className="allergen-own">
+            <summary>Kitchen cross-contact for this recipe (May contain)</summary>
+            <p className="hint" style={{ marginTop: 8 }}>
+              Add anything this dish can pick up in your kitchen even though no ingredient contains it — a shared
+              fryer, a shared board. It shows as “May contain” here and on the printed sheet.
+            </p>
+            <div className="chip-row" style={{ marginBottom: 0 }}>
+              {allergens.map((a) => {
+                const inContains = recipe.allergens.includes(a.id);
+                const active = !inContains && recipe.may_contain_allergens.includes(a.id);
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    className={`chip allergen-chip allergen-chip-may${active ? " active" : ""}`}
+                    aria-pressed={active}
+                    disabled={inContains}
+                    title={inContains ? `${a.name} is already in this recipe` : a.name}
+                    onClick={() => toggleOwnMay(a.id)}
+                  >
+                    <AllergenIcon code={a.code} size={16} />
+                    {a.name}
+                  </button>
+                );
+              })}
+            </div>
+          </details>
+        )}
+        <AllergenSheetBody recipes={[recipe]} allergens={allergens} venue={venue} includeMay variant="card" />
       </div>
+
+      <fieldset className="ro-fieldset" disabled={readOnly}>
 
       {error && <p className="error">{error}</p>}
 

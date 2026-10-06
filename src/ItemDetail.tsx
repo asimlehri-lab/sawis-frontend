@@ -17,6 +17,8 @@ import {
   defaultCurrency,
   convertToBaseUnit,
   fetchItemWasteStats,
+  reviewItemAllergens,
+  resolveAllergenSuggestion,
 } from "./api";
 import type {
   CatalogItem,
@@ -28,6 +30,7 @@ import type {
   Recipe,
   ItemWasteStats,
   Allergen,
+  AllergenSuggestion,
 } from "./api";
 import AllergenIcon from "./AllergenIcon";
 
@@ -147,6 +150,14 @@ export default function ItemDetail({
 }: Props) {
   const [item, setItem] = useState<CatalogItem | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Unsaved edits to the Contains / May contain chips. Nothing is saved
+  // until a person presses Confirm -- tagging is a review decision, not an
+  // autosave. Tied to the server state it was edited from (`key`), so a
+  // reload or a Confirm/Accept that changes the tags drops a stale draft.
+  const [allergenDraft, setAllergenDraft] = useState<{ key: string; contains: string[]; may: string[] } | null>(
+    null
+  );
+  const [confirmingAllergens, setConfirmingAllergens] = useState(false);
   const [onHandMap, setOnHandMap] = useState<Record<string, number>>({});
   // Chips are capped so an item used across a huge chunk of the menu
   // (salt, oil, ...) doesn't turn this card into a wall of tags -- "+N
@@ -317,12 +328,56 @@ export default function ItemDetail({
     saveField({ vat_rate: fraction });
   }
 
-  function handleToggleAllergen(allergenId: string) {
+  // The chips' current values: the unsaved draft if there is one for this
+  // exact server state, else what the server has.
+  const allergenServerKey = item
+    ? `${item.id}|${item.allergens.join(",")}|${item.may_contain_allergens.join(",")}|${item.allergen_review_status}`
+    : "";
+  const draftLive = allergenDraft !== null && allergenDraft.key === allergenServerKey;
+  const containsIds = draftLive ? allergenDraft.contains : (item?.allergens ?? []);
+  const mayIds = draftLive ? allergenDraft.may : (item?.may_contain_allergens ?? []);
+
+  // Contains beats may contain: ticking one removes the other.
+  function handleToggleAllergen(allergenId: string, level: "contains" | "may") {
     if (!item) return;
-    const next = item.allergens.includes(allergenId)
-      ? item.allergens.filter((id) => id !== allergenId)
-      : [...item.allergens, allergenId];
-    saveField({ allergens: next });
+    const flip = (list: string[]) =>
+      list.includes(allergenId) ? list.filter((id) => id !== allergenId) : [...list, allergenId];
+    const nextContains = level === "contains" ? flip(containsIds) : containsIds;
+    let nextMay = level === "may" ? flip(mayIds) : mayIds;
+    if (level === "contains" && !containsIds.includes(allergenId)) nextMay = nextMay.filter((id) => id !== allergenId);
+    setAllergenDraft({ key: allergenServerKey, contains: nextContains, may: nextMay });
+  }
+
+  async function handleConfirmAllergens() {
+    if (!item) return;
+    setConfirmingAllergens(true);
+    setError(null);
+    try {
+      const updated = await reviewItemAllergens(accessToken, item.id, {
+        allergens: containsIds,
+        may_contain_allergens: mayIds.filter((id) => !containsIds.includes(id)),
+      });
+      setItem(updated);
+      setAllergenDraft(null);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not confirm the allergens.");
+    } finally {
+      setConfirmingAllergens(false);
+    }
+  }
+
+  async function handleSuggestion(s: AllergenSuggestion, decision: "accept" | "dismiss") {
+    if (!item) return;
+    setError(null);
+    try {
+      const updated = await resolveAllergenSuggestion(accessToken, item.id, s.id, decision);
+      setItem(updated);
+      setAllergenDraft(null);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update that suggestion.");
+    }
   }
 
   function openAddCategory() {
@@ -652,20 +707,72 @@ export default function ItemDetail({
       </div>
 
       <div className="card">
-        <h2 style={{ marginTop: 0 }}>Allergens</h2>
+        <div className="allergen-card-head">
+          <h2 style={{ margin: 0 }}>Allergens</h2>
+          {item.allergen_review_status === "confirmed" ? (
+            <span className="allergen-status allergen-status-good">
+              ✓ Confirmed
+              {item.allergen_reviewed_by_name ? ` by ${item.allergen_reviewed_by_name}` : ""}
+              {item.allergen_reviewed_at
+                ? ` · ${new Date(item.allergen_reviewed_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`
+                : ""}
+            </span>
+          ) : item.allergen_review_status === "auto" ? (
+            <span className="allergen-status allergen-status-warn">Suggested automatically · needs checking</span>
+          ) : (
+            <span className="allergen-status allergen-status-muted">Not reviewed yet</span>
+          )}
+        </div>
         <p className="hint">
-          Which of the 14 major allergens this item itself contains -- tag it once here and every recipe that
-          uses it picks it up automatically (see that recipe's own Allergens card).
+          Tag what this item contains once here and every recipe that uses it picks it up. Nothing is saved until
+          you press Confirm.
+          {item.allergen_review_status !== "confirmed" &&
+            " Nobody has confirmed this item yet, so no tags does not mean allergen-free — recipes using it show a “not all checked” warning."}
         </p>
-        <div className="chip-row" style={{ marginBottom: 0 }}>
+
+        {item.allergen_suggestions.length > 0 && (
+          <div className="allergen-suggest-list">
+            {item.allergen_suggestions.map((s) => {
+              const a = allergens.find((x) => x.id === s.allergen);
+              if (!a) return null;
+              const applied = s.status === "applied";
+              return (
+                <div key={s.id} className="allergen-suggest">
+                  <AllergenIcon code={a.code} size={18} className="ai-icon" />
+                  <div className="allergen-suggest-main">
+                    <b>
+                      {s.level === "may_contain" ? "May contain " : ""}
+                      {a.name}
+                    </b>
+                    <span className="allergen-suggest-sub">
+                      {applied ? "Added automatically" : "Suggested"} · {s.reason}
+                    </span>
+                  </div>
+                  <div className="allergen-suggest-actions">
+                    <button type="button" className="btn-ghost small" onClick={() => handleSuggestion(s, "accept")}>
+                      {applied ? "Keep" : "Add"}
+                    </button>
+                    <button type="button" className="btn-ghost small" onClick={() => handleSuggestion(s, "dismiss")}>
+                      {applied ? "Remove" : "Dismiss"}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <h3 className="allergen-sub">Contains</h3>
+        <div className="chip-row" style={{ marginBottom: 14 }}>
           {allergens.map((a) => {
-            const active = item.allergens.includes(a.id);
+            const active = containsIds.includes(a.id);
             return (
               <button
                 key={a.id}
                 type="button"
                 className={`chip allergen-chip${active ? " active" : ""}`}
-                onClick={() => handleToggleAllergen(a.id)}
+                onClick={() => handleToggleAllergen(a.id, "contains")}
+                aria-pressed={active}
                 title={a.name}
               >
                 <AllergenIcon code={a.code} size={16} />
@@ -673,6 +780,48 @@ export default function ItemDetail({
               </button>
             );
           })}
+        </div>
+
+        <h3 className="allergen-sub">May contain</h3>
+        <p className="hint" style={{ marginTop: 0 }}>
+          Traces or cross-contact you can't rule out (a “may contain” line on the label, a shared line). An
+          allergen ticked under Contains is not repeated here.
+        </p>
+        <div className="chip-row" style={{ marginBottom: 14 }}>
+          {allergens.map((a) => {
+            const inContains = containsIds.includes(a.id);
+            const active = !inContains && mayIds.includes(a.id);
+            return (
+              <button
+                key={a.id}
+                type="button"
+                className={`chip allergen-chip allergen-chip-may${active ? " active" : ""}`}
+                onClick={() => handleToggleAllergen(a.id, "may")}
+                aria-pressed={active}
+                disabled={inContains}
+                title={inContains ? `${a.name} is already under Contains` : a.name}
+              >
+                <AllergenIcon code={a.code} size={16} />
+                {a.name}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="allergen-confirm-row">
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={handleConfirmAllergens}
+            disabled={confirmingAllergens}
+          >
+            {confirmingAllergens
+              ? "Saving…"
+              : containsIds.length === 0 && mayIds.filter((id) => !containsIds.includes(id)).length === 0
+                ? "Confirm: no allergens"
+                : "Confirm allergens"}
+          </button>
+          {draftLive && <span className="allergen-unsaved">Unsaved changes</span>}
         </div>
       </div>
 

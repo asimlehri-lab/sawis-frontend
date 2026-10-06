@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { costBand, costBandColor, fetchActivityFeed, fetchNotifications, fetchSections, fetchStockCounts } from "./api";
+import {
+  costBand,
+  costBandColor,
+  fetchActivityFeed,
+  fetchNotifications,
+  fetchSections,
+  fetchStockCounts,
+  runAllergenWordList,
+} from "./api";
 import type {
   ActivityEvent,
   AppNotification,
@@ -24,6 +32,8 @@ interface Props {
   onOpenRecipe: (id: string) => void;
   onOpenPO: (id: string) => void;
   onOpenItem: (id: string) => void;
+  onReviewAllergens: () => void;
+  onItemsChanged: () => void;
   onViewReorder: () => void;
   onNavigateApp: (label: string) => void;
 }
@@ -158,6 +168,8 @@ export default function EodTasks({
   onOpenRecipe,
   onOpenPO,
   onOpenItem,
+  onReviewAllergens,
+  onItemsChanged,
   onViewReorder,
   onNavigateApp,
 }: Props) {
@@ -185,6 +197,8 @@ export default function EodTasks({
       onOpenRecipe={onOpenRecipe}
       onOpenPO={onOpenPO}
       onOpenItem={onOpenItem}
+      onReviewAllergens={onReviewAllergens}
+      onItemsChanged={onItemsChanged}
       onViewReorder={onViewReorder}
       onNavigateApp={onNavigateApp}
     />
@@ -212,6 +226,8 @@ function ManagerTasks({
   onOpenRecipe,
   onOpenPO,
   onOpenItem,
+  onReviewAllergens,
+  onItemsChanged,
   onViewReorder,
   onNavigateApp,
 }: {
@@ -225,6 +241,8 @@ function ManagerTasks({
   onOpenRecipe: (id: string) => void;
   onOpenPO: (id: string) => void;
   onOpenItem: (id: string) => void;
+  onReviewAllergens: () => void;
+  onItemsChanged: () => void;
   onViewReorder: () => void;
   onNavigateApp: (label: string) => void;
 }) {
@@ -386,6 +404,35 @@ function ManagerTasks({
         : "";
   const checkNeedsAction = checkLines.filter((l) => l.state !== "done" && l.state !== "upcoming").length;
 
+  // --- Allergen review tile ---
+  // Computed from the items/recipes this tab already has, so it clears
+  // itself the moment the last item is confirmed (no extra endpoint, no
+  // polling lag). "Needs checking" = not confirmed by a person, or
+  // confirmed with a suggestion still open (CatalogItem.allergen_needs_review).
+  const itemsInRecipes = new Set(recipes.flatMap((r) => r.lines.map((l) => l.item).filter((id): id is string => !!id)));
+  const allergenNeeds = items.filter((it) => !it.archived && it.allergen_needs_review);
+  const allergenNeedsInRecipes = allergenNeeds.filter((it) => itemsInRecipes.has(it.id)).length;
+  const allergenUntouched = allergenNeeds.filter((it) => it.allergen_review_status === "unreviewed").length;
+  const [checkingAllergens, setCheckingAllergens] = useState(false);
+  const [allergenCheckMsg, setAllergenCheckMsg] = useState<string | null>(null);
+  async function handleCheckAllergens() {
+    setCheckingAllergens(true);
+    setAllergenCheckMsg(null);
+    try {
+      const r = await runAllergenWordList(accessToken);
+      onItemsChanged();
+      setAllergenCheckMsg(
+        r.tags_added + r.suggestions === 0
+          ? "Nothing new found from the item names."
+          : `Added ${r.tags_added} tag${r.tags_added === 1 ? "" : "s"} and ${r.suggestions} suggestion${r.suggestions === 1 ? "" : "s"} — please check them.`
+      );
+    } catch (err) {
+      setAllergenCheckMsg(err instanceof Error ? err.message : "Could not check your items.");
+    } finally {
+      setCheckingAllergens(false);
+    }
+  }
+
   // --- Latest updates ---
   const feed = activity ?? [];
   const feedCount = (f: FeedFilter) => (f === "all" ? feed.length : feed.filter((e) => feedFilterOf(e.kind) === f).length);
@@ -479,6 +526,40 @@ function ManagerTasks({
               </>
             )}
           </button>
+
+          <div className={`ov-tile ${allergenNeeds.length ? "ov-warn" : "ov-good"}`}>
+            <div className="ov-head">
+              <span className="ov-icon">⚠️</span>
+              <span className="ov-title">Allergen review</span>
+              <span className="ov-count">{allergenNeeds.length}</span>
+            </div>
+            {allergenNeeds.length === 0 ? (
+              <p className="ov-empty">Every item's allergens have been confirmed.</p>
+            ) : (
+              <>
+                <div className="ov-big">
+                  {allergenNeeds.length}
+                  <span> {allergenNeeds.length === 1 ? "item needs" : "items need"} checking</span>
+                </div>
+                <div className="ov-line-sub">
+                  {allergenNeedsInRecipes > 0
+                    ? `${allergenNeedsInRecipes} used in recipes — those recipes can't be called allergen-checked yet.`
+                    : "None are used in recipes yet."}
+                </div>
+                <div className="ov-actions">
+                  <button type="button" className="btn-primary small" onClick={onReviewAllergens}>
+                    Review items
+                  </button>
+                  {allergenUntouched > 0 && (
+                    <button type="button" className="btn-ghost small" onClick={handleCheckAllergens} disabled={checkingAllergens}>
+                      {checkingAllergens ? "Checking…" : "Suggest from item names"}
+                    </button>
+                  )}
+                </div>
+                {allergenCheckMsg && <div className="ov-line-sub">{allergenCheckMsg}</div>}
+              </>
+            )}
+          </div>
 
           <div className={`ov-tile ${checkTone ? `ov-${checkTone}` : ""}`}>
             <div className="ov-head">
