@@ -92,6 +92,11 @@ export const HELP_TOPICS: HelpTopic[] = [
         fact: "💡 Click any chip to jump straight to that recipe. You can also go the other way: on Recipes, Filter → Item used lists every recipe that contains an item.",
       },
       {
+        q: "Can I have two items with the same name?",
+        a: "No. SAWIS keeps one live item per name, ignoring capital letters and extra spaces, so “Milk Syrup” and “milk  syrup” count as the same item. If you try to add or rename an item to a name that is already taken, you get a message saying so; on + New item there is an Open the existing item button. When you create an item from a scanned delivery and the name already exists, SAWIS uses the existing item for that line instead.",
+        fact: "💡 Archived items do not count, so you can archive an old item and create a fresh one with the same name. To find unused leftovers, go to Items → Filter → Used in recipes → Not used in any recipe.",
+      },
+      {
         q: "What do the green, orange and red cost colours mean?",
         a: "A dish's food or drink cost % is compared with your target: green means at or under target, orange means up to 10 points over, and red (“Well over target”) means more than 10 points over. You'll see the colours on recipe pages, in Reports and in the Actions tab's Cost breaching target list.",
       },

@@ -524,6 +524,9 @@ export default function App() {
   const [newVatPct, setNewVatPct] = useState("");
   const [savingItem, setSavingItem] = useState(false);
   const [newItemError, setNewItemError] = useState<string | null>(null);
+  // Set when the name typed in "+ New item" is already used by a live item, so
+  // the form can offer to open that one instead of creating a copy.
+  const [newItemExistingId, setNewItemExistingId] = useState<string | null>(null);
 
   const [recipes, setRecipes] = useState<Recipe[] | null>(null);
   const [recipesError, setRecipesError] = useState<string | null>(null);
@@ -1084,12 +1087,28 @@ export default function App() {
     setNewUnit(BASE_UNITS[1]);
     setNewVatPct("");
     setNewItemError(null);
+    setNewItemExistingId(null);
+  }
+
+  // Same name test the server uses: ignore case and extra spaces. Archived
+  // items do not count (they are out of the way).
+  function findLiveItemByName(name: string) {
+    const norm = (s: string) => s.trim().split(/\s+/).join(" ").toLowerCase();
+    const wanted = norm(name);
+    return wanted ? (items ?? []).find((it) => !it.archived && norm(it.name) === wanted) : undefined;
   }
 
   async function handleCreateItem(e: React.FormEvent) {
     e.preventDefault();
     if (!accessToken) return;
     setNewItemError(null);
+    setNewItemExistingId(null);
+    const already = findLiveItemByName(newName);
+    if (already) {
+      setNewItemError(`An item called "${already.name}" already exists. Use that one, or give this a different name.`);
+      setNewItemExistingId(already.id);
+      return;
+    }
     setSavingItem(true);
     try {
       const vatFraction = newVatPct.trim() === "" ? null : (Number(newVatPct) / 100).toFixed(4);
@@ -1099,7 +1118,7 @@ export default function App() {
       loadItems(accessToken);
       setSelectedItemId(created.id);
     } catch (err) {
-      setNewItemError(err instanceof Error ? err.message : "Could not create item.");
+      setNewItemError(err instanceof Error ? err.message.replace(/^name:\s*/, "") : "Could not create item.");
     } finally {
       setSavingItem(false);
     }
@@ -1355,8 +1374,27 @@ export default function App() {
     }
   }
 
+  // A receipt line's "create item" step found the name already in use: point
+  // the line at the existing item instead of making a second one.
+  function matchScanRowToExisting(rowIndex: number, existing: CatalogItem) {
+    const known = findKnownSupplierUnit(itemSupplierLinks, existing.id, scanSupplierId);
+    updateScanRow(rowIndex, {
+      matchedItemId: existing.id,
+      supplierUnit: known?.supplierUnit ?? "",
+      packQty: known?.packQty ?? "1",
+      vatPct: vatPctFromSupplierLink(itemSupplierLinks, existing.id, scanSupplierId) || vatPctFromItem(existing),
+    });
+    setScanNewItemRow(null);
+    setScanNewItemName("");
+  }
+
   async function handleCreateScanItem(rowIndex: number) {
     if (!accessToken || !scanNewItemName.trim()) return;
+    const already = findLiveItemByName(scanNewItemName);
+    if (already) {
+      matchScanRowToExisting(rowIndex, already);
+      return;
+    }
     setScanCreatingItem(true);
     setScanNewItemError(null);
     try {
@@ -1374,7 +1412,13 @@ export default function App() {
       setScanNewItemRow(null);
       setScanNewItemName("");
     } catch (err) {
-      setScanNewItemError(err instanceof Error ? err.message : "Could not create item.");
+      // The list on screen may be a little stale; the server has the final say.
+      const existing = findLiveItemByName(scanNewItemName);
+      if (existing) {
+        matchScanRowToExisting(rowIndex, existing);
+      } else {
+        setScanNewItemError(err instanceof Error ? err.message.replace(/^name:\s*/, "") : "Could not create item.");
+      }
     } finally {
       setScanCreatingItem(false);
     }
@@ -2500,6 +2544,20 @@ export default function App() {
                 />
               </label>
               {newItemError && <p className="error">{newItemError}</p>}
+              {newItemExistingId && (
+                <button
+                  type="button"
+                  className="btn-ghost small"
+                  onClick={() => {
+                    const id = newItemExistingId;
+                    setShowNewItem(false);
+                    resetNewItemForm();
+                    setSelectedItemId(id);
+                  }}
+                >
+                  Open the existing item
+                </button>
+              )}
               <div className="modal-actions">
                 <button
                   type="button"
