@@ -169,7 +169,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "What can I filter by?",
-        a: "Items: Category, Supplier, Allergens, Allergen status and Allergen review. Recipes: Category, Item used, Food or drink, Cost vs target (On target, Over target, Well over target), Allergens and Allergen status. Live stock: Status (Below par or OK), Section and Category. Procurement: Supplier, Location and Item. Dish vs Sub-recipe, Department and PO status keep their own tabs above the list.",
+        a: "Items: Category, Supplier, Allergens, Allergen status, Allergen review and Used in recipes (pick “Not used in any recipe” to find leftover or duplicate items). Recipes: Category, Item used, Food or drink, Cost vs target (On target, Over target, Well over target), Allergens and Allergen status. Live stock: Status (Below par or OK), Section and Category. Procurement: Supplier, Location and Item. Dish vs Sub-recipe, Department and PO status keep their own tabs above the list.",
       },
       {
         q: "How do several filters combine?",

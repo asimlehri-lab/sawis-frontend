@@ -602,6 +602,12 @@ export default function App() {
   // Items: Category (Category.id), Supplier (matches either the item's
   // default_supplier or any of its supplier_links, since "who could I buy
   // this from" is more useful here than just the one default), Allergens.
+  // Ids of every item that appears on at least one recipe line. Only
+  // meaningful once recipes have loaded, so the "Used in recipes" facet below
+  // is not offered until then (an unloaded list would call everything unused).
+  const itemIdsUsedInRecipes = new Set<string>();
+  (recipes ?? []).forEach((r) => r.lines.forEach((l) => l.item && itemIdsUsedInRecipes.add(l.item)));
+
   const itemFacets: FilterFacet[] = [
     { key: "category", label: "Category", options: categories.map((c) => ({ value: c.id, label: c.name })) },
     { key: "supplier", label: "Supplier", options: suppliers.map((s) => ({ value: s.id, label: s.name })) },
@@ -618,6 +624,18 @@ export default function App() {
         { value: "confirmed", label: "Confirmed" },
       ],
     },
+    ...(recipes
+      ? [
+          {
+            key: "usage",
+            label: "Used in recipes",
+            options: [
+              { value: "used", label: "Used in a recipe" },
+              { value: "unused", label: "Not used in any recipe" },
+            ],
+          },
+        ]
+      : []),
   ];
 
   // Recipes: menu_category (freeform string, not the Category model --
@@ -855,6 +873,9 @@ export default function App() {
     if (!accessToken) return;
     if (activePage === "Items") {
       loadItems(accessToken);
+      // Recipes feed the "Used in recipes" filter and the allergen review
+      // screen's usage counts, so make sure they are loaded on this page.
+      if (!recipes) loadRecipes(accessToken);
       fetchCategories(accessToken).then(setCategories).catch(() => {});
       fetchAllergens(accessToken).then(setAllergens).catch(() => {});
       fetchLocations(accessToken).then(setLocations).catch(() => {});
@@ -2095,6 +2116,14 @@ export default function App() {
                             (it) =>
                               (itemFilters.review ?? null) === null ||
                               itemFilters.review!.some((v) => (v === "needs" ? it.allergen_needs_review : !it.allergen_needs_review))
+                          )
+                          .filter(
+                            (it) =>
+                              !recipes ||
+                              (itemFilters.usage ?? null) === null ||
+                              itemFilters.usage!.some((v) =>
+                                v === "used" ? itemIdsUsedInRecipes.has(it.id) : !itemIdsUsedInRecipes.has(it.id)
+                              )
                           )
                           .filter((it) => {
                             const q = itemSearch.trim().toLowerCase();
@@ -3366,4 +3395,4 @@ export default function App() {
       )}
     </div>
   );
-}
+}
