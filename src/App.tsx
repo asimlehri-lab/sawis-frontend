@@ -599,8 +599,7 @@ export default function App() {
   // object per list holds every facet's own tri-state selection, keyed by
   // facet key -- see FilterBar.tsx's own comment for what null vs an
   // (possibly empty) array means per facet.
-  // Archived items are hidden until the Status filter is changed.
-  const [itemFilters, setItemFilters] = useState<FilterValues>({ archived: ["active"] });
+  const [itemFilters, setItemFilters] = useState<FilterValues>({});
   const [recipeFilters, setRecipeFilters] = useState<FilterValues>({});
 
   // Items: Category (Category.id), Supplier (matches either the item's
@@ -617,8 +616,8 @@ export default function App() {
     { key: "supplier", label: "Supplier", options: suppliers.map((s) => ({ value: s.id, label: s.name })) },
     { key: "allergens", label: "Allergens", options: allergens.map((a) => ({ value: a.id, label: a.name })) },
     { key: "astatus", label: "Allergen status", options: ALLERGEN_STATUS_OPTIONS },
-    // Archived items are kept for history but are normally out of the way, so
-    // the list starts on Active only (see the itemFilters initial state).
+    // Archived items show by default (with an Archived badge on the row);
+    // pick Active to hide them.
     {
       key: "archived",
       label: "Status",
