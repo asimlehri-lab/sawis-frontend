@@ -599,7 +599,8 @@ export default function App() {
   // object per list holds every facet's own tri-state selection, keyed by
   // facet key -- see FilterBar.tsx's own comment for what null vs an
   // (possibly empty) array means per facet.
-  const [itemFilters, setItemFilters] = useState<FilterValues>({});
+  // Archived items are hidden until the Status filter is changed.
+  const [itemFilters, setItemFilters] = useState<FilterValues>({ archived: ["active"] });
   const [recipeFilters, setRecipeFilters] = useState<FilterValues>({});
 
   // Items: Category (Category.id), Supplier (matches either the item's
@@ -616,6 +617,16 @@ export default function App() {
     { key: "supplier", label: "Supplier", options: suppliers.map((s) => ({ value: s.id, label: s.name })) },
     { key: "allergens", label: "Allergens", options: allergens.map((a) => ({ value: a.id, label: a.name })) },
     { key: "astatus", label: "Allergen status", options: ALLERGEN_STATUS_OPTIONS },
+    // Archived items are kept for history but are normally out of the way, so
+    // the list starts on Active only (see the itemFilters initial state).
+    {
+      key: "archived",
+      label: "Status",
+      options: [
+        { value: "active", label: "Active" },
+        { value: "archived", label: "Archived" },
+      ],
+    },
     // Whether a person has confirmed the item's allergens (see
     // CatalogItem.allergen_needs_review) -- what the Actions tab's
     // allergen tile links to.
@@ -2163,6 +2174,11 @@ export default function App() {
                           )
                           .filter(
                             (it) =>
+                              (itemFilters.archived ?? null) === null ||
+                              itemFilters.archived!.includes(it.archived ? "archived" : "active")
+                          )
+                          .filter(
+                            (it) =>
                               !recipes ||
                               (itemFilters.usage ?? null) === null ||
                               itemFilters.usage!.some((v) =>
@@ -2191,6 +2207,11 @@ export default function App() {
                                         <AllergenIcon code={a.code} size={14} className="ai-icon" />
                                       </span>
                                     ))}
+                                  </span>
+                                )}
+                                {it.archived && (
+                                  <span className="archived-badge" title="Archived: kept for history, hidden from the other lists">
+                                    Archived
                                   </span>
                                 )}
                                 {canManage(me) && it.allergen_needs_review && (

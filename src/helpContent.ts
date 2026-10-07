@@ -174,7 +174,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "What can I filter by?",
-        a: "Items: Category, Supplier, Allergens, Allergen status, Allergen review and Used in recipes (pick “Not used in any recipe” to find leftover or duplicate items). Recipes: Category, Item used, Food or drink, Cost vs target (On target, Over target, Well over target), Allergens and Allergen status. Live stock: Status (Below par or OK), Section and Category. Procurement: Supplier, Location and Item. Dish vs Sub-recipe, Department and PO status keep their own tabs above the list.",
+        a: "Items: Category, Supplier, Allergens, Allergen status, Status (Active or Archived — archived items are hidden until you pick Archived), Allergen review and Used in recipes (pick “Not used in any recipe” to find leftover or duplicate items). Recipes: Category, Item used, Food or drink, Cost vs target (On target, Over target, Well over target), Allergens and Allergen status. Live stock: Status (Below par or OK), Section and Category. Procurement: Supplier, Location and Item. Dish vs Sub-recipe, Department and PO status keep their own tabs above the list.",
       },
       {
         q: "How do several filters combine?",
@@ -546,7 +546,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "What shortcuts are there in lists and filters?",
-        a: "Click a filter chip's name to reopen its values, or its × to clear it. On an item, the Used in recipes chips jump straight to each recipe. On Recipes, filter first and then Print sheet's “What is showing now” prints just that group. In Items, the ⚠ Review allergens button shows how many items still need checking.",
+        a: "Click a filter chip's name to reopen its values, or its × to clear it. The Status chip on Items starts on Active; clear it or add Archived to see archived items again. On an item, the Used in recipes chips jump straight to each recipe. On Recipes, filter first and then Print sheet's “What is showing now” prints just that group. In Items, the ⚠ Review allergens button shows how many items still need checking.",
       },
       {
         q: "What shortcuts are there for counts and daily jobs?",
