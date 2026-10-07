@@ -403,7 +403,12 @@ function buildRecipesSheet(wb: ExcelJS.Workbook, entries: RecipeEntry[]) {
     sheet.getCell(row, 1).value = e.category;
     sheet.getCell(row, 2).value = e.base;
     sheet.getCell(row, 3).value = e.size;
-    sheet.getCell(row, 4).value = { formula: `B${row}&IF(C${row}<>"", " ("&C${row}&")", "")` };
+    sheet.getCell(row, 4).value = {
+      formula: `B${row}&IF(C${row}<>"", " ("&C${row}&")", "")`,
+      // Stored result, so the name is still there if the file is uploaded
+      // without being opened and saved in Excel first.
+      result: e.size ? `${e.base} (${e.size})` : e.base,
+    };
     sheet.getCell(row, 5).value = r.pos_id || "";
     sheet.getCell(row, 6).value = r.kind;
     sheet.getCell(row, 7).value = numberOrBlank(r.yield_qty);
@@ -415,7 +420,7 @@ function buildRecipesSheet(wb: ExcelJS.Workbook, entries: RecipeEntry[]) {
     row++;
   }
   for (let i = 0; i < RECIPE_BLANK_ROWS; i++) {
-    sheet.getCell(row, 4).value = { formula: `B${row}&IF(C${row}<>"", " ("&C${row}&")", "")` };
+    sheet.getCell(row, 4).value = { formula: `B${row}&IF(C${row}<>"", " ("&C${row}&")", "")`, result: "" };
     borderRow(sheet, row, headers.length);
     bandRow(sheet, row, headers.length, CREAM);
     row++;
@@ -456,9 +461,16 @@ function buildRecipeIngredientsSheet(
   wb: ExcelJS.Workbook,
   entries: RecipeEntry[],
   lastRecipeRow: number,
-  lastItemRow: number
+  lastItemRow: number,
+  items: CatalogItem[]
 ) {
   const sheet = wb.addWorksheet("Recipe Ingredients");
+  // Base unit by item name, for the stored result of the unit lookup formula.
+  const unitByName = new Map<string, string>();
+  for (const it of items) {
+    const k = it.name.trim().toLowerCase();
+    if (k && !unitByName.has(k)) unitByName.set(k, it.base_unit);
+  }
   const headers = ["category (auto)", "recipe", "ingredient", "qty", "unit"];
   setHeaders(sheet, headers);
   freezeHeaderRow(sheet);
@@ -476,11 +488,15 @@ function buildRecipeIngredientsSheet(
     for (const line of itemLines) {
       sheet.getCell(row, 1).value = {
         formula: `IF(B${row}="","",IFERROR(INDEX(Recipes!$A:$A,MATCH(B${row},Recipes!$D:$D,0)),""))`,
+        result: e.category,
       };
       sheet.getCell(row, 2).value = e.recipe.name;
       sheet.getCell(row, 3).value = line.item_name || "";
       sheet.getCell(row, 4).value = numberOrBlank(line.qty);
-      sheet.getCell(row, 5).value = { formula: `IFERROR(VLOOKUP(C${row},Items!$B:$C,2,FALSE),"")` };
+      sheet.getCell(row, 5).value = {
+        formula: `IFERROR(VLOOKUP(C${row},Items!$B:$C,2,FALSE),"")`,
+        result: unitByName.get((line.item_name || "").trim().toLowerCase()) ?? "",
+      };
       borderRow(sheet, row, headers.length);
       bandRow(sheet, row, headers.length, shade ? BAND_B : BAND_A);
       row++;
@@ -489,8 +505,9 @@ function buildRecipeIngredientsSheet(
   for (let i = 0; i < INGREDIENT_BLANK_ROWS; i++) {
     sheet.getCell(row, 1).value = {
       formula: `IF(B${row}="","",IFERROR(INDEX(Recipes!$A:$A,MATCH(B${row},Recipes!$D:$D,0)),""))`,
+      result: "",
     };
-    sheet.getCell(row, 5).value = { formula: `IFERROR(VLOOKUP(C${row},Items!$B:$C,2,FALSE),"")` };
+    sheet.getCell(row, 5).value = { formula: `IFERROR(VLOOKUP(C${row},Items!$B:$C,2,FALSE),"")`, result: "" };
     borderRow(sheet, row, headers.length);
     bandRow(sheet, row, headers.length, i % 2 === 0 ? BAND_A : BAND_B);
     row++;
@@ -532,7 +549,10 @@ export async function buildRecipeImportWorkbook(
   buildReadMeSheet(wb);
   const { lastItemRow } = buildItemsSheet(wb, items, location, allergens);
   const { lastRecipeRow } = buildRecipesSheet(wb, entries);
-  buildRecipeIngredientsSheet(wb, entries, lastRecipeRow, lastItemRow);
+  buildRecipeIngredientsSheet(wb, entries, lastRecipeRow, lastItemRow, items);
+  // Excel recalculates every formula on open, so the stored results above
+  // only matter to readers that do not calculate (including SAWIS's own import).
+  wb.calcProperties.fullCalcOnLoad = true;
   return wb;
 }
 
