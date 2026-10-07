@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import AllergenIcon from "./AllergenIcon";
-import { bulkReviewItems } from "./api";
+import { bulkReviewItems, runAllergenWordList } from "./api";
 import type { Allergen, CatalogItem, Recipe } from "./api";
 
 // The allergen review screen: the fast way to confirm every item's
@@ -268,6 +268,57 @@ export default function AllergenReview({
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkPick, setBulkPick] = useState<string[]>([]);
   const [bulkLevel, setBulkLevel] = useState<"contains" | "may">("contains");
+  // Word list over every item name ("Suggest from item names"). The server
+  // only runs it when an item is created, renamed or imported, so a catalogue
+  // that existed first needs one run; it happens by itself the first time this
+  // screen opens with nothing suggested, and can be repeated from the button.
+  const [checking, setChecking] = useState(false);
+  const [checkNote, setCheckNote] = useState<string | null>(null);
+  const autoTried = useRef(false);
+
+  async function runCheck() {
+    setChecking(true);
+    setError(null);
+    try {
+      const r = await runAllergenWordList(accessToken);
+      try {
+        sessionStorage.setItem("sawis-allergen-autocheck", "1");
+      } catch {
+        /* storage can be blocked; the check is still safe to repeat */
+      }
+      setCheckNote(
+        r.items_changed === 0
+          ? `Checked ${r.items} item names against the word list. None matched, so every item below needs a person's check.`
+          : `Checked ${r.items} item names against the word list: ${r.items_changed} matched (${r.tags_added} tag${r.tags_added === 1 ? "" : "s"} added, ${r.suggestions} suggestion${r.suggestions === 1 ? "" : "s"} to look at). Nothing is confirmed until you confirm it.`
+      );
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not check the item names.");
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  useEffect(() => {
+    if (autoTried.current || items.length === 0) return;
+    autoTried.current = true;
+    const already = (() => {
+      try {
+        return sessionStorage.getItem("sawis-allergen-autocheck") === "1";
+      } catch {
+        return false;
+      }
+    })();
+    const waiting = items.filter((it) => !it.archived && it.allergen_needs_review);
+    const anySuggested = waiting.some(
+      (it) => it.allergens.length > 0 || it.may_contain_allergens.length > 0 || it.allergen_suggestions.length > 0
+    );
+    if (!already && waiting.length > 0 && !anySuggested) {
+      const t = setTimeout(() => void runCheck(), 0);
+      return () => clearTimeout(t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items.length]);
 
   const view = (it: CatalogItem): CatalogItem => local[it.id] ?? it;
   const itemsById = useMemo(() => new Map(items.map((it) => [it.id, it])), [items]);
@@ -447,6 +498,18 @@ export default function AllergenReview({
       <div className="ar-progress" aria-hidden="true">
         <span style={{ width: `${total ? Math.round((doneCount / total) * 100) : 0}%` }} />
       </div>
+      {(needing.length > 0 || checkNote) && (
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginTop: 10 }}>
+          <button className="btn-ghost small" onClick={() => void runCheck()} disabled={checking}>
+            {checking ? "Checking item names…" : "Suggest from item names"}
+          </button>
+          <span className="hint" style={{ margin: 0, flex: "1 1 260px" }}>
+            {checking
+              ? "Reading every item name against the word list…"
+              : (checkNote ?? "Reads every item name and suggests allergens it recognises, such as milk in “Milk Syrup”.")}
+          </span>
+        </div>
+      )}
 
       <div className="rtabs" style={{ marginTop: 14 }}>
         <button className={`rtab ${tab === "queue" ? "on" : ""}`} onClick={() => setTab("queue")}>
