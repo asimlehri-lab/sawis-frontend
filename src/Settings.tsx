@@ -907,6 +907,15 @@ function RecipeAndItemImportPanel({
     if (itNameIdx === -1 || itUnitIdx === -1) {
       return { error: 'The "Items" tab is missing its item_name or base_unit column.' };
     }
+    // Every Items-tab row's base unit, by name. Used below to fill in an
+    // ingredient's unit when the template's own lookup formula has no
+    // stored value (a file saved by a tool that does not recalculate).
+    const baseUnitByName = new Map<string, string>();
+    for (const r of itemsTable.slice(1)) {
+      const n = (r[itNameIdx] || "").trim().toLowerCase();
+      const u = (r[itUnitIdx] || "").trim();
+      if (n && u && !baseUnitByName.has(n)) baseUnitByName.set(n, u);
+    }
     const itemRows: BulkItemInput[] = [];
     for (const r of itemsTable.slice(1)) {
       const status = (statusIdx > -1 ? r[statusIdx] || "" : "").trim().toLowerCase();
@@ -949,6 +958,8 @@ function RecipeAndItemImportPanel({
     const rcHeader = recipesTable[0];
     const rcCatIdx = headerIndex(rcHeader, "category");
     const rcDisplayIdx = headerIndex(rcHeader, "display_name");
+    const rcNameIdx = headerIndex(rcHeader, "recipe");
+    const rcSizeIdx = headerIndex(rcHeader, "size");
     const rcPosIdx = headerIndex(rcHeader, "pos_id");
     const rcKindIdx = headerIndex(rcHeader, "kind");
     const rcYqIdx = headerIndex(rcHeader, "yield_qty");
@@ -972,7 +983,12 @@ function RecipeAndItemImportPanel({
       }
     >();
     for (const r of recipesTable.slice(1)) {
-      const displayName = (r[rcDisplayIdx] || "").trim();
+      // display_name is a formula (recipe + " (size)"). If the file was
+      // saved without calculated values the cell reads blank, so build the
+      // same name from the recipe and size columns instead.
+      const recipeCell = rcNameIdx > -1 ? (r[rcNameIdx] || "").trim() : "";
+      const sizeCell = rcSizeIdx > -1 ? (r[rcSizeIdx] || "").trim() : "";
+      const displayName = (r[rcDisplayIdx] || "").trim() || (recipeCell ? (sizeCell ? `${recipeCell} (${sizeCell})` : recipeCell) : "");
       const kindRaw = (rcKindIdx > -1 ? r[rcKindIdx] || "" : "").trim().toLowerCase();
       if (!displayName || (kindRaw !== "dish" && kindRaw !== "sub")) continue;
       const groupRaw = (rcGroupIdx > -1 ? r[rcGroupIdx] || "" : "").trim().toLowerCase();
@@ -1014,7 +1030,8 @@ function RecipeAndItemImportPanel({
       const key = recipeName.toLowerCase();
       if (!recipeMetaByKey.has(key)) continue; // not on the Recipes tab -- skip rather than error
       if (!ingredientsByKey.has(key)) ingredientsByKey.set(key, []);
-      ingredientsByKey.get(key)!.push({ ingredient, qty, unit: riUnitIdx > -1 ? (r[riUnitIdx] || "").trim() : "" });
+      const unitCell = riUnitIdx > -1 ? (r[riUnitIdx] || "").trim() : "";
+      ingredientsByKey.get(key)!.push({ ingredient, qty, unit: unitCell || baseUnitByName.get(ingredient.toLowerCase()) || "" });
     }
 
     const parsedRows: RecipeRow[] = [];
