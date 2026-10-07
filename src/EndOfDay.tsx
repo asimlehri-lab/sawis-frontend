@@ -232,6 +232,9 @@ export default function EndOfDay({
     dishes: number;
     revenue: number;
     skipped: number;
+    // Rows left out because that recipe was already recorded for that date
+    // (a re-import of days already in the ledger) -- nothing is counted twice.
+    alreadyRecorded: number;
     undepletedIngredients: string[];
   } | null>(null);
 
@@ -550,26 +553,46 @@ export default function EndOfDay({
       let dishesTotal = 0;
       let revenueTotal = 0;
       const undepleted = new Set<string>();
+      let alreadyRecorded = 0;
       for (const [date, dateRows] of byDate) {
         // "covers" is a per-day figure, not per-dish — the CSV can only
         // really carry one constant value per date, so the first row
         // that has one wins for the whole day.
         const covers = dateRows.find((r) => r.covers !== null)?.covers ?? undefined;
-        const sale = await importSales(accessToken, {
-          location,
-          occurred_at: date,
-          covers,
-          lines: dateRows.map((r) => ({
-            recipe: r.matchedRecipeId as string,
-            qty: r.qty,
-            gross_amount: r.revenue,
-          })),
-        });
+        let sale;
+        try {
+          sale = await importSales(accessToken, {
+            location,
+            occurred_at: date,
+            covers,
+            lines: dateRows.map((r) => ({
+              recipe: r.matchedRecipeId as string,
+              qty: r.qty,
+              gross_amount: r.revenue,
+            })),
+          });
+        } catch (e) {
+          // A day whose every recipe is already recorded is refused by the
+          // server so nothing is counted twice. That is not a failure when
+          // re-importing a whole month: note it and carry on with the next day.
+          if (e instanceof Error && /already recorded for this date/i.test(e.message)) {
+            alreadyRecorded += dateRows.length;
+            continue;
+          }
+          throw e;
+        }
         salesCreated++;
         for (const name of sale.skipped_depletion_items || []) undepleted.add(name);
+        // Count only the recipes the server actually added; the rest were
+        // already recorded for this date and were skipped.
+        const addedRecipeIds = new Set((sale.lines || []).map((l) => l.recipe));
         for (const r of dateRows) {
-          dishesTotal += r.qty;
-          revenueTotal += Number(r.revenue) || 0;
+          if (addedRecipeIds.has(r.matchedRecipeId as string)) {
+            dishesTotal += r.qty;
+            revenueTotal += Number(r.revenue) || 0;
+          } else {
+            alreadyRecorded++;
+          }
         }
       }
       setResult({
@@ -577,6 +600,7 @@ export default function EndOfDay({
         dishes: dishesTotal,
         revenue: revenueTotal,
         skipped: rows.length - importableRows.length,
+        alreadyRecorded,
         undepletedIngredients: Array.from(undepleted).sort(),
       });
       setRows([]);
@@ -801,7 +825,9 @@ export default function EndOfDay({
                   {result.sales} sale{result.sales === 1 ? "" : "s"}
                 </b>{" "}
                 imported — {result.dishes} dishes, £{result.revenue.toFixed(2)} revenue.
-                {result.skipped > 0 && ` ${result.skipped} row${result.skipped === 1 ? "" : "s"} skipped.`}{" "}
+                {result.skipped > 0 && ` ${result.skipped} row${result.skipped === 1 ? "" : "s"} skipped.`}
+                {result.alreadyRecorded > 0 &&
+                  ` ${result.alreadyRecorded} row${result.alreadyRecorded === 1 ? " was" : "s were"} already recorded for that date and left as they were.`}{" "}
                 {result.undepletedIngredients.length === 0
                   ? "Stock has been depleted for every matched ingredient."
                   : `Stock was depleted for every ingredient that has a stock holding at this location. ${result.undepletedIngredients.length} ingredient${result.undepletedIngredients.length === 1 ? " has" : "s have"} no holding here yet and could not be depleted: ${result.undepletedIngredients.join(", ")}. Add a stock holding for ${result.undepletedIngredients.length === 1 ? "it" : "them"} in Inventory (or re-import via Settings) to track it going forward.`}
