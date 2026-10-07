@@ -821,7 +821,9 @@ function RecipeAndItemImportPanel({
 
   function matchItem(name: string): string | null {
     const norm = name.trim().toLowerCase();
-    const found = items.find((i) => i.name.trim().toLowerCase() === norm);
+    // Prefer a live item over an archived duplicate of the same name.
+    const sameName = items.filter((i) => i.name.trim().toLowerCase() === norm);
+    const found = sameName.find((i) => !i.archived) ?? sameName[0];
     return found ? found.id : null;
   }
 
