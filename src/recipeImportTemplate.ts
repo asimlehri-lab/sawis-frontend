@@ -193,13 +193,19 @@ function buildReadMeSheet(wb: ExcelJS.Workbook) {
     "1. Items tab",
     "   \"existing\" rows (grey) are your current item catalogue, pulled in automatically,",
     "   with their current category/vat/par_level/supplier/cost/waste_pct/allergens shown",
-    "   alongside so you can see and copy them. Category, vat and par_level are reference",
-    "   only: editing them on an existing row does nothing, it only backs that item's",
-    "   ingredient lines below. Add anything genuinely new as a \"new\" row (green) below",
-    "   them -- only item_name + base_unit are required, everything else is optional.",
+    "   alongside so you can see and copy them. Category is reference only: editing it on",
+    "   an existing row does nothing, it only backs that item's ingredient lines below.",
+    "   Add anything genuinely new as a \"new\" row (green) below them -- only item_name +",
+    "   base_unit are required, everything else is optional.",
     "",
-    "   Three columns DO update an existing item when you change them and re-upload --",
+    "   These columns DO update an existing item when you change them and re-upload --",
     "   rows you leave as they are change nothing:",
+    "   - vat: the item's VAT rate as a whole-number percentage (e.g. 20). It shows the rate",
+    "     the item uses now (its own, or its category's). Changing it gives the item its own",
+    "     rate; open purchase-order lines without a rate of their own follow it, received",
+    "     deliveries keep the rate they had. Blank leaves it as it is.",
+    "   - par_level: the par for the location picked on the import card (so upload with",
+    "     the same location you downloaded for). Blank leaves it as it is.",
     "   - cost: the price per base unit (per g, ml or piece) from the supplier on that",
     "     row. Only the price changes; the supplier's own unit and pack size stay as they",
     "     are. A new supplier name plus a cost adds that supplier to the item. Recipe",
@@ -371,11 +377,11 @@ function buildItemsSheet(wb: ExcelJS.Workbook, items: CatalogItem[], location: s
   }
 
   sheet.getCell("A1").note =
-    '"existing" rows are your current catalogue, pulled in automatically -- category, vat and par_level are reference only; cost, waste_pct and the allergen slots update the item if you change them. Add anything genuinely new as a "new" row below.';
+    '"existing" rows are your current catalogue, pulled in automatically -- category is reference only; vat, par_level, cost, waste_pct and the allergen slots update the item if you change them. Add anything genuinely new as a "new" row below.';
   sheet.getCell("B1").note =
     "Only item_name + base_unit are required -- everything else (category/vat/par_level/supplier/cost/waste_pct/allergen_1..6) is optional, same as the old standalone Items import.";
   sheet.getCell("D1").note =
-    "On \"existing\" rows, category/vat/par_level/supplier/cost/waste_pct show that item's current values (par_level for the location you've picked below) so you can see and copy them -- category, vat and par_level are reference only (editing them has no effect on an existing item), but cost, waste_pct and the allergen slots DO update it when you change them. Matching is by name only.";
+    "On \"existing\" rows, category/vat/par_level/supplier/cost/waste_pct show that item's current values (par_level for the location you've picked below) so you can see and copy them -- category is reference only (editing it has no effect on an existing item), but vat, par_level, cost, waste_pct and the allergen slots DO update it when you change them. Matching is by name only.";
   sheet.getCell("H1").note =
     "Price per base unit (per g, ml or piece) from the supplier on this row. On an existing row, changing it updates that supplier's price for the item (the supplier's own unit and pack size stay as they are) and recipe costs follow. Needs a supplier on the row.";
   sheet.getCell("I1").note =

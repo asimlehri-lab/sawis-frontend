@@ -427,6 +427,8 @@ export interface BulkItemImportResult {
   // Existing items whose supplier price / waste target changed.
   costs_updated?: string[];
   waste_updated?: string[];
+  vat_updated?: string[];
+  par_updated?: string[];
 }
 
 // `location` is required server-side — every imported item also gets an
@@ -603,6 +605,8 @@ export interface BulkRecipeImportResult {
   // Existing items whose supplier price / waste target changed.
   costs_updated?: string[];
   waste_updated?: string[];
+  vat_updated?: string[];
+  par_updated?: string[];
 }
 
 // Backend creates any ingredient with no item_id as a brand-new Item on

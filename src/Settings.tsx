@@ -822,6 +822,8 @@ function RecipeAndItemImportPanel({
     allergensSet: number;
     costsUpdated: number;
     wasteUpdated: number;
+    vatUpdated: number;
+    parUpdated: number;
   } | null>(null);
 
   function matchItem(name: string): string | null {
@@ -991,6 +993,28 @@ function RecipeAndItemImportPanel({
               changes.cost = costRaw;
               changed = true;
             }
+          }
+        }
+
+        // VAT: the sheet shows the rate the item is using now (its own, or its
+        // category's), as a whole-number percentage.
+        const vatRaw = itVatIdx > -1 ? (r[itVatIdx] || "").trim() : "";
+        if (vatRaw && !isNaN(Number(vatRaw)) && Number(vatRaw) >= 0 && Number(vatRaw) <= 100) {
+          const haveVat = current.effective_vat_rate == null ? null : Number(current.effective_vat_rate) * 100;
+          if (haveVat === null || Math.abs(haveVat - Number(vatRaw)) > 0.005) {
+            changes.vat_rate = (Number(vatRaw) / 100).toFixed(4);
+            changed = true;
+          }
+        }
+
+        // Par level: for the location chosen on this card (the sheet shows
+        // that location's par).
+        const parRaw = itParIdx > -1 ? (r[itParIdx] || "").trim() : "";
+        if (parRaw && !isNaN(Number(parRaw)) && Number(parRaw) >= 0) {
+          const holding = current.holdings.find((h) => h.location === location);
+          if (!holding || Math.abs(Number(holding.par_level) - Number(parRaw)) > 0.0005) {
+            changes.par_level = parRaw;
+            changed = true;
           }
         }
 
@@ -1407,6 +1431,8 @@ function RecipeAndItemImportPanel({
   const allergensPreviewCount = newItemRows.filter((r) => r.allergens).length;
   const costPreviewCount = newItemRows.filter((r) => r.update_existing && r.cost).length;
   const wastePreviewCount = newItemRows.filter((r) => r.update_existing && r.waste_pct).length;
+  const vatPreviewCount = newItemRows.filter((r) => r.update_existing && r.vat_rate != null).length;
+  const parPreviewCount = newItemRows.filter((r) => r.update_existing && r.par_level).length;
   const recipesByPosId = new Map(recipes.filter((r) => r.pos_id).map((r) => [r.pos_id, r]));
   const recipesByName = new Map(recipes.map((r) => [r.name.trim().toLowerCase(), r]));
 
@@ -1461,6 +1487,8 @@ function RecipeAndItemImportPanel({
         allergensSet: res.allergens_set.length,
         costsUpdated: (res.costs_updated ?? []).length,
         wasteUpdated: (res.waste_updated ?? []).length,
+        vatUpdated: (res.vat_updated ?? []).length,
+        parUpdated: (res.par_updated ?? []).length,
       });
       setRows([]);
       setNewItemRows([]);
@@ -1471,7 +1499,9 @@ function RecipeAndItemImportPanel({
         res.holdings_backfilled.length > 0 ||
         res.allergens_set.length > 0 ||
         (res.costs_updated ?? []).length > 0 ||
-        (res.waste_updated ?? []).length > 0
+        (res.waste_updated ?? []).length > 0 ||
+        (res.vat_updated ?? []).length > 0 ||
+        (res.par_updated ?? []).length > 0
       )
         onItemsChanged();
     } catch (e) {
@@ -1610,6 +1640,10 @@ function RecipeAndItemImportPanel({
               ` ${costPreviewCount} item${costPreviewCount === 1 ? "" : "s"} will get a new supplier price.`}
             {wastePreviewCount > 0 &&
               ` ${wastePreviewCount} item${wastePreviewCount === 1 ? "" : "s"} will get a new waste target.`}
+            {vatPreviewCount > 0 &&
+              ` ${vatPreviewCount} item${vatPreviewCount === 1 ? "" : "s"} will get a new VAT rate.`}
+            {parPreviewCount > 0 &&
+              ` ${parPreviewCount} item${parPreviewCount === 1 ? "" : "s"} will get a new par level.`}
             {costsWithoutSupplier > 0 &&
               ` ${costsWithoutSupplier} changed cost${costsWithoutSupplier === 1 ? " was" : "s were"} skipped because the item has no supplier on its row.`}
           </div>
@@ -1716,6 +1750,10 @@ function RecipeAndItemImportPanel({
             ` ${result.costsUpdated} item${result.costsUpdated === 1 ? "" : "s"} got a new supplier price.`}
           {result.wasteUpdated > 0 &&
             ` ${result.wasteUpdated} item${result.wasteUpdated === 1 ? "" : "s"} got a new waste target.`}
+          {result.vatUpdated > 0 &&
+            ` ${result.vatUpdated} item${result.vatUpdated === 1 ? "" : "s"} got a new VAT rate.`}
+          {result.parUpdated > 0 &&
+            ` ${result.parUpdated} item${result.parUpdated === 1 ? "" : "s"} got a new par level.`}
         </div>
       )}
     </div>
