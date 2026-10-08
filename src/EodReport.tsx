@@ -70,12 +70,14 @@ export default function EodReport({ accessToken, locations }: Props) {
   const [compareLoading, setCompareLoading] = useState(false);
 
   useEffect(() => {
-    if (!location && locations[0]) setLocation(locations[0].id);
+    // Also replaces a location that is not in the list (left over from
+    // another account), which the server would reject.
+    if ((!location || !locations.some((l) => l.id === location)) && locations[0]) setLocation(locations[0].id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locations]);
 
   useEffect(() => {
-    if (!location) return;
+    if (!location || !locations.some((l) => l.id === location)) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -92,6 +94,7 @@ export default function EodReport({ accessToken, locations }: Props) {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, location, period, anchorDate]);
 
   useEffect(() => {

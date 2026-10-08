@@ -1034,6 +1034,21 @@ export default function App() {
     return () => clearInterval(id);
   }, []);
 
+  // Everything loaded for the account that was signed in. Cleared on sign-out
+  // and again on sign-in: otherwise the next person to sign in on this tab
+  // briefly sees (and the pages pick from) the previous account's locations,
+  // and the End of day report asks the server for a location that is not
+  // theirs ("Request failed (400)") until the page is refreshed.
+  function resetOrgData() {
+    setLocations([]);
+    setCategories([]);
+    setAllergens([]);
+    setSuppliers([]);
+    setSupplierItems([]);
+    setItems(null);
+    setRecipes(null);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -1042,6 +1057,7 @@ export default function App() {
       const tokens = await login(email, password);
       const profile = await getMe(tokens.access);
       storeTokens(tokens.access, tokens.refresh);
+      resetOrgData();
       setMe(profile);
       setAccessToken(tokens.access);
       // A genuine sign-in (as opposed to a refresh restoring an existing
@@ -1060,8 +1076,7 @@ export default function App() {
     clearStoredTokens();
     setMe(null);
     setAccessToken(null);
-    setItems(null);
-    setRecipes(null);
+    resetOrgData();
     setSelectedRecipeId(null);
     setSelectedItemId(null);
     setEmail("");
