@@ -118,7 +118,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         q: "How do I set an item's allergens?",
         a: "Go to Items, open the item and find the Allergens card. Under Contains, tap each allergen the item has; under May contain, tap anything it might pick up (a shared fryer, a “may contain nuts” label). Then press Confirm allergens — nothing is saved until you do. If the item has none, press Confirm: no allergens so it counts as checked. Admins, Managers and Finance can change allergens; Staff can read them.",
-        fact: "💡 New items can also be tagged in bulk: the Items tab of the Excel import template has six allergen dropdown columns (allergen_1 to allergen_6).",
+        fact: "💡 Items can also be tagged in bulk: the Items tab of the Excel import template has six allergen dropdown columns (allergen_1 to allergen_6). Change them on an existing row and re-upload, and that item's tags are replaced and marked reviewed. Rows you leave alone change nothing.",
       },
       {
         q: "What do “Not reviewed yet”, “Suggested automatically” and “Confirmed” mean?",
@@ -381,7 +381,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         q: "How do I set a waste target for an item?",
         a: "Go to Items, open the item and find the Waste card. Type your predicted spoilage in Target waste (%) and press Save. SAWIS then compares it with the item's actual waste — logged waste against sales usage over the last 90 days — and shows a gauge, a six-month trend and a tag: On track, Investigate (actual is at least two points over target), No target set or No data yet.",
-        fact: "💡 For brand-new items you can set targets in bulk with the waste_pct column on the Items tab of the Excel import template. Actual waste needs some sales or waste logged before it shows a number.",
+        fact: "💡 You can set targets in bulk with the waste_pct column on the Items tab of the Excel import template; change it on an existing row and re-upload to update that item. Actual waste needs some sales or waste logged before it shows a number.",
       },
       {
         q: "Why is there waste in the log that I didn't enter?",
@@ -508,6 +508,10 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         q: "Where do I download the import template?",
         a: "Go to Settings and find the Import recipes & items card — click ⇩ Download Excel template. SAWIS asks for your password first (every time), because the workbook contains your costs and suppliers. It opens with a Read me tab explaining each column.",
+      },
+      {
+        q: "Can I update costs, waste % and allergens for existing items from the template?",
+        a: "Yes. Download the template, then on the Items tab change cost, waste_pct or the allergen_1 to allergen_6 dropdowns on any grey \"existing\" row and upload the file again. Only rows you actually changed are updated. Cost is the price per base unit (per g, ml or piece) from the supplier on that row: only the price changes, the supplier's own unit and pack stay, and recipe costs follow. A supplier name plus a cost that the item doesn't have yet adds that supplier. Allergens replace the item's tags and mark it reviewed; leave all six blank to leave tags alone. Category, vat and par level on existing rows are for reference only. Rows you didn't touch change nothing.",
       },
       {
         q: "What's the difference between the template import and \"Import menu list\"?",

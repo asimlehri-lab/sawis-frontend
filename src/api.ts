@@ -375,6 +375,10 @@ export interface BulkItemInput {
   // already exists, matching bulk_import's existing "never clobber what's
   // already there" behavior.
   par_level?: string;
+  // Set by the import template on a row whose item already exists: that item's
+  // waste target, supplier price and allergens are then updated from the row
+  // (only the fields it carries). See bulk_upsert_items on the backend.
+  update_existing?: boolean;
   // Optional supplier name + per-unit cost, provided together. When both
   // are present the backend finds-or-creates a Supplier by this name,
   // upserts a SupplierItem (the background catalogue row) for this item's
@@ -420,6 +424,9 @@ export interface BulkItemImportResult {
   // Names of items (new or existing) whose allergen tags were set by
   // this import's allergens column.
   allergens_set: string[];
+  // Existing items whose supplier price / waste target changed.
+  costs_updated?: string[];
+  waste_updated?: string[];
 }
 
 // `location` is required server-side — every imported item also gets an
@@ -593,6 +600,9 @@ export interface BulkRecipeImportResult {
   // this import's Items-tab allergens column — same reasoning as
   // BulkItemImportResult.allergens_set.
   allergens_set: string[];
+  // Existing items whose supplier price / waste target changed.
+  costs_updated?: string[];
+  waste_updated?: string[];
 }
 
 // Backend creates any ingredient with no item_id as a brand-new Item on

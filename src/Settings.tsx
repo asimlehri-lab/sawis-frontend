@@ -18,7 +18,7 @@ import type { Allergen, BulkItemInput, CatalogItem, CurrencyCode, InventoryCheck
 import MenuListImportModal from "./MenuListImportModal";
 import type { ParsedMenuRow } from "./MenuListImportModal";
 import SearchSelect from "./SearchSelect";
-import { downloadRecipeImportTemplate } from "./recipeImportTemplate";
+import { downloadRecipeImportTemplate, resolveUsualSupplierLink } from "./recipeImportTemplate";
 import PasswordConfirmModal from "./PasswordConfirmModal";
 // DAY_NAMES is exported from App.tsx, which imports Settings back -- same
 // established circular-import pattern already used by SupplierDeliveries.tsx
@@ -803,6 +803,9 @@ function RecipeAndItemImportPanel({
   // guess-from-unit-text fallback a bare unmatched ingredient name would
   // otherwise get. Always cleared at the start of handleFile.
   const [newItemRows, setNewItemRows] = useState<BulkItemInput[]>([]);
+  // Existing rows whose cost was changed but that have no supplier to attach
+  // it to -- shown as a note, never silently dropped.
+  const [costsWithoutSupplier, setCostsWithoutSupplier] = useState(0);
   const [templateDownloading, setTemplateDownloading] = useState(false);
   // Gates the template download behind a password re-confirmation (see
   // PasswordConfirmModal) -- the template contains this org's full costed
@@ -817,6 +820,8 @@ function RecipeAndItemImportPanel({
     itemsCreated: string[];
     holdingsBackfilled: number;
     allergensSet: number;
+    costsUpdated: number;
+    wasteUpdated: number;
   } | null>(null);
 
   function matchItem(name: string): string | null {
@@ -874,7 +879,7 @@ function RecipeAndItemImportPanel({
   // name fall back to guessing a base_unit from its unit text.
   function parseThreeTabWorkbook(
     workbook: XLSX.WorkBook
-  ): { rows: RecipeRow[]; itemRows: BulkItemInput[] } | { error: string } {
+  ): { rows: RecipeRow[]; itemRows: BulkItemInput[]; costsWithoutSupplier: number } | { error: string } {
     const sheetTable = (name: string): string[][] => {
       const raw = XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[name], { header: 1, blankrows: false });
       return rowsToTable(raw);
@@ -919,6 +924,17 @@ function RecipeAndItemImportPanel({
       if (n && u && !baseUnitByName.has(n)) baseUnitByName.set(n, u);
     }
     const itemRows: BulkItemInput[] = [];
+    // Live items by lower-cased name (an archived copy only if there is no
+    // live one), and allergen names by id, for comparing "existing" rows with
+    // what is stored.
+    const liveItemByName = new Map<string, CatalogItem>();
+    for (const it of items) {
+      const key = it.name.trim().toLowerCase();
+      const seen = liveItemByName.get(key);
+      if (!seen || (seen.archived && !it.archived)) liveItemByName.set(key, it);
+    }
+    const allergenNameById = new Map(allergens.map((a) => [a.id, a.name.trim().toLowerCase()]));
+    let costsWithoutSupplier = 0;
     for (const r of itemsTable.slice(1)) {
       const status = (statusIdx > -1 ? r[statusIdx] || "" : "").trim().toLowerCase();
       const allergensRaw = itAllergenIdxs
@@ -926,8 +942,61 @@ function RecipeAndItemImportPanel({
         .map((idx) => (r[idx] || "").trim())
         .filter(Boolean)
         .join(", ");
-      if (status !== "new" && !allergensRaw) continue;
       const name = (r[itNameIdx] || "").trim();
+      if (status !== "new") {
+        // A row for an item that already exists: send only what the person
+        // actually changed (cost, waste %, allergens), compared with what is
+        // stored now, so re-uploading an untouched file changes nothing.
+        const current = liveItemByName.get(name.toLowerCase());
+        if (!current) continue;
+        const changes: BulkItemInput = { name: current.name, base_unit: current.base_unit, update_existing: true };
+        let changed = false;
+
+        if (allergensRaw) {
+          const wanted = new Set(
+            allergensRaw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+          );
+          const have = new Set(
+            current.allergens.map((id) => allergenNameById.get(id)).filter((n): n is string => !!n)
+          );
+          const same = wanted.size === have.size && [...wanted].every((n) => have.has(n));
+          if (!same) {
+            changes.allergens = allergensRaw;
+            changed = true;
+          }
+        }
+
+        const wasteRaw = itWasteIdx > -1 ? (r[itWasteIdx] || "").trim() : "";
+        if (wasteRaw && !isNaN(Number(wasteRaw)) && Number(wasteRaw) >= 0 && Number(wasteRaw) <= 100) {
+          const haveWaste = current.target_waste_pct == null ? null : Number(current.target_waste_pct);
+          if (haveWaste === null || Math.abs(haveWaste - Number(wasteRaw)) > 0.0001) {
+            changes.waste_pct = wasteRaw;
+            changed = true;
+          }
+        }
+
+        const costRaw = itCostIdx > -1 ? (r[itCostIdx] || "").trim() : "";
+        if (costRaw && !isNaN(Number(costRaw)) && Number(costRaw) >= 0) {
+          const usual = resolveUsualSupplierLink(current);
+          const sheetSupplier = itSupplierIdx > -1 ? (r[itSupplierIdx] || "").trim() : "";
+          const supplierName = sheetSupplier || usual?.supplier_name || "";
+          if (!supplierName) {
+            costsWithoutSupplier += 1;
+          } else {
+            const link = (current.supplier_links || []).find(
+              (l) => l.supplier_name.trim().toLowerCase() === supplierName.toLowerCase()
+            );
+            if (!link || Math.abs(Number(link.unit_price) - Number(costRaw)) > 0.00005) {
+              changes.supplier = supplierName;
+              changes.cost = costRaw;
+              changed = true;
+            }
+          }
+        }
+
+        if (changed) itemRows.push(changes);
+        continue;
+      }
       const unitRaw = (r[itUnitIdx] || "").trim();
       const base_unit = BASE_UNITS.find((u) => u.toLowerCase() === unitRaw.toLowerCase()) || "";
       if (!name || !base_unit) continue;
@@ -1064,7 +1133,7 @@ function RecipeAndItemImportPanel({
         }
       }
     }
-    return { rows: parsedRows, itemRows };
+    return { rows: parsedRows, itemRows, costsWithoutSupplier };
   }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1075,6 +1144,7 @@ function RecipeAndItemImportPanel({
     setImportError(null);
     setResult(null);
     setNewItemRows([]);
+    setCostsWithoutSupplier(0);
     const isSpreadsheet = /\.xlsx?$/i.test(file.name);
     const reader = new FileReader();
     reader.onload = () => {
@@ -1097,6 +1167,7 @@ function RecipeAndItemImportPanel({
             } else {
               setRows(outcome.rows);
               setNewItemRows(outcome.itemRows);
+              setCostsWithoutSupplier(outcome.costsWithoutSupplier);
             }
             return;
           }
@@ -1334,6 +1405,8 @@ function RecipeAndItemImportPanel({
       .map((r) => r.name.trim().toLowerCase()),
   ]);
   const allergensPreviewCount = newItemRows.filter((r) => r.allergens).length;
+  const costPreviewCount = newItemRows.filter((r) => r.update_existing && r.cost).length;
+  const wastePreviewCount = newItemRows.filter((r) => r.update_existing && r.waste_pct).length;
   const recipesByPosId = new Map(recipes.filter((r) => r.pos_id).map((r) => [r.pos_id, r]));
   const recipesByName = new Map(recipes.map((r) => [r.name.trim().toLowerCase(), r]));
 
@@ -1386,12 +1459,21 @@ function RecipeAndItemImportPanel({
         itemsCreated: res.items_created,
         holdingsBackfilled: res.holdings_backfilled.length,
         allergensSet: res.allergens_set.length,
+        costsUpdated: (res.costs_updated ?? []).length,
+        wasteUpdated: (res.waste_updated ?? []).length,
       });
       setRows([]);
       setNewItemRows([]);
       setFileName("");
       onRecipesChanged();
-      if (res.items_created.length > 0 || res.holdings_backfilled.length > 0) onItemsChanged();
+      if (
+        res.items_created.length > 0 ||
+        res.holdings_backfilled.length > 0 ||
+        res.allergens_set.length > 0 ||
+        (res.costs_updated ?? []).length > 0 ||
+        (res.waste_updated ?? []).length > 0
+      )
+        onItemsChanged();
     } catch (e) {
       setImportError(e instanceof Error ? e.message : "Could not import these recipes.");
     } finally {
@@ -1524,6 +1606,12 @@ function RecipeAndItemImportPanel({
             {newItemNames.size > 0 && ` ${newItemNames.size} new item${newItemNames.size === 1 ? "" : "s"} will be created.`}
             {allergensPreviewCount > 0 &&
               ` ${allergensPreviewCount} item${allergensPreviewCount === 1 ? "" : "s"} will have allergen tags set.`}
+            {costPreviewCount > 0 &&
+              ` ${costPreviewCount} item${costPreviewCount === 1 ? "" : "s"} will get a new supplier price.`}
+            {wastePreviewCount > 0 &&
+              ` ${wastePreviewCount} item${wastePreviewCount === 1 ? "" : "s"} will get a new waste target.`}
+            {costsWithoutSupplier > 0 &&
+              ` ${costsWithoutSupplier} changed cost${costsWithoutSupplier === 1 ? " was" : "s were"} skipped because the item has no supplier on its row.`}
           </div>
           <div className="table-scroll">
             <table className="tbl" style={{ marginTop: 10 }}>
@@ -1624,6 +1712,10 @@ function RecipeAndItemImportPanel({
             } got a stock holding added at this location.`}
           {result.allergensSet > 0 &&
             ` ${result.allergensSet} item${result.allergensSet === 1 ? "" : "s"} had allergen tags set.`}
+          {result.costsUpdated > 0 &&
+            ` ${result.costsUpdated} item${result.costsUpdated === 1 ? "" : "s"} got a new supplier price.`}
+          {result.wasteUpdated > 0 &&
+            ` ${result.wasteUpdated} item${result.wasteUpdated === 1 ? "" : "s"} got a new waste target.`}
         </div>
       )}
     </div>

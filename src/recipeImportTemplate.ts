@@ -192,21 +192,26 @@ function buildReadMeSheet(wb: ExcelJS.Workbook) {
     "",
     "1. Items tab",
     "   \"existing\" rows (grey) are your current item catalogue, pulled in automatically,",
-    "   with their current category/vat/par_level/supplier/cost/allergens shown alongside",
-    "   so you can see and copy them -- reference only for every column except allergens:",
-    "   editing category/vat/par_level/supplier/cost/etc. on an existing row does nothing,",
-    "   it only backs an existing item's ingredient lines below. Add anything genuinely new",
-    "   as a \"new\" row (green) below them -- only item_name + base_unit are required,",
-    "   everything else is optional.",
+    "   with their current category/vat/par_level/supplier/cost/waste_pct/allergens shown",
+    "   alongside so you can see and copy them. Category, vat and par_level are reference",
+    "   only: editing them on an existing row does nothing, it only backs that item's",
+    "   ingredient lines below. Add anything genuinely new as a \"new\" row (green) below",
+    "   them -- only item_name + base_unit are required, everything else is optional.",
     "",
-    "   Allergens are the one exception: the 6 allergen_1..allergen_6 columns are each a",
-    "   real dropdown (pick from the 14 recognized allergens -- typing something else isn't",
-    "   accepted, so there's no risk of a typo not matching what's set up in SAWIS). Fill as",
-    "   many slots as an item needs, left to right, blank rest. Edit an existing row's slots",
-    "   and re-upload, and that item's tags are replaced with exactly what's picked -- the",
-    "   way to bulk-tag your whole existing catalogue without opening each item one at a",
-    "   time. Leave every slot blank to leave an item's tags alone. Tagged with more than 6",
-    "   allergens? Finish tagging it on the item's own page in SAWIS instead.",
+    "   Three columns DO update an existing item when you change them and re-upload --",
+    "   rows you leave as they are change nothing:",
+    "   - cost: the price per base unit (per g, ml or piece) from the supplier on that",
+    "     row. Only the price changes; the supplier's own unit and pack size stay as they",
+    "     are. A new supplier name plus a cost adds that supplier to the item. Recipe",
+    "     costs follow the new price.",
+    "   - waste_pct: your predicted waste % for the item (e.g. 5 for 5%). Blank leaves it",
+    "     as it is.",
+    "   - allergen_1..allergen_6: each a real dropdown (pick from the 14 recognized",
+    "     allergens -- typing something else isn't accepted). Fill as many slots as an item",
+    "     needs, left to right, blank rest. Change an existing row's slots and that item's",
+    "     tags are replaced with exactly what's picked and the item counts as reviewed.",
+    "     Leave every slot blank to leave an item's tags alone. Tagged with more than 6",
+    "     allergens? Finish tagging it on the item's own page in SAWIS instead.",
     "",
     "2. Recipes tab",
     "   Every recipe you already have is listed here, fully filled in and grouped/shaded by",
@@ -255,7 +260,7 @@ function buildReadMeSheet(wb: ExcelJS.Workbook) {
 // ordered from. Reference-only here (see the note on this sheet), but
 // picking the same supplier consistently is still more useful than an
 // arbitrary one.
-function resolveUsualSupplierLink(item: CatalogItem): ItemSupplierRow | null {
+export function resolveUsualSupplierLink(item: CatalogItem): ItemSupplierRow | null {
   const links = item.supplier_links || [];
   if (links.length === 0) return null;
   if (item.default_supplier) {
@@ -366,15 +371,17 @@ function buildItemsSheet(wb: ExcelJS.Workbook, items: CatalogItem[], location: s
   }
 
   sheet.getCell("A1").note =
-    '"existing" rows are your current catalogue, pulled in automatically -- reference only, don\'t edit. Add anything genuinely new as a "new" row below.';
+    '"existing" rows are your current catalogue, pulled in automatically -- category, vat and par_level are reference only; cost, waste_pct and the allergen slots update the item if you change them. Add anything genuinely new as a "new" row below.';
   sheet.getCell("B1").note =
     "Only item_name + base_unit are required -- everything else (category/vat/par_level/supplier/cost/waste_pct/allergen_1..6) is optional, same as the old standalone Items import.";
   sheet.getCell("D1").note =
-    "On \"existing\" rows, category/vat/par_level/supplier/cost/waste_pct show that item's current values (par_level for the location you've picked below) so you can see and copy them -- editing these cells has no effect on an existing item, since matching is by name only.";
+    "On \"existing\" rows, category/vat/par_level/supplier/cost/waste_pct show that item's current values (par_level for the location you've picked below) so you can see and copy them -- category, vat and par_level are reference only (editing them has no effect on an existing item), but cost, waste_pct and the allergen slots DO update it when you change them. Matching is by name only.";
+  sheet.getCell("H1").note =
+    "Price per base unit (per g, ml or piece) from the supplier on this row. On an existing row, changing it updates that supplier's price for the item (the supplier's own unit and pack size stay as they are) and recipe costs follow. Needs a supplier on the row.";
   sheet.getCell("I1").note =
-    "Your own predicted spoilage % for this item (e.g. 5 for 5%) -- shown on the item's own page next to the actual % calculated from your waste log. Leave blank to set it later.";
+    "Your own predicted spoilage % for this item (e.g. 5 for 5%) -- shown on the item's own page next to the actual % calculated from your waste log. On an existing row, changing it updates the item; blank leaves it as it is.";
   sheet.getCell("J1").note =
-    `Pick from the dropdown -- each of these ${ALLERGEN_SLOTS} columns (allergen_1..allergen_${ALLERGEN_SLOTS}) is a real dropdown of the 14 recognized allergens, not free text, so what you pick always matches what's set up in SAWIS. Fill as many slots as this item needs, left to right, and leave the rest blank. Unlike every other column here, these DO take effect on an "existing" row: re-uploading replaces that item's current tags with exactly what's picked across these columns, so this is the way to bulk-tag your whole catalogue without opening each item one at a time. Leave every slot blank to leave an item's tags alone. Tagged with more than ${ALLERGEN_SLOTS}? Finish tagging it on the item's own page in SAWIS instead -- only the first ${ALLERGEN_SLOTS} show here.`;
+    `Pick from the dropdown -- each of these ${ALLERGEN_SLOTS} columns (allergen_1..allergen_${ALLERGEN_SLOTS}) is a real dropdown of the 14 recognized allergens, not free text, so what you pick always matches what's set up in SAWIS. Fill as many slots as this item needs, left to right, and leave the rest blank. Like cost and waste_pct, these DO take effect on an "existing" row when you change them: re-uploading replaces that item's current tags with exactly what's picked across these columns, so this is the way to bulk-tag your whole catalogue without opening each item one at a time. Leave every slot blank to leave an item's tags alone. Tagged with more than ${ALLERGEN_SLOTS}? Finish tagging it on the item's own page in SAWIS instead -- only the first ${ALLERGEN_SLOTS} show here.`;
 
   sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: lastItemRow, column: headers.length } };
 
