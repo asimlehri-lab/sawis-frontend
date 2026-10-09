@@ -824,6 +824,8 @@ function RecipeAndItemImportPanel({
     wasteUpdated: number;
     vatUpdated: number;
     parUpdated: number;
+    categoryUpdated: number;
+    categoryUnknown: string[];
   } | null>(null);
 
   function matchItem(name: string): string | null {
@@ -994,6 +996,15 @@ function RecipeAndItemImportPanel({
               changed = true;
             }
           }
+        }
+
+        // Category: a different name from the item's current one. Blank leaves
+        // it alone; the server only moves it to a category that already
+        // exists, so a typo is reported back instead of creating a new one.
+        const catRaw = itCatIdx > -1 ? (r[itCatIdx] || "").trim() : "";
+        if (catRaw && catRaw.toLowerCase() !== (current.category_name || "").trim().toLowerCase()) {
+          changes.category = catRaw;
+          changed = true;
         }
 
         // VAT: the sheet shows the rate the item is using now (its own, or its
@@ -1433,6 +1444,13 @@ function RecipeAndItemImportPanel({
   const wastePreviewCount = newItemRows.filter((r) => r.update_existing && r.waste_pct).length;
   const vatPreviewCount = newItemRows.filter((r) => r.update_existing && r.vat_rate != null).length;
   const parPreviewCount = newItemRows.filter((r) => r.update_existing && r.par_level).length;
+  const categoryChangeRows = newItemRows.filter((r) => r.update_existing && r.category);
+  // Items with no VAT rate of their own take their category's rate, so moving
+  // them changes the VAT they use.
+  const categoryVatShiftCount = categoryChangeRows.filter((r) => {
+    const it = items.find((i) => i.name.trim().toLowerCase() === r.name.trim().toLowerCase());
+    return it && it.vat_rate == null;
+  }).length;
   const recipesByPosId = new Map(recipes.filter((r) => r.pos_id).map((r) => [r.pos_id, r]));
   const recipesByName = new Map(recipes.map((r) => [r.name.trim().toLowerCase(), r]));
 
@@ -1489,6 +1507,8 @@ function RecipeAndItemImportPanel({
         wasteUpdated: (res.waste_updated ?? []).length,
         vatUpdated: (res.vat_updated ?? []).length,
         parUpdated: (res.par_updated ?? []).length,
+        categoryUpdated: (res.category_updated ?? []).length,
+        categoryUnknown: res.category_unknown ?? [],
       });
       setRows([]);
       setNewItemRows([]);
@@ -1501,7 +1521,8 @@ function RecipeAndItemImportPanel({
         (res.costs_updated ?? []).length > 0 ||
         (res.waste_updated ?? []).length > 0 ||
         (res.vat_updated ?? []).length > 0 ||
-        (res.par_updated ?? []).length > 0
+        (res.par_updated ?? []).length > 0 ||
+        (res.category_updated ?? []).length > 0
       )
         onItemsChanged();
     } catch (e) {
@@ -1644,6 +1665,10 @@ function RecipeAndItemImportPanel({
               ` ${vatPreviewCount} item${vatPreviewCount === 1 ? "" : "s"} will get a new VAT rate.`}
             {parPreviewCount > 0 &&
               ` ${parPreviewCount} item${parPreviewCount === 1 ? "" : "s"} will get a new par level.`}
+            {categoryChangeRows.length > 0 &&
+              ` ${categoryChangeRows.length} item${categoryChangeRows.length === 1 ? "" : "s"} will move to another category.`}
+            {categoryVatShiftCount > 0 &&
+              ` ${categoryVatShiftCount} of those ${categoryVatShiftCount === 1 ? "has" : "have"} no VAT rate of ${categoryVatShiftCount === 1 ? "its" : "their"} own, so will use the new category's rate.`}
             {costsWithoutSupplier > 0 &&
               ` ${costsWithoutSupplier} changed cost${costsWithoutSupplier === 1 ? " was" : "s were"} skipped because the item has no supplier on its row.`}
           </div>
@@ -1752,6 +1777,10 @@ function RecipeAndItemImportPanel({
             ` ${result.wasteUpdated} item${result.wasteUpdated === 1 ? "" : "s"} got a new waste target.`}
           {result.vatUpdated > 0 &&
             ` ${result.vatUpdated} item${result.vatUpdated === 1 ? "" : "s"} got a new VAT rate.`}
+          {result.categoryUpdated > 0 &&
+            ` ${result.categoryUpdated} item${result.categoryUpdated === 1 ? "" : "s"} moved to another category.`}
+          {result.categoryUnknown.length > 0 &&
+            ` No category called ${result.categoryUnknown.map((c) => `"${c}"`).join(", ")} exists, so the items for ${result.categoryUnknown.length === 1 ? "it were" : "them were"} left where they were — check the spelling or pick from the dropdown.`}
           {result.parUpdated > 0 &&
             ` ${result.parUpdated} item${result.parUpdated === 1 ? "" : "s"} got a new par level.`}
         </div>

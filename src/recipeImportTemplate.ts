@@ -13,13 +13,13 @@ import type { Allergen, CatalogItem, Recipe, ItemSupplierRow } from "./api";
 //
 // The three tabs:
 //  - Items: "existing" rows (grey) are this org's current item catalogue,
-//    pulled in live -- reference only (this import never edits an existing
-//    item's fields, only backfills a missing stock holding -- see
-//    bulk_upsert_items on the backend). category/vat/par_level (at the
-//    selected location)/usual supplier/cost are shown too, purely so
-//    existing values are visible at a glance and can be copied into a new
-//    row -- editing one of these cells on an "existing" row has no effect,
-//    since matching is by name only. "new" rows (green) are blank, for
+//    pulled in live. Changing category/vat/par_level (at the selected
+//    location)/cost/waste_pct/allergens on one updates that item on upload
+//    (only fields that differ from what is stored are sent -- see
+//    parseThreeTabWorkbook in Settings.tsx and bulk_upsert_items on the
+//    backend). Name, base_unit and supplier are never changed from here
+//    (matching is by name, so a renamed row would be read as a different
+//    item); they are shown for reference. "new" rows (green) are blank, for
 //    genuinely new items -- filled in the same pass as the recipes that
 //    use them. This replaces the old standalone "Import items" template:
 //    that panel is gone, this is the only import now.
@@ -193,13 +193,17 @@ function buildReadMeSheet(wb: ExcelJS.Workbook) {
     "1. Items tab",
     "   \"existing\" rows (grey) are your current item catalogue, pulled in automatically,",
     "   with their current category/vat/par_level/supplier/cost/waste_pct/allergens shown",
-    "   alongside so you can see and copy them. Category is reference only: editing it on",
-    "   an existing row does nothing, it only backs that item's ingredient lines below.",
+    "   alongside so you can see and copy them. An item's name, base_unit and supplier",
+    "   cannot be changed from this file (editing them on an existing row does nothing, a",
+    "   changed name is read as a different item); change those on the item's own page.",
     "   Add anything genuinely new as a \"new\" row (green) below them -- only item_name +",
     "   base_unit are required, everything else is optional.",
     "",
     "   These columns DO update an existing item when you change them and re-upload --",
     "   rows you leave as they are change nothing:",
+    "   - category: pick another category from the dropdown to move the item. It must be a",
+    "     category that already exists (a new name is not created here). An item with no VAT",
+    "     rate of its own then uses the new category's VAT rate. Blank leaves it as it is.",
     "   - vat: the item's VAT rate as a whole-number percentage (e.g. 20). It shows the rate",
     "     the item uses now (its own, or its category's). Changing it gives the item its own",
     "     rate; open purchase-order lines without a rate of their own follow it, received",
@@ -377,11 +381,11 @@ function buildItemsSheet(wb: ExcelJS.Workbook, items: CatalogItem[], location: s
   }
 
   sheet.getCell("A1").note =
-    '"existing" rows are your current catalogue, pulled in automatically -- category is reference only; vat, par_level, cost, waste_pct and the allergen slots update the item if you change them. Add anything genuinely new as a "new" row below.';
+    '"existing" rows are your current catalogue, pulled in automatically -- category, vat, par_level, cost, waste_pct and the allergen slots update the item if you change them; name, base_unit and supplier do not. Add anything genuinely new as a "new" row below.';
   sheet.getCell("B1").note =
     "Only item_name + base_unit are required -- everything else (category/vat/par_level/supplier/cost/waste_pct/allergen_1..6) is optional, same as the old standalone Items import.";
   sheet.getCell("D1").note =
-    "On \"existing\" rows, category/vat/par_level/supplier/cost/waste_pct show that item's current values (par_level for the location you've picked below) so you can see and copy them -- category is reference only (editing it has no effect on an existing item), but vat, par_level, cost, waste_pct and the allergen slots DO update it when you change them. Matching is by name only.";
+    "On \"existing\" rows, category/vat/par_level/supplier/cost/waste_pct show that item's current values (par_level for the location you've picked below) so you can see and copy them -- category, vat, par_level, cost, waste_pct and the allergen slots DO update it when you change them. Name, base_unit and supplier do not: matching is by name, so a changed name is read as a different item.";
   sheet.getCell("H1").note =
     "Price per base unit (per g, ml or piece) from the supplier on this row. On an existing row, changing it updates that supplier's price for the item (the supplier's own unit and pack size stay as they are) and recipe costs follow. Needs a supplier on the row.";
   sheet.getCell("I1").note =
