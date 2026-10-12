@@ -1158,12 +1158,17 @@ function RecipeAndItemImportPanel({
         parsedRows.push({ ...header, ingredientRaw: "", qty: "", unit: "", matchedItemId: null });
       } else {
         for (const line of ingredientLines) {
+          const matchedItemId = matchItem(line.ingredient);
+          // A file saved without calculated values has no unit for items that are
+          // not on its own Items tab; the matched item's own base unit is the
+          // right one to show, so the recipe line is not saved with a blank unit.
+          const matchedUnit = matchedItemId ? items.find((i) => i.id === matchedItemId)?.base_unit ?? "" : "";
           parsedRows.push({
             ...header,
             ingredientRaw: line.ingredient,
             qty: line.qty,
-            unit: line.unit,
-            matchedItemId: matchItem(line.ingredient),
+            unit: line.unit || matchedUnit,
+            matchedItemId,
           });
         }
       }
