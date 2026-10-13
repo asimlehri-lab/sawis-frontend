@@ -1083,7 +1083,11 @@ export default function ItemDetail({
                           <span className="muted">
                             {" "}
                             · counted in {p.stock_unit_name ?? item.base_unit}
-                            {p.max_qty !== null ? ` · most that fits ${tidy(Number(p.max_qty))} ${item.base_unit}` : ""}
+                            {p.max_qty !== null
+                              ? p.stock_unit_name && Number(p.stock_unit_qty) > 0
+                                ? ` · most that fits ${tidy(Number(p.max_qty) / Number(p.stock_unit_qty))} ${p.stock_unit_name} (${tidy(Number(p.max_qty))} ${item.base_unit})`
+                                : ` · most that fits ${tidy(Number(p.max_qty))} ${item.base_unit}`
+                              : ""}
                           </span>
                         </div>
                       ))}

@@ -1071,6 +1071,10 @@ function SectionsTab({
   const [modalUnit, setModalUnit] = useState<Record<string, string>>({});
   // Maximum typed per ticked item ('' = no limit); a missing key keeps what is saved.
   const [modalMax, setModalMax] = useState<Record<string, string>>({});
+  // What was typed in the limit box while a stock unit is chosen (e.g. "2." on the way to 2.5 tubs).
+  // modalMax stays the single source of truth, always in the base unit; this only keeps the text as
+  // typed. Keyed with the unit so switching the unit drops stale text and the box shows the converted value.
+  const [modalMaxDraft, setModalMaxDraft] = useState<Record<string, string>>({});
   const [modalCadence, setModalCadence] = useState<"weekly" | "monthly" | null>(null);
   const [modalDueDate, setModalDueDate] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1085,6 +1089,7 @@ function SectionsTab({
     setModalChecked({});
     setModalUnit({});
     setModalMax({});
+    setModalMaxDraft({});
     setModalCadence(null);
     setModalDueDate("");
     setErr(null);
@@ -1100,6 +1105,7 @@ function SectionsTab({
     setModalChecked(Object.fromEntries(holdingsInSection(holdings, s.id).map((h) => [h.id, true])));
     setModalUnit({});
     setModalMax({});
+    setModalMaxDraft({});
     setModalCadence(s.count_cadence);
     setModalDueDate(s.next_count_due ?? "");
     setErr(null);
@@ -1248,18 +1254,57 @@ function SectionsTab({
             ))}
         </span>
         <span className="il-max">
-          {selected && (
-            <input
-              type="number"
-              min="0"
-              step="any"
-              placeholder="no limit"
-              aria-label={`Most ${h.itemName} that fits in this section, in ${h.baseUnit}`}
-              title={`The most that fits in this section (${h.baseUnit}). Leave blank for no limit. Counts above it show a warning, never a block.`}
-              value={modalMax[h.id] ?? (here?.maxQty != null ? String(here.maxQty) : "")}
-              onChange={(e) => setModalMax((m) => ({ ...m, [h.id]: e.target.value }))}
-            />
-          )}
+          {selected &&
+            (() => {
+              // The limit is typed in the unit this section counts in (a tub, say) and saved in the base unit.
+              const unitId = modalUnit[h.id] ?? here?.stockUnitId ?? "";
+              const unit = h.itemStockUnits.find((u) => u.id === unitId);
+              const unitQty = unit ? Number(unit.qty) : 0;
+              const baseText = modalMax[h.id] ?? (here?.maxQty != null ? String(here.maxQty) : "");
+              const baseNum = baseText.trim() !== "" && Number.isFinite(Number(baseText)) ? Number(baseText) : null;
+              const draftKey = `${h.id}|${unitId}`;
+              const shown =
+                unit && unitQty > 0
+                  ? draftKey in modalMaxDraft
+                    ? modalMaxDraft[draftKey]
+                    : baseNum === null
+                      ? ""
+                      : String(parseFloat((baseNum / unitQty).toFixed(3)))
+                  : baseText;
+              const unitName = unit && unitQty > 0 ? unit.name : h.baseUnit;
+              return (
+                <>
+                  <div className="il-max-box">
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="no limit"
+                      aria-label={`Most ${h.itemName} that fits in this section, in ${unitName}`}
+                      title={`The most that fits in this section, in ${unitName}. Leave blank for no limit. Counts above it show a warning, never a block.`}
+                      value={shown}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (unit && unitQty > 0) {
+                          setModalMaxDraft((d) => ({ ...d, [draftKey]: v }));
+                          const n = Number(v);
+                          if (v === "") setModalMax((m) => ({ ...m, [h.id]: "" }));
+                          else if (Number.isFinite(n)) setModalMax((m) => ({ ...m, [h.id]: String(parseFloat((n * unitQty).toFixed(3))) }));
+                        } else {
+                          setModalMax((m) => ({ ...m, [h.id]: v }));
+                        }
+                      }}
+                    />
+                    <span className="muted il-max-unit">{unitName}</span>
+                  </div>
+                  {unit && unitQty > 0 && baseNum !== null && (
+                    <div className="muted il-max-eq">
+                      = {parseFloat(baseNum.toFixed(3))} {h.baseUnit}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
         </span>
       </div>
     );
