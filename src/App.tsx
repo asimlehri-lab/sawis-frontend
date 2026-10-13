@@ -2592,6 +2592,7 @@ export default function App() {
                 locations={locations}
                 onItemsChanged={() => loadItems(accessToken)}
                 onRecipesChanged={() => loadRecipes(accessToken)}
+                onCategoriesChanged={() => fetchCategories(accessToken).then(setCategories).catch(() => {})}
               />
             )}
 

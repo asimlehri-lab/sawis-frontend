@@ -769,10 +769,38 @@ export interface Category {
   org: string;
   name: string;
   default_vat_rate: string;
+  // Items using this category, archived ones included. 0 = safe to delete.
+  item_count?: number;
 }
 
 export async function fetchCategories(accessToken: string): Promise<Category[]> {
   return authedFetchAllPages<Category>("/api/catalog/categories/", accessToken);
+}
+
+// A category in use is refused by the server with a readable reason
+// ("Spices is used by 3 items. Move them…"), which is shown as it comes.
+export async function deleteCategory(accessToken: string, id: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/catalog/categories/${id}/`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error((body && (body.detail || body.error)) || "Could not delete this category.");
+  }
+}
+
+// Deletes every category no item uses; ones in use are never touched.
+export async function deleteUnusedCategories(accessToken: string): Promise<{ deleted: number; names: string[] }> {
+  const res = await fetch(`${API_URL}/api/catalog/categories/delete_unused/`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error((body && (body.detail || body.error)) || "Could not delete the unused categories.");
+  }
+  return res.json();
 }
 
 export interface NewCategoryInput {

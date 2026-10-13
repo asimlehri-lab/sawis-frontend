@@ -542,6 +542,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "Categories can be created directly from any item's Category field while editing it.",
       },
       {
+        q: "How do I delete a category I don't use?",
+        a: "An Admin goes to Settings and finds the Item categories card. Each category shows how many items use it. One marked Unused has a Delete button (click it, then Confirm delete), and if several are unused, Delete all unused removes them in one go. A category that items still use can't be deleted: move those items to another category first, then it shows as Unused. Deleting a category never deletes items.",
+      },
+      {
         q: "How do I set my food and drink cost targets?",
         a: "Settings → Locations card: each location has a Food target and a Drink target (%) beside its currency and overhead. Change them and save. They drive the green, orange and red cost colours and the Actions tab's Cost breaching target list, and start at 30%.",
       },
