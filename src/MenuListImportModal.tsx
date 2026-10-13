@@ -77,8 +77,11 @@ export default function MenuListImportModal({
   // first render) and matchFor (used on every render, for the "will
   // create"/"will update" badge) share the same lookup instead of
   // duplicating the match logic in two places.
-  const recipesByPosId = new Map(recipes.filter((r) => r.pos_id).map((r) => [r.pos_id, r]));
-  const recipesByName = new Map(recipes.map((r) => [r.name.trim().toLowerCase(), r]));
+  // Archived recipes go first so a live recipe with the same name or POS ID
+  // replaces them in the lookup, as the server does.
+  const recipesLiveLast = [...recipes].sort((a, b) => Number(!!b.archived) - Number(!!a.archived));
+  const recipesByPosId = new Map(recipesLiveLast.filter((r) => r.pos_id).map((r) => [r.pos_id, r]));
+  const recipesByName = new Map(recipesLiveLast.map((r) => [r.name.trim().toLowerCase(), r]));
   function findMatch(posId: string, name: string): Recipe | undefined {
     if (posId && recipesByPosId.has(posId)) return recipesByPosId.get(posId);
     return recipesByName.get(name.trim().toLowerCase());

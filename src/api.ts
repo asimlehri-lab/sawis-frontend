@@ -495,6 +495,9 @@ export interface Recipe {
   // Tea") -- distinct from menu_group. Purely for filtering/browsing a
   // long menu; no effect on costing or reporting.
   menu_category: string;
+  // Hidden from the other lists (End of day, allergen review, the template)
+  // but kept with its sales history -- same idea as CatalogItem.archived.
+  archived: boolean;
   lines: RecipeLine[];
   batch_cost: number;
   per_portion_cost: number;
@@ -661,6 +664,7 @@ export interface RecipePatch {
   menu_group?: "food" | "drink";
   pos_id?: string;
   menu_category?: string;
+  archived?: boolean;
   // This recipe's own "may contain" (cross-contact in the kitchen).
   may_contain_allergens?: string[];
 }
@@ -674,8 +678,25 @@ export async function updateRecipe(accessToken: string, id: string, patch: Recip
     },
     body: JSON.stringify(patch),
   });
-  if (!res.ok) throw new Error("Could not save changes.");
+  if (!res.ok) {
+    // Archiving a sub-recipe that other recipes still use is refused with a
+    // message naming them; show it instead of a generic failure.
+    const body = await res.json().catch(() => null);
+    const archivedMsg = body && (Array.isArray(body.archived) ? body.archived[0] : body.archived);
+    throw new Error(typeof archivedMsg === "string" && archivedMsg ? archivedMsg : "Could not save changes.");
+  }
   return res.json();
+}
+
+export async function deleteRecipe(accessToken: string, id: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/catalog/recipes/${id}/`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error((body && (body.detail || body.error || body.message)) || "Could not delete this recipe.");
+  }
 }
 
 export interface NewRecipeLineInput {

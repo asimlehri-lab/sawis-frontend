@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import {
   fetchRecipe,
   updateRecipe,
+  deleteRecipe,
+  login,
   createRecipeLine,
   deleteRecipeLine,
   createItem,
@@ -24,6 +26,9 @@ interface Props {
   // refuses the writes regardless.
   readOnly?: boolean;
   accessToken: string;
+  // The signed-in account's email, used to re-check the password before a
+  // permanent delete (same as ItemDetail).
+  userEmail: string;
   items: CatalogItem[];
   allRecipes: Recipe[];
   allergens: Allergen[];
@@ -43,6 +48,7 @@ export default function RecipeDetail({
   recipeId,
   readOnly = false,
   accessToken,
+  userEmail,
   items,
   allRecipes,
   allergens,
@@ -65,6 +71,13 @@ export default function RecipeDetail({
   const [addSubId, setAddSubId] = useState("");
   const [addSubQty, setAddSubQty] = useState("1");
   const [savingLine, setSavingLine] = useState(false);
+
+  // Archive / delete (danger zone at the bottom), same behaviour as items.
+  const [archiving, setArchiving] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // A quick-add "+ Add new item..." inside the ingredient picker below,
   // same pattern as Import menu list's own inline item creation
@@ -111,6 +124,39 @@ export default function RecipeDetail({
       onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save changes.");
+    }
+  }
+
+  async function handleToggleArchive() {
+    if (!recipe) return;
+    setArchiving(true);
+    try {
+      await saveField({ archived: !recipe.archived });
+    } finally {
+      setArchiving(false);
+    }
+  }
+
+  async function handleConfirmDelete() {
+    if (!recipe) return;
+    setDeleteError(null);
+    setDeleting(true);
+    try {
+      // Re-check the password against the real login endpoint, as for items.
+      await login(userEmail, deletePassword);
+      await deleteRecipe(accessToken, recipe.id);
+      onChanged();
+      onBack();
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error && err.message.includes("Login failed")
+          ? "That password doesn't match your account."
+          : err instanceof Error
+          ? err.message
+          : "Could not delete this recipe."
+      );
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -253,6 +299,11 @@ export default function RecipeDetail({
           placeholder={`Name this ${isSub ? "sub-recipe" : "dish"}…`}
         />
         <span className={`kind-tag ${recipe.kind}`}>{isSub ? "SUB-RECIPE" : "DISH"}</span>
+        {recipe.archived && (
+          <span className="archived-badge" title="Archived: kept for history, hidden from End of day and the other lists">
+            Archived
+          </span>
+        )}
       </div>
       <p className="muted detail-sub">
         {isSub
@@ -650,6 +701,67 @@ export default function RecipeDetail({
             </>
           )}
         </div>
+      </div>
+
+      <div className="card dz-card">
+        <h2 className="dz-h2">Danger zone</h2>
+
+        <div className="dz-row">
+          <div>
+            <b>{recipe.archived ? "This recipe is archived" : "Archive this recipe"}</b>
+            <p className="hint" style={{ margin: "3px 0 0" }}>
+              {recipe.archived
+                ? "Hidden from End of day, allergen review and the import template, but its past sales stay intact."
+                : "Use this when you no longer make it. It is hidden from End of day and the other lists, keeps its sales history, and can be brought back any time."}
+            </p>
+          </div>
+          <button className="btn-ghost" onClick={handleToggleArchive} disabled={archiving}>
+            {archiving ? "Saving…" : recipe.archived ? "Unarchive" : `Archive ${isSub ? "sub-recipe" : "recipe"}`}
+          </button>
+        </div>
+
+        <div className="dz-row dz-row-danger">
+          <div>
+            <b>Delete permanently</b>
+            <p className="hint" style={{ margin: "3px 0 0" }}>
+              Only possible if this recipe has no sales recorded and is not used inside another recipe. Otherwise,
+              archive it instead.
+            </p>
+          </div>
+          {!showDeleteConfirm ? (
+            <button className="btn-danger" onClick={() => setShowDeleteConfirm(true)}>
+              Delete {isSub ? "sub-recipe" : "recipe"}
+            </button>
+          ) : null}
+        </div>
+
+        {showDeleteConfirm && (
+          <div className="dz-confirm">
+            <label>Enter your password to confirm</label>
+            <div className="dz-confirm-row">
+              <input
+                type="password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                placeholder="Your account password"
+              />
+              <button className="btn-danger" onClick={handleConfirmDelete} disabled={deleting || !deletePassword}>
+                {deleting ? "Deleting…" : "Confirm & delete"}
+              </button>
+              <button
+                className="btn-ghost"
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDeletePassword("");
+                  setDeleteError(null);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+            {deleteError && <p className="error">{deleteError}</p>}
+          </div>
+        )}
       </div>
       </fieldset>
     </div>

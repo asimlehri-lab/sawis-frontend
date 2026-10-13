@@ -608,8 +608,11 @@ export default function App() {
   // Ids of every item that appears on at least one recipe line. Only
   // meaningful once recipes have loaded, so the "Used in recipes" facet below
   // is not offered until then (an unloaded list would call everything unused).
+  // Archived recipes stay in the Recipes list (with a badge) but are left out
+  // everywhere else: End of day, allergen review, the template, item usage.
+  const liveRecipes = (recipes ?? []).filter((r) => !r.archived);
   const itemIdsUsedInRecipes = new Set<string>();
-  (recipes ?? []).forEach((r) => r.lines.forEach((l) => l.item && itemIdsUsedInRecipes.add(l.item)));
+  liveRecipes.forEach((r) => r.lines.forEach((l) => l.item && itemIdsUsedInRecipes.add(l.item)));
 
   const itemFacets: FilterFacet[] = [
     { key: "category", label: "Category", options: categories.map((c) => ({ value: c.id, label: c.name })) },
@@ -681,6 +684,16 @@ export default function App() {
         { value: "danger", label: "Well over target" },
       ],
     },
+    // Archived recipes show by default (with an Archived badge on the row);
+    // pick Active to hide them -- same as Items.
+    {
+      key: "archived",
+      label: "Status",
+      options: [
+        { value: "active", label: "Active" },
+        { value: "archived", label: "Archived" },
+      ],
+    },
     // A recipe's own allergens are the union of its ingredients' tags,
     // computed server-side (Recipe.allergens) -- same option list as
     // Items' own allergens facet, just matched against the recipe's
@@ -702,6 +715,11 @@ export default function App() {
         recipeFilters.item!.some((itemId) => r.lines.some((l) => l.item === itemId))
     )
     .filter((r) => (recipeFilters.group ?? null) === null || recipeFilters.group!.includes(r.menu_group))
+    .filter(
+      (r) =>
+        (recipeFilters.archived ?? null) === null ||
+        recipeFilters.archived!.includes(r.archived ? "archived" : "active")
+    )
     .filter(
       (r) =>
         (recipeFilters.cost ?? null) === null ||
@@ -1964,8 +1982,9 @@ export default function App() {
             recipeId={selectedRecipeId}
             readOnly={!canManage(me)}
             accessToken={accessToken}
+            userEmail={me.email}
             items={items ?? []}
-            allRecipes={recipes ?? []}
+            allRecipes={liveRecipes}
             allergens={allergens}
             venue={me.org.name}
             locations={locations}
@@ -1985,7 +2004,7 @@ export default function App() {
             locations={locations}
             suppliers={suppliers}
             supplierItems={supplierItems}
-            recipes={recipes ?? []}
+            recipes={liveRecipes}
             onBack={() => setSelectedItemId(null)}
             onChanged={() => loadItems(accessToken)}
             onCategoriesChanged={() => fetchCategories(accessToken).then(setCategories).catch(() => {})}
@@ -2030,7 +2049,7 @@ export default function App() {
         ) : activePage === "Items" && showAllergenReview && accessToken ? (
           <AllergenReview
             items={items ?? []}
-            recipes={recipes ?? []}
+            recipes={liveRecipes}
             allergens={allergens}
             accessToken={accessToken}
             onBack={() => setShowAllergenReview(false)}
@@ -2284,7 +2303,7 @@ export default function App() {
                       <tbody>
                         {shownRecipes
                           .map((r) => {
-                            const usedInCount = recipes.filter((other) =>
+                            const usedInCount = liveRecipes.filter((other) =>
                               other.lines.some((l) => l.line_type === "recipe" && l.sub_recipe === r.id)
                             ).length;
                             const rAllergens = allergens.filter((a) => r.allergens.includes(a.id));
@@ -2293,6 +2312,11 @@ export default function App() {
                                 <td className="dish">
                                   {r.name || <span className="muted">Untitled</span>}
                                   <span className={`kind-tag ${r.kind}`}>{r.kind === "sub" ? "Sub-recipe" : "Dish"}</span>
+                                  {r.archived && (
+                                    <span className="archived-badge" title="Archived: kept for history, hidden from End of day and the other lists">
+                                      Archived
+                                    </span>
+                                  )}
                                   {rAllergens.length > 0 && (
                                     <span className="allergen-icons-inline">
                                       {rAllergens.map((a) => (
@@ -2484,7 +2508,7 @@ export default function App() {
                 accessToken={accessToken}
                 me={me}
                 locations={locations}
-                recipes={recipes ?? []}
+                recipes={liveRecipes}
                 items={items ?? []}
                 itemSupplierLinks={itemSupplierLinks}
                 stockMovements={stockMovements}
@@ -2615,8 +2639,8 @@ export default function App() {
 
       {showAllergenSheet && recipes && (
         <AllergenPrintSheet
-          shown={shownRecipes}
-          all={recipes}
+          shown={shownRecipes.filter((r) => !r.archived)}
+          all={liveRecipes}
           allergens={allergens}
           venue={me.org.name}
           onClose={() => setShowAllergenSheet(false)}
