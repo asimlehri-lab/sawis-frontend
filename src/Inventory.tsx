@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import Loader from "./Loader";
 import FilterBar from "./FilterBar";
+import StockUnitPanel from "./StockUnitPanel";
 import type { FilterFacet, FilterValues } from "./FilterBar";
 import {
   createCountAssignment,
@@ -28,6 +29,7 @@ import type {
   Section,
   StockCountRow,
   StockMovementRow,
+  Supplier,
 } from "./api";
 
 interface Props {
@@ -42,9 +44,11 @@ interface Props {
   itemSupplierLinks: ItemSupplierRow[];
   stockMovements: StockMovementRow[];
   memberships: Membership[];
+  suppliers: Supplier[];
   onSectionsChanged: () => void;
   onStockCountsChanged: () => void;
   onItemsChanged: () => void;
+  onOpenItem?: (itemId: string) => void;
 }
 
 const DEPARTMENTS: { value: "kitchen" | "bar" | "foh"; label: string }[] = [
@@ -146,12 +150,21 @@ interface FlatHolding {
   itemId: string;
   itemName: string;
   baseUnit: string;
+  // Optional stock unit (e.g. bag = 1000 g). Counts are typed in either unit but always saved in baseUnit.
+  stockUnit: string;
+  stockUnitQty: number | null;
   department: "kitchen" | "bar" | "foh";
   section: string | null;
   sectionName: string | null;
   parLevel: number;
   category: string | null;
   categoryName: string | null;
+}
+
+// "2.5 bag" for a base-unit quantity, or "" when the item has no stock unit.
+function inStockUnit(h: FlatHolding, baseQty: number): string {
+  if (!h.stockUnit || !h.stockUnitQty) return "";
+  return `${parseFloat((baseQty / h.stockUnitQty).toFixed(2))} ${h.stockUnit}`;
 }
 
 export default function Inventory({
@@ -166,10 +179,13 @@ export default function Inventory({
   itemSupplierLinks,
   stockMovements,
   memberships,
+  suppliers,
   onSectionsChanged,
   onStockCountsChanged,
   onItemsChanged,
+  onOpenItem,
 }: Props) {
+  const [stockEditItemId, setStockEditItemId] = useState<string | null>(null);
   const [tab, setTab] = useState<"live" | "count" | "sections">("live");
   const [activeLocation, setActiveLocation] = useState(locations[0]?.id ?? "");
   const [onHand, setOnHand] = useState<Record<string, number>>({});
@@ -189,6 +205,8 @@ export default function Inventory({
         itemId: it.id,
         itemName: it.name,
         baseUnit: it.base_unit,
+        stockUnit: it.stock_unit && it.stock_unit_qty ? it.stock_unit : "",
+        stockUnitQty: it.stock_unit && it.stock_unit_qty ? Number(it.stock_unit_qty) : null,
         department: h.department as "kitchen" | "bar" | "foh",
         section: h.section,
         sectionName: h.section_name,
@@ -230,6 +248,9 @@ export default function Inventory({
   function refreshOnHand() {
     setRefreshTick((t) => t + 1);
   }
+  // Quick-edit of the stock unit / default supplier, only for people who can edit items.
+  const editStockUnit = canManage ? (itemId: string) => setStockEditItemId(itemId) : undefined;
+  const stockEditItem = stockEditItemId ? items.find((i) => i.id === stockEditItemId) : undefined;
 
   return (
     <>
@@ -276,6 +297,7 @@ export default function Inventory({
           locationName={locations.find((l) => l.id === activeLocation)?.name ?? ""}
           currency={locations.find((l) => l.id === activeLocation)?.currency}
           stockMovements={stockMovements}
+          onEditStockUnit={editStockUnit}
         />
       )}
 
@@ -308,10 +330,25 @@ export default function Inventory({
           stockCounts={stockCounts}
           stockCountsError={stockCountsError}
           onSectionsChanged={onSectionsChanged}
+          onEditStockUnit={editStockUnit}
           onStockCountsChanged={() => {
             onStockCountsChanged();
             refreshOnHand();
           }}
+        />
+      )}
+
+      {stockEditItem && (
+        <StockUnitPanel
+          accessToken={accessToken}
+          item={stockEditItem}
+          suppliers={suppliers}
+          onClose={() => setStockEditItemId(null)}
+          onSaved={() => {
+            setStockEditItemId(null);
+            onItemsChanged();
+          }}
+          onOpenItem={onOpenItem}
         />
       )}
     </>
@@ -331,6 +368,7 @@ function LiveStockTab({
   locationName,
   currency,
   stockMovements,
+  onEditStockUnit,
 }: {
   holdings: FlatHolding[];
   onHand: Record<string, number>;
@@ -340,6 +378,7 @@ function LiveStockTab({
   locationName: string;
   currency?: string;
   stockMovements: StockMovementRow[];
+  onEditStockUnit?: (itemId: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState<"all" | "kitchen" | "bar" | "foh">("all");
@@ -496,6 +535,11 @@ function LiveStockTab({
                         <td className="muted">{h.sectionName ?? "—"}</td>
                         <td className="num">
                           {oh === undefined ? "…" : oh.toFixed(2)} {h.baseUnit}
+                          {oh !== undefined && h.stockUnit && (
+                            <div className="muted" style={{ fontSize: 11.5 }}>
+                              ≈ {inStockUnit(h, oh)}
+                            </div>
+                          )}
                         </td>
                         <td className="num">{h.parLevel.toFixed(2)}</td>
                         <td>
@@ -506,6 +550,16 @@ function LiveStockTab({
                       {expanded && (
                         <tr>
                           <td colSpan={7} style={{ background: "var(--bg)" }}>
+                            <div className="muted" style={{ margin: "8px 4px", fontSize: 12.5 }}>
+                              {h.stockUnit && h.stockUnitQty
+                                ? `Stock unit: 1 ${h.stockUnit} = ${h.stockUnitQty} ${h.baseUnit}`
+                                : "No stock unit set."}{" "}
+                              {onEditStockUnit && (
+                                <button type="button" className="link-btn" onClick={() => onEditStockUnit(h.itemId)}>
+                                  {h.stockUnit ? "Edit stock unit" : "Set stock unit"}
+                                </button>
+                              )}
+                            </div>
                             {rowMovements.length === 0 && (
                               <p className="muted" style={{ margin: "8px 4px" }}>
                                 No ledger activity recorded yet.
@@ -962,6 +1016,7 @@ function CountSheetsTab({
   stockCountsError,
   onSectionsChanged,
   onStockCountsChanged,
+  onEditStockUnit,
 }: {
   accessToken: string;
   me: Me;
@@ -976,6 +1031,7 @@ function CountSheetsTab({
   stockCountsError: string | null;
   onSectionsChanged: () => void;
   onStockCountsChanged: () => void;
+  onEditStockUnit?: (itemId: string) => void;
 }) {
   const [starting, setStarting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -1054,6 +1110,7 @@ function CountSheetsTab({
         cheapestPrice={cheapestPrice}
         onBack={() => setOpenSectionId(null)}
         onSectionsChanged={onSectionsChanged}
+        onEditStockUnit={onEditStockUnit}
         onSubmitted={() => {
           onStockCountsChanged();
           setOpenSectionId(null);
@@ -1233,6 +1290,7 @@ function CountSheet({
   cheapestPrice,
   onBack,
   onSectionsChanged,
+  onEditStockUnit,
   onSubmitted,
 }: {
   accessToken: string;
@@ -1243,10 +1301,16 @@ function CountSheet({
   cheapestPrice: (itemId: string) => number | null;
   onBack: () => void;
   onSectionsChanged: () => void;
+  onEditStockUnit?: (itemId: string) => void;
   onSubmitted: () => void;
 }) {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
   const [qty, setQty] = useState<Record<string, string>>({});
+  // What was typed in the stock-unit box (e.g. "2." while typing 2.5 bags).
+  // `qty` stays the single source of truth in the base unit; this only keeps
+  // the text as typed. Keyed with the unit size so editing the stock unit
+  // mid-count drops stale text.
+  const [stockDraft, setStockDraft] = useState<Record<string, string>>({});
   const [reason, setReason] = useState<Record<string, string>>({});
   const [note, setNote] = useState<Record<string, string>>({});
   const [openNoteId, setOpenNoteId] = useState<string | null>(null);
@@ -1325,8 +1389,32 @@ function CountSheet({
     return null;
   }
 
+  const draftKey = (h: FlatHolding) => `${h.id}|${h.stockUnitQty}`;
+  function clearDraft(h: FlatHolding) {
+    setStockDraft((d) => {
+      if (!(draftKey(h) in d)) return d;
+      const rest = { ...d };
+      delete rest[draftKey(h)];
+      return rest;
+    });
+  }
+  function stockShown(h: FlatHolding): string {
+    if (draftKey(h) in stockDraft) return stockDraft[draftKey(h)];
+    const base = qty[h.id];
+    if (!h.stockUnitQty || base === undefined || base === "" || !Number.isFinite(Number(base))) return "";
+    return parseFloat((Number(base) / h.stockUnitQty).toFixed(3)).toString();
+  }
+  function handleStockChange(h: FlatHolding, value: string) {
+    if (!h.stockUnitQty) return;
+    setStockDraft((d) => ({ ...d, [draftKey(h)]: value }));
+    const n = Number(value);
+    if (value === "") handleQtyChange(h, "");
+    else if (Number.isFinite(n)) handleQtyChange(h, parseFloat((n * h.stockUnitQty).toFixed(3)).toString());
+  }
+
   function handleTick(h: FlatHolding, isChecked: boolean) {
     setChecked((c) => ({ ...c, [h.id]: isChecked }));
+    if (!isChecked) clearDraft(h);
     if (isChecked) {
       // Prefill with the expected quantity — most items will match, so the
       // counter only has to touch items that actually differ.
@@ -1532,6 +1620,7 @@ function CountSheet({
                 )}
                 <span className="muted" style={{ fontSize: 11.5, fontFamily: "monospace" }}>
                   system says {(onHand[h.id] ?? 0).toFixed(2)} {h.baseUnit}
+                  {h.stockUnit ? ` (${inStockUnit(h, onHand[h.id] ?? 0)})` : ""}
                 </span>
                 <input
                   type="number"
@@ -1540,7 +1629,10 @@ function CountSheet({
                   placeholder="—"
                   disabled={!checked[h.id]}
                   value={qty[h.id] ?? ""}
-                  onChange={(e) => handleQtyChange(h, e.target.value)}
+                  onChange={(e) => {
+                    clearDraft(h);
+                    handleQtyChange(h, e.target.value);
+                  }}
                   style={{
                     width: 96,
                     fontFamily: "monospace",
@@ -1554,6 +1646,39 @@ function CountSheet({
                 <span className="cunit muted" style={{ fontSize: 12.5, minWidth: 40 }}>
                   {h.baseUnit}
                 </span>
+                {h.stockUnit && h.stockUnitQty ? (
+                  <>
+                    <span className="muted" style={{ fontSize: 12.5 }}>
+                      or
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="—"
+                      aria-label={`Counted in ${h.stockUnit}`}
+                      disabled={!checked[h.id]}
+                      value={stockShown(h)}
+                      onChange={(e) => handleStockChange(h, e.target.value)}
+                      style={{
+                        width: 80,
+                        fontFamily: "monospace",
+                        textAlign: "right",
+                        border: "1.5px solid var(--border)",
+                        borderRadius: 8,
+                        padding: "8px 10px",
+                      }}
+                    />
+                    <span className="cunit muted" style={{ fontSize: 12.5, minWidth: 40 }} title={`1 ${h.stockUnit} = ${h.stockUnitQty} ${h.baseUnit}`}>
+                      {h.stockUnit}
+                    </span>
+                  </>
+                ) : null}
+                {onEditStockUnit && (
+                  <button type="button" className="note-btn-sm" onClick={() => onEditStockUnit(h.itemId)}>
+                    {h.stockUnit ? "✎ unit" : "+ stock unit"}
+                  </button>
+                )}
                 {invalid && (
                   <span className="badge warn" title={invalid}>
                     ⚠ {invalid}

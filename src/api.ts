@@ -209,6 +209,11 @@ export interface CatalogItem {
   // the one flag the Items list, its filter and the Actions tile share.
   allergen_needs_review: boolean;
   archived: boolean;
+  // How the item is kept and counted when that is not the base unit, e.g.
+  // "bag" holding 1000 (base units). Both set or both empty. Counts, costs
+  // and the ledger all stay in base_unit; this is only for typing and showing.
+  stock_unit: string;
+  stock_unit_qty: string | null;
   holdings: ItemHolding[];
   // Included so the Items list can be searched by a supplier's own item
   // code, not just by our SKU/name -- see ItemSupplierRow.supplier_sku.
@@ -1093,6 +1098,8 @@ export interface ItemPatch {
   target_waste_pct?: string | null;
   allergens?: string[];
   archived?: boolean;
+  stock_unit?: string;
+  stock_unit_qty?: string | null;
 }
 
 async function postJson<T>(path: string, accessToken: string, body: unknown, failure: string): Promise<T> {
@@ -1166,7 +1173,14 @@ export async function updateItem(accessToken: string, id: string, patch: ItemPat
     },
     body: JSON.stringify(patch),
   });
-  if (!res.ok) throw new Error("Could not save changes.");
+  if (!res.ok) {
+    // Show the server's own message for the stock unit fields (for example
+    // "Say how many are in one bag") instead of a generic failure.
+    const body = await res.json().catch(() => null);
+    const field = body && (body.stock_unit_qty ?? body.stock_unit);
+    const msg = Array.isArray(field) ? field[0] : field;
+    throw new Error(typeof msg === "string" && msg ? msg : "Could not save changes.");
+  }
   return res.json();
 }
 

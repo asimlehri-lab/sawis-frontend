@@ -33,6 +33,7 @@ import type {
   AllergenSuggestion,
 } from "./api";
 import AllergenIcon from "./AllergenIcon";
+import StockUnitPanel from "./StockUnitPanel";
 
 interface Props {
   itemId: string;
@@ -193,6 +194,7 @@ export default function ItemDetail({
   const [categoryError, setCategoryError] = useState<string | null>(null);
 
   const [showUnitModal, setShowUnitModal] = useState(false);
+  const [showStockUnit, setShowStockUnit] = useState(false);
   const [unitNew, setUnitNew] = useState("kg");
   const [unitMode, setUnitMode] = useState<"relabel" | "convert">("relabel");
   const [unitFactor, setUnitFactor] = useState("1");
@@ -589,7 +591,14 @@ export default function ItemDetail({
     setSavingUnit(true);
     setUnitError(null);
     try {
-      await updateItem(accessToken, item.id, { base_unit: unitNew });
+      // A stock unit holds a number of base units, so it is restated with the
+      // base unit (1 kg per bag becomes 1000 g per bag) just like the par levels.
+      await updateItem(accessToken, item.id, {
+        base_unit: unitNew,
+        ...(item.stock_unit && item.stock_unit_qty && factor !== 1
+          ? { stock_unit_qty: parseFloat((Number(item.stock_unit_qty) * factor).toFixed(4)).toString() }
+          : {}),
+      });
       if (factor !== 1) {
         await Promise.all(
           item.holdings.map((h) =>
@@ -663,6 +672,19 @@ export default function ItemDetail({
               <span className="ro">{item.base_unit}</span>
               <button type="button" className="mini" onClick={openUnitModal}>
                 Change
+              </button>
+            </div>
+          </div>
+          <div className="field">
+            <label>Stock unit</label>
+            <div className="unit-row">
+              <span className="ro">
+                {item.stock_unit && item.stock_unit_qty
+                  ? `1 ${item.stock_unit} = ${parseFloat(Number(item.stock_unit_qty).toFixed(4))} ${item.base_unit}`
+                  : "Not set"}
+              </span>
+              <button type="button" className="mini" onClick={() => setShowStockUnit(true)}>
+                {item.stock_unit ? "Edit" : "Set"}
               </button>
             </div>
           </div>
@@ -1315,6 +1337,20 @@ export default function ItemDetail({
       </div>
 
       </fieldset>
+
+      {showStockUnit && (
+        <StockUnitPanel
+          accessToken={accessToken}
+          item={item}
+          suppliers={suppliers}
+          onClose={() => setShowStockUnit(false)}
+          onSaved={(updated) => {
+            setItem(updated);
+            setShowStockUnit(false);
+            onChanged();
+          }}
+        />
+      )}
 
       {showUnitModal && (
         <div className="modal-backdrop" onClick={() => setShowUnitModal(false)}>

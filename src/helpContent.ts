@@ -327,6 +327,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "Go to Inventory, then click the Count sheets tab — print a sheet, count physically, then enter or scan the results back in.",
       },
       {
+        q: "What is a stock unit, and how do I count in bags or boxes?",
+        a: "A stock unit is how an item sits on your shelf — for example a bag that holds 1000 g, or a case of 24. Set it from Inventory (click Set stock unit on a count-sheet row, or open the item in Live stock and use Set stock unit) or on the item page under Stock unit. Once set, the count sheet shows a second box, so you can type 2.5 bags or 2500 g and the other updates. Everything is still saved in the base unit, so costs, recipes and history do not change. If a supplier already sells the item in a pack, the panel offers that pack with one click. You can also pick the item's default supplier there. Managers and admins can set stock units; staff can use them when counting.",
+      },
+      {
         q: "Can I scan a filled-in count sheet instead of typing it in?",
         a: "Yes — from Inventory → Count sheets, print the sheet, fill it in by hand, then use \"Scan filled sheet\" to photograph it. Review the read-back numbers before submitting.",
       },

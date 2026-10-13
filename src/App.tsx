@@ -2515,6 +2515,11 @@ export default function App() {
                 itemSupplierLinks={itemSupplierLinks}
                 stockMovements={stockMovements}
                 memberships={memberships}
+                suppliers={suppliers}
+                onOpenItem={(id) => {
+                  goToNav("Items");
+                  setSelectedItemId(id);
+                }}
                 onSectionsChanged={() => loadSections(accessToken)}
                 onStockCountsChanged={() => loadStockCounts(accessToken)}
                 onItemsChanged={() => loadItems(accessToken)}
