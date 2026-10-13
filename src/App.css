@@ -3117,6 +3117,8 @@ input[type="file"] {
 .idm-bal td { font-weight: 700; background: var(--bg); }
 .idm-eq { font-size: 11.5px; font-weight: 400; }
 .idm-note { margin: 8px 0 0; font-size: 12px; }
+.idm-deliv { margin-top: 2px; }
+.idm-deliv > div { line-height: 1.5; }
 .idm-modes { display: inline-flex; }
 .idm-period { font-weight: 600; min-width: 150px; text-align: center; }
 .idm-sub { margin: 16px 0 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; color: var(--muted); }

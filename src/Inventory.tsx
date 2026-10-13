@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import Loader from "./Loader";
 import FilterBar from "./FilterBar";
 import type { FilterFacet, FilterValues } from "./FilterBar";
@@ -10,6 +10,7 @@ import {
   createStockMovement,
   deleteSection,
   fetchOnHand,
+  fetchPurchaseOrders,
   formatMoney,
   markSectionCounted,
   scanCountSheet,
@@ -28,6 +29,7 @@ import type {
   Section,
   StockCountRow,
   ItemStockUnit,
+  PurchaseOrder,
   StockMovementRow,
 } from "./api";
 
@@ -288,6 +290,7 @@ export default function Inventory({
 
       {locations.length > 0 && tab === "live" && (
         <LiveStockTab
+          accessToken={accessToken}
           holdings={holdingsAtLocation}
           onHand={onHand}
           cheapestPrice={cheapestPrice}
@@ -381,16 +384,26 @@ function shiftDay(day: string, by: number): string {
   return localDay(d);
 }
 
+// What a purchase order line recorded about the delivery, as invoiced.
+interface ReceiptInfo {
+  supplierName: string;
+  poNumber: string;
+  supplierUnit: string;
+  supplierQty: number | null;
+}
+
 function ItemMovementReview({
   holding: h,
   movements,
   countReasonByLine,
+  receipts,
   onHandNow,
   currency,
 }: {
   holding: FlatHolding;
   movements: StockMovementRow[];
   countReasonByLine: Record<string, string | null>;
+  receipts: Record<string, ReceiptInfo>;
   onHandNow: number | undefined;
   currency?: string;
 }) {
@@ -456,6 +469,17 @@ function ItemMovementReview({
     };
   }).filter((l) => l.count > 0);
   const closing = opening + lines.reduce((sum, l) => sum + l.qty, 0);
+
+  // Each delivery in the period, with the unit the supplier invoiced it in
+  // when that differs from the base unit (e.g. "2 carton (= 48 tin)").
+  const deliveries = inRange
+    .filter((r) => r.kind === "purchase")
+    .sort((x, y) => x.m.occurred_at.localeCompare(y.m.occurred_at))
+    .map((r) => {
+      const info = r.m.source_type === "po_line" ? receipts[r.m.source_id] : undefined;
+      return { id: r.m.id, day: dayOf(r.m), qty: Number(r.m.qty_delta), info };
+    });
+  const DELIVERIES_SHOWN = 6;
 
   // Day-by-day, only days that had movement (a quiet day would be an empty row).
   const days: string[] = [];
@@ -553,6 +577,24 @@ function ItemMovementReview({
                 <span className="muted">
                   · {l.count} {l.count === 1 ? "entry" : "entries"}
                 </span>
+                {l.kind === "purchase" && deliveries.length > 0 && (
+                  <div className="muted idm-eq idm-deliv">
+                    {deliveries.slice(0, DELIVERIES_SHOWN).map((d) => {
+                      const converted = d.info && d.info.supplierUnit && d.info.supplierQty !== null && d.info.supplierUnit !== h.baseUnit;
+                      return (
+                        <div key={d.id}>
+                          {fmtShort(d.day)}
+                          {d.info?.supplierName ? ` · ${d.info.supplierName}` : ""}
+                          {" · "}
+                          {converted
+                            ? `${num(d.info!.supplierQty!)} ${d.info!.supplierUnit} (= ${num(d.qty)} ${h.baseUnit})`
+                            : `${num(d.qty)} ${h.baseUnit}`}
+                        </div>
+                      );
+                    })}
+                    {deliveries.length > DELIVERIES_SHOWN && <div>+ {deliveries.length - DELIVERIES_SHOWN} more deliveries</div>}
+                  </div>
+                )}
                 {l.countedCount > 0 && (
                   <div className="muted idm-eq">
                     {l.kind === "waste"
@@ -636,6 +678,7 @@ function ItemMovementReview({
 }
 
 function LiveStockTab({
+  accessToken,
   holdings,
   onHand,
   cheapestPrice,
@@ -645,6 +688,7 @@ function LiveStockTab({
   currency,
   stockMovements,
 }: {
+  accessToken: string;
   holdings: FlatHolding[];
   onHand: Record<string, number>;
   cheapestPrice: (itemId: string) => number | null;
@@ -657,6 +701,31 @@ function LiveStockTab({
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState<"all" | "kitchen" | "bar" | "foh">("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // Purchase orders are only needed to show the supplier's own unit on each
+  // delivery in the movement review, so they are fetched the first time a row
+  // is opened (not when Live stock loads).
+  const [receipts, setReceipts] = useState<Record<string, ReceiptInfo>>({});
+  const receiptsRequested = useRef(false);
+  useEffect(() => {
+    if (!expandedId || receiptsRequested.current) return;
+    receiptsRequested.current = true;
+    fetchPurchaseOrders(accessToken)
+      .then((pos: PurchaseOrder[]) => {
+        const map: Record<string, ReceiptInfo> = {};
+        pos.forEach((po) =>
+          po.lines.forEach((l) => {
+            map[l.id] = {
+              supplierName: po.supplier_name,
+              poNumber: po.po_number,
+              supplierUnit: l.supplier_unit || "",
+              supplierQty: l.supplier_qty ? Number(l.supplier_qty) : null,
+            };
+          })
+        );
+        setReceipts(map);
+      })
+      .catch(() => {});
+  }, [expandedId, accessToken]);
   // Faceted filter (FilterBar.tsx) -- department keeps its own existing
   // rtabs toggle above, same as Recipes' Dish/Sub-recipe split stays
   // outside its own FilterBar.
@@ -819,6 +888,7 @@ function LiveStockTab({
                               holding={h}
                               movements={rowMovements}
                               countReasonByLine={countReasonByLine}
+                              receipts={receipts}
                               onHandNow={oh}
                               currency={currency}
                             />
