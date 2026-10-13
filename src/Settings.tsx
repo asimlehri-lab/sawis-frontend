@@ -4,8 +4,6 @@ import {
   bulkImportRecipes,
   changePassword,
   createInventoryCheckSchedule,
-  deleteCategory,
-  deleteUnusedCategories,
   fetchCategories,
   fetchInventoryCheckSchedules,
   fetchVapidPublicKey,
@@ -18,6 +16,7 @@ import {
   currencySymbol,
 } from "./api";
 import type { Allergen, BulkItemInput, CatalogItem, Category, CurrencyCode, InventoryCheckSchedule, Location, Recipe } from "./api";
+import CategoryManagerModal from "./CategoryManagerModal";
 import MenuListImportModal from "./MenuListImportModal";
 import type { ParsedMenuRow } from "./MenuListImportModal";
 import SearchSelect from "./SearchSelect";
@@ -287,11 +286,9 @@ function ChangePasswordPanel({ accessToken }: { accessToken: string }) {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Item categories: the picklist behind the Items filter and each item's
-// Category field. They are created from an item's own page, so unused ones
-// pile up and clutter every filter and dropdown -- this lists them with how
-// many items use each, and lets an admin delete the unused ones. A category
-// in use cannot be deleted (the server refuses too): move its items first.
+// Item categories: a one-line summary and a button that opens the manager
+// pop-up (CategoryManagerModal), so a long category list never pushes the
+// rest of Settings off the screen.
 // ---------------------------------------------------------------------------
 
 function CategorySettingsPanel({
@@ -302,21 +299,8 @@ function CategorySettingsPanel({
   onCategoriesChanged?: () => void;
 }) {
   const [categories, setCategories] = useState<Category[] | null>(null);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [confirmId, setConfirmId] = useState<string | null>(null);
-  const [confirmAll, setConfirmAll] = useState(false);
-  const [busy, setBusy] = useState(false);
-
-  async function load() {
-    try {
-      setCategories(await fetchCategories(accessToken));
-      setLoadError(null);
-    } catch (e) {
-      setLoadError(e instanceof Error ? e.message : "Could not load the categories.");
-    }
-  }
+  const [open, setOpen] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -324,128 +308,44 @@ function CategorySettingsPanel({
       .then((rows) => {
         if (!cancelled) setCategories(rows);
       })
-      .catch((e) => {
-        if (!cancelled) setLoadError(e instanceof Error ? e.message : "Could not load the categories.");
+      .catch(() => {
+        if (!cancelled) setCategories([]);
       });
     return () => {
       cancelled = true;
     };
-  }, [accessToken]);
+  }, [accessToken, reloadKey]);
 
-  const unused = (categories ?? []).filter((c) => (c.item_count ?? 0) === 0);
-
-  async function handleDelete(c: Category) {
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      await deleteCategory(accessToken, c.id);
-      setConfirmId(null);
-      setNotice(`Deleted ${c.name}.`);
-      await load();
-      onCategoriesChanged?.();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not delete this category.");
-      setConfirmId(null);
-      await load();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleDeleteAllUnused() {
-    setBusy(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const res = await deleteUnusedCategories(accessToken);
-      setConfirmAll(false);
-      setNotice(res.deleted ? `Deleted ${res.deleted} unused categor${res.deleted === 1 ? "y" : "ies"}.` : "Nothing to delete.");
-      await load();
-      onCategoriesChanged?.();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not delete the unused categories.");
-      setConfirmAll(false);
-    } finally {
-      setBusy(false);
-    }
-  }
+  const total = categories?.length ?? 0;
+  const unused = (categories ?? []).filter((c) => (c.item_count ?? 0) === 0).length;
 
   return (
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Item categories</h2>
       <p className="hint">
-        The categories on the Items filter and in each item's Category field. A category nobody uses can be deleted
-        to keep those lists short. One that items still use can't be deleted — move its items to another category
-        first.
+        The categories on the Items filter and in each item's Category field. Delete the ones nobody uses to keep
+        those lists short.
       </p>
-      {loadError && <p className="error">{loadError}</p>}
-      {error && <p className="error">{error}</p>}
-      {notice && !error && <p><span className="badge b-ok">{notice}</span></p>}
-      {categories === null && !loadError && <p className="muted">Loading…</p>}
-      {categories !== null && !categories.length && <p className="muted">No categories yet.</p>}
-      {categories !== null && unused.length > 1 && (
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-          {!confirmAll ? (
-            <button type="button" className="btn-ghost" disabled={busy} onClick={() => setConfirmAll(true)}>
-              Delete all {unused.length} unused
-            </button>
-          ) : (
-            <>
-              <button type="button" className="btn-danger" disabled={busy} onClick={handleDeleteAllUnused}>
-                {busy ? "Deleting…" : `Confirm: delete ${unused.length} unused`}
-              </button>
-              <button type="button" className="btn-ghost" disabled={busy} onClick={() => setConfirmAll(false)}>
-                Cancel
-              </button>
-            </>
-          )}
-        </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <span className="muted" style={{ marginBottom: 0 }}>
+          {categories === null
+            ? "Loading…"
+            : `${total} categor${total === 1 ? "y" : "ies"} · ${unused ? `${unused} unused` : "none unused"}`}
+        </span>
+        <button type="button" className="btn-ghost" onClick={() => setOpen(true)} disabled={categories === null}>
+          Manage categories
+        </button>
+      </div>
+      {open && (
+        <CategoryManagerModal
+          accessToken={accessToken}
+          onClose={() => setOpen(false)}
+          onChanged={() => {
+            setReloadKey((k) => k + 1);
+            onCategoriesChanged?.();
+          }}
+        />
       )}
-      {(categories ?? []).map((c) => {
-        const count = c.item_count ?? 0;
-        return (
-          <div key={c.id} className="price-row" style={{ alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap", alignSelf: "center" }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>{c.name}</span>
-              <span className="muted" style={{ fontSize: 12 }}>
-                VAT {Math.round(Number(c.default_vat_rate) * 10000) / 100}%
-              </span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span className={`badge ${count ? "b-muted" : "b-low"}`}>
-                {count ? `${count} item${count === 1 ? "" : "s"}` : "Unused"}
-              </span>
-              {count > 0 && (
-                <button
-                  type="button"
-                  className="btn-ghost"
-                  disabled
-                  style={{ opacity: 0.45, cursor: "not-allowed" }}
-                  title={`Used by ${count} item${count === 1 ? "" : "s"}`}
-                >
-                  Delete
-                </button>
-              )}
-              {count === 0 && confirmId !== c.id && (
-                <button type="button" className="btn-ghost" disabled={busy} onClick={() => { setConfirmId(c.id); setConfirmAll(false); }}>
-                  Delete
-                </button>
-              )}
-              {count === 0 && confirmId === c.id && (
-                <>
-                  <button type="button" className="btn-danger" disabled={busy} onClick={() => handleDelete(c)}>
-                    {busy ? "Deleting…" : "Confirm delete"}
-                  </button>
-                  <button type="button" className="btn-ghost" disabled={busy} onClick={() => setConfirmId(null)}>
-                    Cancel
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }
