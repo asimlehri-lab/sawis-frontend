@@ -1338,6 +1338,8 @@ export default function App() {
       setShowNewRecipe(false);
       resetNewRecipeForm();
       loadRecipes(accessToken);
+      // Only keep the "go back to the dish" link when a sub-recipe was made from a dish page.
+      if (created.kind !== "sub") setSubReturn(null);
       setSelectedRecipeId(created.id); // jump straight into the new recipe to add ingredients
     } catch (err) {
       setNewRecipeError(err instanceof Error ? err.message : "Could not create recipe.");
@@ -2001,12 +2003,15 @@ export default function App() {
             onChanged={() => loadRecipes(accessToken)}
             onOpenRecipe={(id) => setSelectedRecipeId(id)}
             onItemsChanged={() => loadItems(accessToken)}
-            onCreateSubRecipe={(newId) => {
+            onNewSubRecipe={() => {
+              // Same "New recipe" box as the Recipes list, with "A sub-recipe" already chosen.
               const parentId = selectedRecipeId;
               const parentName = (recipes ?? []).find((r) => r.id === parentId)?.name || "this recipe";
               setSubReturn({ id: parentId, name: parentName });
               setPreselectSub(null);
-              setSelectedRecipeId(newId);
+              resetNewRecipeForm();
+              setNewRecipeKind("sub");
+              setShowNewRecipe(true);
             }}
             returnTo={subReturn && subReturn.id !== selectedRecipeId ? subReturn : null}
             onReturn={() => {
@@ -2672,7 +2677,7 @@ export default function App() {
       )}
 
       {showNewRecipe && (
-        <div className="modal-backdrop" onClick={() => setShowNewRecipe(false)}>
+        <div className="modal-backdrop" onClick={() => { setShowNewRecipe(false); setSubReturn(null); }}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2>New recipe</h2>
             <div className="seg">
@@ -2740,6 +2745,7 @@ export default function App() {
                   onClick={() => {
                     setShowNewRecipe(false);
                     resetNewRecipeForm();
+                    setSubReturn(null);
                   }}
                 >
                   Cancel

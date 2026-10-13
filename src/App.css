@@ -1548,9 +1548,6 @@ nav {
 .link-btn { background: none; border: none; padding: 0; color: var(--violet); font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; text-align: left; }
 .link-btn:hover { opacity: 0.8; }
 .sub-col .link-btn { margin-top: 10px; display: inline-block; }
-.newsub { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
-.newsub > input { font-family: inherit; font-size: 13px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--surface); color: var(--ink); width: 100%; box-sizing: border-box; }
-.newsub select { flex: 1; min-width: 0; font-family: inherit; font-size: 13px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--surface); color: var(--ink); }
 .return-banner { background: var(--violet-soft); color: var(--violet); border-radius: 10px; padding: 10px 14px; font-size: 13px; margin: 0 0 14px; line-height: 1.5; }
 .return-banner .link-btn { font-size: inherit; }
 

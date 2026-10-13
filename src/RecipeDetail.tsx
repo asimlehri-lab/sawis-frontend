@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import {
   fetchRecipe,
   updateRecipe,
-  createRecipe,
   deleteRecipe,
   login,
   createRecipeLine,
@@ -45,7 +44,7 @@ interface Props {
   onItemsChanged: () => void;
   // "+ New sub-recipe" in the purple section: App.tsx opens the sub-recipe that
   // was just created (to add its ingredients) and remembers where to come back to.
-  onCreateSubRecipe?: (newRecipeId: string) => void;
+  onNewSubRecipe?: () => void;
   // Set when this recipe was opened from another recipe's "+ New sub-recipe":
   // shows a way back to it.
   returnTo?: { id: string; name: string } | null;
@@ -68,7 +67,7 @@ export default function RecipeDetail({
   onChanged,
   onOpenRecipe,
   onItemsChanged,
-  onCreateSubRecipe,
+  onNewSubRecipe,
   returnTo,
   onReturn,
   preselectSubId,
@@ -87,12 +86,6 @@ export default function RecipeDetail({
   const [savingLine, setSavingLine] = useState(false);
 
   // "+ New sub-recipe" inline form in the purple section.
-  const [newSubOpen, setNewSubOpen] = useState(false);
-  const [newSubName, setNewSubName] = useState("");
-  const [newSubYield, setNewSubYield] = useState("1");
-  const [newSubUnit, setNewSubUnit] = useState<string>(YIELD_UNITS[0]);
-  const [newSubSaving, setNewSubSaving] = useState(false);
-  const [newSubError, setNewSubError] = useState<string | null>(null);
 
   // Archive / delete (danger zone at the bottom), same behaviour as items.
   const [archiving, setArchiving] = useState(false);
@@ -237,29 +230,6 @@ export default function RecipeDetail({
       setNewItemError(err instanceof Error ? err.message : "Could not create item.");
     } finally {
       setNewItemSaving(false);
-    }
-  }
-
-  async function handleCreateSub() {
-    const name = newSubName.trim();
-    if (!name) return;
-    setNewSubSaving(true);
-    setNewSubError(null);
-    try {
-      const created = await createRecipe(accessToken, {
-        kind: "sub",
-        name,
-        yield_qty: newSubYield || "1",
-        yield_unit: newSubUnit,
-      });
-      onChanged();
-      setNewSubOpen(false);
-      setNewSubName("");
-      onCreateSubRecipe?.(created.id);
-    } catch (err) {
-      setNewSubError(err instanceof Error ? err.message : "Could not create the sub-recipe.");
-    } finally {
-      setNewSubSaving(false);
     }
   }
 
@@ -610,58 +580,10 @@ export default function RecipeDetail({
               ) : (
                 <p className="sub-empty">No sub-recipes yet. Create one here and it'll be ready to drop into this dish.</p>
               )}
-              {!newSubOpen ? (
-                <button type="button" className="link-btn" onClick={() => setNewSubOpen(true)}>
+              {onNewSubRecipe && (
+                <button type="button" className="link-btn" onClick={onNewSubRecipe}>
                   + New sub-recipe
                 </button>
-              ) : (
-                <div className="newsub">
-                  <input
-                    value={newSubName}
-                    onChange={(e) => setNewSubName(e.target.value)}
-                    placeholder="Sub-recipe name, e.g. Caramel sauce"
-                    autoFocus
-                  />
-                  <div className="addrow-bottom">
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={newSubYield}
-                      onChange={(e) => setNewSubYield(e.target.value)}
-                      aria-label="Batch yields"
-                    />
-                    <select value={newSubUnit} onChange={(e) => setNewSubUnit(e.target.value)} aria-label="Yield unit">
-                      {YIELD_UNITS.map((u) => (
-                        <option key={u} value={u}>
-                          {u}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="addrow-bottom">
-                    <button
-                      type="button"
-                      className="mini"
-                      onClick={() => {
-                        setNewSubOpen(false);
-                        setNewSubName("");
-                        setNewSubError(null);
-                      }}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      className="add-btn violet-btn"
-                      onClick={handleCreateSub}
-                      disabled={newSubSaving || !newSubName.trim()}
-                    >
-                      {newSubSaving ? "Creating…" : "Create & add ingredients"}
-                    </button>
-                  </div>
-                  {newSubError && <p className="error">{newSubError}</p>}
-                </div>
               )}
             </div>
           </div>
