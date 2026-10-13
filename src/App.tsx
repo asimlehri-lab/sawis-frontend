@@ -545,6 +545,9 @@ export default function App() {
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
 
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  // Jumped from Inventory to an item page (e.g. to add a stock unit): keep Inventory mounted but hidden
+  // so a half-filled count sheet or section form is still there on the way back.
+  const [inventoryParked, setInventoryParked] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   // The 14-row global allergen catalogue -- fetched lazily like
   // categories/locations (Items and Recipes pages are the only ones
@@ -1106,6 +1109,7 @@ export default function App() {
   }
 
   function goToNav(label: string, opts?: { eodTab?: "overview" | "reorder" }) {
+    setInventoryParked(false);
     setActivePage(label);
     setMobileNavOpen(false);
     setSelectedRecipeId(null);
@@ -1983,6 +1987,34 @@ export default function App() {
           )}
         </div>
         {showHelp && <HelpChat onClose={() => setShowHelp(false)} />}
+        {(activePage === "Inventory" || inventoryParked) && accessToken && me && (
+          <div style={{ display: activePage === "Inventory" ? undefined : "none" }}>
+            <div className="content-head">
+              <h1 className="page-title">Inventory</h1>
+            </div>
+            <Inventory
+              accessToken={accessToken}
+              me={me}
+              items={items ?? []}
+              locations={locations}
+              sections={sections}
+              sectionsError={sectionsError}
+              stockCounts={stockCounts}
+              stockCountsError={stockCountsError}
+              itemSupplierLinks={itemSupplierLinks}
+              stockMovements={stockMovements}
+              memberships={memberships}
+              onOpenItem={(id) => {
+                goToNav("Items");
+                setSelectedItemId(id);
+                setInventoryParked(true);
+              }}
+              onSectionsChanged={() => loadSections(accessToken)}
+              onStockCountsChanged={() => loadStockCounts(accessToken)}
+              onItemsChanged={() => loadItems(accessToken)}
+            />
+          </div>
+        )}
         {activePage === "Recipes" && selectedRecipeId && accessToken ? (
           <RecipeDetail
             key={selectedRecipeId}
@@ -2034,7 +2066,14 @@ export default function App() {
             suppliers={suppliers}
             supplierItems={supplierItems}
             recipes={liveRecipes}
-            onBack={() => setSelectedItemId(null)}
+            backLabel={inventoryParked ? "Back to Inventory" : undefined}
+            onBack={() => {
+              if (inventoryParked) {
+                setInventoryParked(false);
+                setActivePage("Inventory");
+              }
+              setSelectedItemId(null);
+            }}
             onChanged={() => loadItems(accessToken)}
             onCategoriesChanged={() => fetchCategories(accessToken).then(setCategories).catch(() => {})}
             onOpenSupplier={(id) => {
@@ -2105,7 +2144,7 @@ export default function App() {
           />
         ) : (
           <>
-            <div className="content-head">
+            <div className="content-head" style={activePage === "Inventory" ? { display: "none" } : undefined}>
               <h1 className="page-title">{activePage}</h1>
               {activePage === "Items" && (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -2499,30 +2538,6 @@ export default function App() {
                 wasteError={wasteError}
                 stockMovements={stockMovements}
                 onChanged={() => loadWasteEvents(accessToken)}
-              />
-            )}
-
-            {activePage === "Inventory" && accessToken && me && (
-              <Inventory
-                accessToken={accessToken}
-                me={me}
-                items={items ?? []}
-                locations={locations}
-                sections={sections}
-                sectionsError={sectionsError}
-                stockCounts={stockCounts}
-                stockCountsError={stockCountsError}
-                itemSupplierLinks={itemSupplierLinks}
-                stockMovements={stockMovements}
-                memberships={memberships}
-                suppliers={suppliers}
-                onOpenItem={(id) => {
-                  goToNav("Items");
-                  setSelectedItemId(id);
-                }}
-                onSectionsChanged={() => loadSections(accessToken)}
-                onStockCountsChanged={() => loadStockCounts(accessToken)}
-                onItemsChanged={() => loadItems(accessToken)}
               />
             )}
 

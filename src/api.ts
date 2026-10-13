@@ -172,6 +172,21 @@ export interface ItemHolding {
   section: string | null;
   section_name: string | null;
   par_level: string;
+  // Which of the item's stock units this holding is counted in (null = base
+  // unit only). Chosen in Manage sections; the count sheet just uses it.
+  stock_unit: string | null;
+  stock_unit_name: string | null;
+  stock_unit_qty: string | null;
+}
+
+// One way an item is kept and counted besides its base unit (e.g. bag =
+// 1000 g). An item can have several. Everything stays recorded in the base
+// unit; this is only for typing and showing quantities.
+export interface ItemStockUnit {
+  id: string;
+  item: string;
+  name: string;
+  qty: string;
 }
 
 export interface CatalogItem {
@@ -209,11 +224,7 @@ export interface CatalogItem {
   // the one flag the Items list, its filter and the Actions tile share.
   allergen_needs_review: boolean;
   archived: boolean;
-  // How the item is kept and counted when that is not the base unit, e.g.
-  // "bag" holding 1000 (base units). Both set or both empty. Counts, costs
-  // and the ledger all stay in base_unit; this is only for typing and showing.
-  stock_unit: string;
-  stock_unit_qty: string | null;
+  stock_units: ItemStockUnit[];
   holdings: ItemHolding[];
   // Included so the Items list can be searched by a supplier's own item
   // code, not just by our SKU/name -- see ItemSupplierRow.supplier_sku.
@@ -1098,8 +1109,6 @@ export interface ItemPatch {
   target_waste_pct?: string | null;
   allergens?: string[];
   archived?: boolean;
-  stock_unit?: string;
-  stock_unit_qty?: string | null;
 }
 
 async function postJson<T>(path: string, accessToken: string, body: unknown, failure: string): Promise<T> {
@@ -1173,15 +1182,52 @@ export async function updateItem(accessToken: string, id: string, patch: ItemPat
     },
     body: JSON.stringify(patch),
   });
-  if (!res.ok) {
-    // Show the server's own message for the stock unit fields (for example
-    // "Say how many are in one bag") instead of a generic failure.
-    const body = await res.json().catch(() => null);
-    const field = body && (body.stock_unit_qty ?? body.stock_unit);
-    const msg = Array.isArray(field) ? field[0] : field;
-    throw new Error(typeof msg === "string" && msg ? msg : "Could not save changes.");
-  }
+  if (!res.ok) throw new Error("Could not save changes.");
   return res.json();
+}
+
+async function stockUnitError(res: Response): Promise<Error> {
+  // Show the server's own message ("Say how many g are in one bag", "already
+  // has a stock unit called ...") instead of a generic failure.
+  const body = await res.json().catch(() => null);
+  const first = body && typeof body === "object" ? Object.values(body)[0] : null;
+  const msg = Array.isArray(first) ? first[0] : first;
+  return new Error(typeof msg === "string" && msg ? msg : "Could not save the stock unit.");
+}
+
+export async function createItemStockUnit(
+  accessToken: string,
+  input: { item: string; name: string; qty: string }
+): Promise<ItemStockUnit> {
+  const res = await fetch(`${API_URL}/api/catalog/item-stock-units/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw await stockUnitError(res);
+  return res.json();
+}
+
+export async function updateItemStockUnit(
+  accessToken: string,
+  id: string,
+  patch: { name?: string; qty?: string }
+): Promise<ItemStockUnit> {
+  const res = await fetch(`${API_URL}/api/catalog/item-stock-units/${id}/`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw await stockUnitError(res);
+  return res.json();
+}
+
+export async function deleteItemStockUnit(accessToken: string, id: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/catalog/item-stock-units/${id}/`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("Could not remove the stock unit.");
 }
 
 export interface NewHoldingInput {
@@ -1217,7 +1263,7 @@ export async function createItemHolding(accessToken: string, input: NewHoldingIn
 export async function updateItemHolding(
   accessToken: string,
   id: string,
-  patch: { par_level?: string; section?: string | null }
+  patch: { par_level?: string; section?: string | null; stock_unit?: string | null }
 ): Promise<ItemHolding> {
   const res = await fetch(`${API_URL}/api/catalog/item-holdings/${id}/`, {
     method: "PATCH",

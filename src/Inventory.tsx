@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import Loader from "./Loader";
 import FilterBar from "./FilterBar";
-import StockUnitPanel from "./StockUnitPanel";
 import type { FilterFacet, FilterValues } from "./FilterBar";
 import {
   createCountAssignment,
@@ -28,8 +27,8 @@ import type {
   ScannedCountRow,
   Section,
   StockCountRow,
+  ItemStockUnit,
   StockMovementRow,
-  Supplier,
 } from "./api";
 
 interface Props {
@@ -44,7 +43,6 @@ interface Props {
   itemSupplierLinks: ItemSupplierRow[];
   stockMovements: StockMovementRow[];
   memberships: Membership[];
-  suppliers: Supplier[];
   onSectionsChanged: () => void;
   onStockCountsChanged: () => void;
   onItemsChanged: () => void;
@@ -150,9 +148,13 @@ interface FlatHolding {
   itemId: string;
   itemName: string;
   baseUnit: string;
-  // Optional stock unit (e.g. bag = 1000 g). Counts are typed in either unit but always saved in baseUnit.
+  // The stock unit this section counts this item in (chosen in Manage sections),
+  // e.g. bag = 1000 g. Counts can be typed in either unit but are saved in baseUnit.
+  stockUnitId: string;
   stockUnit: string;
   stockUnitQty: number | null;
+  // Every stock unit the item has (for the Manage sections picker).
+  itemStockUnits: ItemStockUnit[];
   department: "kitchen" | "bar" | "foh";
   section: string | null;
   sectionName: string | null;
@@ -179,13 +181,11 @@ export default function Inventory({
   itemSupplierLinks,
   stockMovements,
   memberships,
-  suppliers,
   onSectionsChanged,
   onStockCountsChanged,
   onItemsChanged,
   onOpenItem,
 }: Props) {
-  const [stockEditItemId, setStockEditItemId] = useState<string | null>(null);
   const [tab, setTab] = useState<"live" | "count" | "sections">("live");
   const [activeLocation, setActiveLocation] = useState(locations[0]?.id ?? "");
   const [onHand, setOnHand] = useState<Record<string, number>>({});
@@ -205,8 +205,10 @@ export default function Inventory({
         itemId: it.id,
         itemName: it.name,
         baseUnit: it.base_unit,
-        stockUnit: it.stock_unit && it.stock_unit_qty ? it.stock_unit : "",
-        stockUnitQty: it.stock_unit && it.stock_unit_qty ? Number(it.stock_unit_qty) : null,
+        stockUnitId: h.stock_unit ?? "",
+        stockUnit: h.stock_unit_name ?? "",
+        stockUnitQty: h.stock_unit && h.stock_unit_qty ? Number(h.stock_unit_qty) : null,
+        itemStockUnits: it.stock_units,
         department: h.department as "kitchen" | "bar" | "foh",
         section: h.section,
         sectionName: h.section_name,
@@ -248,9 +250,6 @@ export default function Inventory({
   function refreshOnHand() {
     setRefreshTick((t) => t + 1);
   }
-  // Quick-edit of the stock unit / default supplier, only for people who can edit items.
-  const editStockUnit = canManage ? (itemId: string) => setStockEditItemId(itemId) : undefined;
-  const stockEditItem = stockEditItemId ? items.find((i) => i.id === stockEditItemId) : undefined;
 
   return (
     <>
@@ -297,7 +296,6 @@ export default function Inventory({
           locationName={locations.find((l) => l.id === activeLocation)?.name ?? ""}
           currency={locations.find((l) => l.id === activeLocation)?.currency}
           stockMovements={stockMovements}
-          onEditStockUnit={editStockUnit}
         />
       )}
 
@@ -309,6 +307,7 @@ export default function Inventory({
           sectionsError={sectionsError}
           holdings={holdingsAtLocation}
           onSectionsChanged={onSectionsChanged}
+          onOpenItem={onOpenItem}
           onItemsChanged={() => {
             onItemsChanged();
             refreshOnHand();
@@ -330,7 +329,6 @@ export default function Inventory({
           stockCounts={stockCounts}
           stockCountsError={stockCountsError}
           onSectionsChanged={onSectionsChanged}
-          onEditStockUnit={editStockUnit}
           onStockCountsChanged={() => {
             onStockCountsChanged();
             refreshOnHand();
@@ -338,19 +336,6 @@ export default function Inventory({
         />
       )}
 
-      {stockEditItem && (
-        <StockUnitPanel
-          accessToken={accessToken}
-          item={stockEditItem}
-          suppliers={suppliers}
-          onClose={() => setStockEditItemId(null)}
-          onSaved={() => {
-            setStockEditItemId(null);
-            onItemsChanged();
-          }}
-          onOpenItem={onOpenItem}
-        />
-      )}
     </>
   );
 }
@@ -368,7 +353,6 @@ function LiveStockTab({
   locationName,
   currency,
   stockMovements,
-  onEditStockUnit,
 }: {
   holdings: FlatHolding[];
   onHand: Record<string, number>;
@@ -378,7 +362,6 @@ function LiveStockTab({
   locationName: string;
   currency?: string;
   stockMovements: StockMovementRow[];
-  onEditStockUnit?: (itemId: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState<"all" | "kitchen" | "bar" | "foh">("all");
@@ -550,16 +533,6 @@ function LiveStockTab({
                       {expanded && (
                         <tr>
                           <td colSpan={7} style={{ background: "var(--bg)" }}>
-                            <div className="muted" style={{ margin: "8px 4px", fontSize: 12.5 }}>
-                              {h.stockUnit && h.stockUnitQty
-                                ? `Stock unit: 1 ${h.stockUnit} = ${h.stockUnitQty} ${h.baseUnit}`
-                                : "No stock unit set."}{" "}
-                              {onEditStockUnit && (
-                                <button type="button" className="link-btn" onClick={() => onEditStockUnit(h.itemId)}>
-                                  {h.stockUnit ? "Edit stock unit" : "Set stock unit"}
-                                </button>
-                              )}
-                            </div>
                             {rowMovements.length === 0 && (
                               <p className="muted" style={{ margin: "8px 4px" }}>
                                 No ledger activity recorded yet.
@@ -695,6 +668,7 @@ function SectionsTab({
   sectionsError,
   holdings,
   onSectionsChanged,
+  onOpenItem,
   onItemsChanged,
 }: {
   accessToken: string;
@@ -703,12 +677,15 @@ function SectionsTab({
   sectionsError: string | null;
   holdings: FlatHolding[];
   onSectionsChanged: () => void;
+  onOpenItem?: (itemId: string) => void;
   onItemsChanged: () => void;
 }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Section | null>(null);
   const [modalName, setModalName] = useState("");
   const [modalChecked, setModalChecked] = useState<Record<string, boolean>>({});
+  // Stock unit chosen per ticked item in this section ('' = base unit only); a missing key keeps what is saved.
+  const [modalUnit, setModalUnit] = useState<Record<string, string>>({});
   const [modalCadence, setModalCadence] = useState<"weekly" | "monthly" | null>(null);
   const [modalDueDate, setModalDueDate] = useState("");
   const [saving, setSaving] = useState(false);
@@ -721,6 +698,7 @@ function SectionsTab({
     setEditing(null);
     setModalName("");
     setModalChecked({});
+    setModalUnit({});
     setModalCadence(null);
     setModalDueDate("");
     setErr(null);
@@ -734,6 +712,7 @@ function SectionsTab({
     setEditing(s);
     setModalName(s.name);
     setModalChecked(Object.fromEntries(holdings.filter((h) => h.section === s.id).map((h) => [h.id, true])));
+    setModalUnit({});
     setModalCadence(s.count_cadence);
     setModalDueDate(s.next_count_due ?? "");
     setErr(null);
@@ -769,10 +748,15 @@ function SectionsTab({
         ? (await updateSection(accessToken, editing.id, { name: modalName.trim(), ...schedule })).id
         : (await createSection(accessToken, { location: activeLocation, name: modalName.trim(), ...schedule })).id;
 
-      const toChange = holdings.filter((h) => (h.section === sectionId) !== !!modalChecked[h.id]);
-      await Promise.all(
-        toChange.map((h) => updateItemHolding(accessToken, h.id, { section: modalChecked[h.id] ? sectionId : null }))
-      );
+      const changes: [FlatHolding, { section?: string | null; stock_unit?: string | null }][] = [];
+      for (const h of holdings) {
+        const inSection = !!modalChecked[h.id];
+        const patch: { section?: string | null; stock_unit?: string | null } = {};
+        if ((h.section === sectionId) !== inSection) patch.section = inSection ? sectionId : null;
+        if (inSection && (modalUnit[h.id] ?? h.stockUnitId) !== h.stockUnitId) patch.stock_unit = modalUnit[h.id] || null;
+        if (Object.keys(patch).length) changes.push([h, patch]);
+      }
+      await Promise.all(changes.map(([h, patch]) => updateItemHolding(accessToken, h.id, patch)));
 
       setModalOpen(false);
       onSectionsChanged();
@@ -861,7 +845,7 @@ function SectionsTab({
                 </div>
               </div>
               <div className="section-preview">
-                {itemsInSection.length ? itemsInSection.map((h) => h.itemName).join(" · ") : "No items assigned yet"}
+                {itemsInSection.length ? itemsInSection.map((h) => h.itemName + (h.stockUnit ? ` (${h.stockUnit})` : "")).join(" · ") : "No items assigned yet"}
               </div>
               <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
                 {s.count_cadence
@@ -966,6 +950,37 @@ function SectionsTab({
                           onChange={(e) => setModalChecked((c) => ({ ...c, [h.id]: e.target.checked }))}
                         />
                         {h.itemName} <span className="muted">({deptLabel(h.department)})</span>
+                        {modalChecked[h.id] &&
+                          (h.itemStockUnits.length > 0 ? (
+                            <select
+                              className="item-check-unit"
+                              aria-label={`Count ${h.itemName} in`}
+                              title="Which unit this section counts it in"
+                              value={modalUnit[h.id] ?? h.stockUnitId}
+                              onChange={(e) => setModalUnit((m) => ({ ...m, [h.id]: e.target.value }))}
+                            >
+                              <option value="">{h.baseUnit} only</option>
+                              {h.itemStockUnits.map((u) => (
+                                <option key={u.id} value={u.id}>
+                                  also in {u.name} ({parseFloat(Number(u.qty).toFixed(4))} {h.baseUnit})
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            onOpenItem && (
+                              <button
+                                type="button"
+                                className="link-btn"
+                                title="Stock units are set up on the item page"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  onOpenItem(h.itemId);
+                                }}
+                              >
+                                + stock unit
+                              </button>
+                            )
+                          ))}
                       </label>
                     ))}
                   </div>
@@ -1016,7 +1031,6 @@ function CountSheetsTab({
   stockCountsError,
   onSectionsChanged,
   onStockCountsChanged,
-  onEditStockUnit,
 }: {
   accessToken: string;
   me: Me;
@@ -1031,7 +1045,6 @@ function CountSheetsTab({
   stockCountsError: string | null;
   onSectionsChanged: () => void;
   onStockCountsChanged: () => void;
-  onEditStockUnit?: (itemId: string) => void;
 }) {
   const [starting, setStarting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -1110,7 +1123,6 @@ function CountSheetsTab({
         cheapestPrice={cheapestPrice}
         onBack={() => setOpenSectionId(null)}
         onSectionsChanged={onSectionsChanged}
-        onEditStockUnit={onEditStockUnit}
         onSubmitted={() => {
           onStockCountsChanged();
           setOpenSectionId(null);
@@ -1290,7 +1302,6 @@ function CountSheet({
   cheapestPrice,
   onBack,
   onSectionsChanged,
-  onEditStockUnit,
   onSubmitted,
 }: {
   accessToken: string;
@@ -1301,7 +1312,6 @@ function CountSheet({
   cheapestPrice: (itemId: string) => number | null;
   onBack: () => void;
   onSectionsChanged: () => void;
-  onEditStockUnit?: (itemId: string) => void;
   onSubmitted: () => void;
 }) {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
@@ -1674,11 +1684,7 @@ function CountSheet({
                     </span>
                   </>
                 ) : null}
-                {onEditStockUnit && (
-                  <button type="button" className="note-btn-sm" onClick={() => onEditStockUnit(h.itemId)}>
-                    {h.stockUnit ? "✎ unit" : "+ stock unit"}
-                  </button>
-                )}
+
                 {invalid && (
                   <span className="badge warn" title={invalid}>
                     ⚠ {invalid}

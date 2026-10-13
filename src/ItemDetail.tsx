@@ -9,6 +9,9 @@ import {
   BASE_UNITS,
   fetchItemSuppliers,
   createItemSupplier,
+  createItemStockUnit,
+  updateItemStockUnit,
+  deleteItemStockUnit,
   updateItemSupplier,
   createCategory,
   deleteItem,
@@ -25,6 +28,7 @@ import type {
   Category,
   Location,
   ItemSupplierRow,
+  ItemStockUnit,
   SupplierItemRow,
   Supplier,
   Recipe,
@@ -33,7 +37,6 @@ import type {
   AllergenSuggestion,
 } from "./api";
 import AllergenIcon from "./AllergenIcon";
-import StockUnitPanel from "./StockUnitPanel";
 
 interface Props {
   itemId: string;
@@ -49,6 +52,8 @@ interface Props {
   supplierItems: SupplierItemRow[];
   recipes: Recipe[];
   onBack: () => void;
+  // Wording of the top-left link; set when the user jumped here from Inventory.
+  backLabel?: string;
   onChanged: () => void;
   onCategoriesChanged: () => void;
   onOpenSupplier?: (supplierId: string) => void;
@@ -144,6 +149,7 @@ export default function ItemDetail({
   supplierItems,
   recipes,
   onBack,
+  backLabel,
   onChanged,
   onCategoriesChanged,
   onOpenSupplier,
@@ -194,7 +200,16 @@ export default function ItemDetail({
   const [categoryError, setCategoryError] = useState<string | null>(null);
 
   const [showUnitModal, setShowUnitModal] = useState(false);
-  const [showStockUnit, setShowStockUnit] = useState(false);
+  // Stock units (several per item): add form, per-supplier "sold as" form.
+  const [newUnitName, setNewUnitName] = useState("");
+  const [newUnitQty, setNewUnitQty] = useState("");
+  const [showAddUnit, setShowAddUnit] = useState(false);
+  const [unitBusy, setUnitBusy] = useState(false);
+  const [unitErr, setUnitErr] = useState<string | null>(null);
+  // Supplier row currently creating a brand-new stock unit from its "Sold as" menu.
+  const [soldAsNewRow, setSoldAsNewRow] = useState<string | null>(null);
+  const [soldAsName, setSoldAsName] = useState("");
+  const [soldAsQty, setSoldAsQty] = useState("");
   const [unitNew, setUnitNew] = useState("kg");
   const [unitMode, setUnitMode] = useState<"relabel" | "convert">("relabel");
   const [unitFactor, setUnitFactor] = useState("1");
@@ -537,6 +552,122 @@ export default function ItemDetail({
     }
   }
 
+  // ---- Stock units ----------------------------------------------------
+  const tidy = (n: number) => parseFloat(n.toFixed(4)).toString();
+
+  async function addStockUnit(name: string, qty: string): Promise<ItemStockUnit | null> {
+    if (!item) return null;
+    setUnitErr(null);
+    setUnitBusy(true);
+    try {
+      const created = await createItemStockUnit(accessToken, { item: item.id, name: name.trim(), qty });
+      reload();
+      onChanged();
+      return created;
+    } catch (err) {
+      setUnitErr(err instanceof Error ? err.message : "Could not save the stock unit.");
+      return null;
+    } finally {
+      setUnitBusy(false);
+    }
+  }
+
+  async function handleAddUnitSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const created = await addStockUnit(newUnitName, newUnitQty);
+    if (created) {
+      setNewUnitName("");
+      setNewUnitQty("");
+      setShowAddUnit(false);
+    }
+  }
+
+  async function handleEditStockUnit(u: ItemStockUnit, patch: { name?: string; qty?: string }) {
+    if ((patch.name === undefined || patch.name.trim() === u.name) && (patch.qty === undefined || Number(patch.qty) === Number(u.qty))) return;
+    setUnitErr(null);
+    try {
+      await updateItemStockUnit(accessToken, u.id, { ...patch, ...(patch.name !== undefined ? { name: patch.name.trim() } : {}) });
+      onChanged();
+    } catch (err) {
+      setUnitErr(err instanceof Error ? err.message : "Could not save the stock unit.");
+    } finally {
+      reload(); // also puts the box back to the saved value if the edit was refused
+    }
+  }
+
+  async function handleRemoveStockUnit(u: ItemStockUnit) {
+    setUnitErr(null);
+    try {
+      await deleteItemStockUnit(accessToken, u.id);
+      reload();
+      onChanged();
+    } catch (err) {
+      setUnitErr(err instanceof Error ? err.message : "Could not remove the stock unit.");
+    }
+  }
+
+  // Which stock unit a department/section counts in (null = base unit only).
+  async function handleHoldingUnit(holdingId: string, unitId: string) {
+    setUnitErr(null);
+    try {
+      await updateItemHolding(accessToken, holdingId, { stock_unit: unitId || null });
+      reload();
+      onChanged();
+    } catch (err) {
+      setUnitErr(err instanceof Error ? err.message : "Could not save.");
+    }
+  }
+
+  // Supplier "Sold as": pick the base unit or one of this item's stock units.
+  // unit_price (per base unit) stays the source of truth for costing; the
+  // pack price shown "as invoiced" is derived from it.
+  async function handleSoldAs(row: ItemSupplierRow, unit: { name: string; qty: number } | null) {
+    setSupplierError(null);
+    try {
+      const updated = await updateItemSupplier(
+        accessToken,
+        row.id,
+        unit
+          ? { supplier_unit: unit.name, supplier_unit_price: (Number(row.unit_price) * unit.qty).toFixed(2) }
+          : { supplier_unit: "", supplier_unit_price: null }
+      );
+      setItemSuppliers((rows) => rows.map((r) => (r.id === updated.id ? updated : r)));
+    } catch (err) {
+      setSupplierError(err instanceof Error ? err.message : "Could not save how this supplier sells it.");
+    }
+  }
+
+  async function handleSoldAsNewSubmit(e: React.FormEvent, row: ItemSupplierRow) {
+    e.preventDefault();
+    const created = await addStockUnit(soldAsName, soldAsQty);
+    if (created) {
+      await handleSoldAs(row, { name: created.name, qty: Number(created.qty) });
+      setSoldAsNewRow(null);
+      setSoldAsName("");
+      setSoldAsQty("");
+    }
+  }
+
+  // Packs suppliers already sell this item in that are not yet a stock unit.
+  const packSuggestions = item
+    ? itemSuppliers
+        .filter(
+          (l) =>
+            l.supplier_unit &&
+            l.supplier_unit !== item.base_unit &&
+            Number(l.supplier_unit_price) > 0 &&
+            Number(l.unit_price) > 0 &&
+            !item.stock_units.some((u) => u.name.toLowerCase() === l.supplier_unit.toLowerCase())
+        )
+        .map((l) => ({
+          key: l.id,
+          name: l.supplier_unit,
+          qty: Math.round((Number(l.supplier_unit_price) / Number(l.unit_price)) * 100) / 100,
+          supplier: l.supplier_name,
+        }))
+        .filter((p, i, all) => all.findIndex((q) => q.name.toLowerCase() === p.name.toLowerCase()) === i)
+    : [];
+
   async function handleToggleArchive() {
     if (!item) return;
     setArchiving(true);
@@ -591,14 +722,16 @@ export default function ItemDetail({
     setSavingUnit(true);
     setUnitError(null);
     try {
-      // A stock unit holds a number of base units, so it is restated with the
+      // Stock units hold a number of base units, so they are restated with the
       // base unit (1 kg per bag becomes 1000 g per bag) just like the par levels.
-      await updateItem(accessToken, item.id, {
-        base_unit: unitNew,
-        ...(item.stock_unit && item.stock_unit_qty && factor !== 1
-          ? { stock_unit_qty: parseFloat((Number(item.stock_unit_qty) * factor).toFixed(4)).toString() }
-          : {}),
-      });
+      await updateItem(accessToken, item.id, { base_unit: unitNew });
+      if (factor !== 1) {
+        await Promise.all(
+          item.stock_units.map((u) =>
+            updateItemStockUnit(accessToken, u.id, { qty: parseFloat((Number(u.qty) * factor).toFixed(4)).toString() })
+          )
+        );
+      }
       if (factor !== 1) {
         await Promise.all(
           item.holdings.map((h) =>
@@ -622,7 +755,7 @@ export default function ItemDetail({
     return (
       <div>
         <button className="back-link" onClick={onBack}>
-          ← All items
+          ← {backLabel ?? "All items"}
         </button>
         {error ? <p className="error">{error}</p> : <p className="muted">Loading…</p>}
       </div>
@@ -634,7 +767,7 @@ export default function ItemDetail({
   return (
     <div>
       <button className="back-link" onClick={onBack}>
-        ← All items
+        ← {backLabel ?? "All items"}
       </button>
 
       {readOnly && <p className="ro-banner">View only — changes to items need a manager or admin.</p>}
@@ -672,19 +805,6 @@ export default function ItemDetail({
               <span className="ro">{item.base_unit}</span>
               <button type="button" className="mini" onClick={openUnitModal}>
                 Change
-              </button>
-            </div>
-          </div>
-          <div className="field">
-            <label>Stock unit</label>
-            <div className="unit-row">
-              <span className="ro">
-                {item.stock_unit && item.stock_unit_qty
-                  ? `1 ${item.stock_unit} = ${parseFloat(Number(item.stock_unit_qty).toFixed(4))} ${item.base_unit}`
-                  : "Not set"}
-              </span>
-              <button type="button" className="mini" onClick={() => setShowStockUnit(true)}>
-                {item.stock_unit ? "Edit" : "Set"}
               </button>
             </div>
           </div>
@@ -853,12 +973,102 @@ export default function ItemDetail({
           The same product can be held in more than one place, each with its own par level.
           {multiDept && ` Shown in lists as "${item.name} — Department".`}
         </p>
+        <div className="su-block">
+          <div className="su-head">
+            <b>Stock units</b>
+            <span className="muted">
+              {" "}
+              How this item is kept on the shelf, besides {item.base_unit}. Add as many as you need (a sack, a tub, a case); each
+              section can count in one of them from Inventory → Manage sections. Everything is still recorded in {item.base_unit}.
+            </span>
+          </div>
+          {item.stock_units.length === 0 && <p className="muted su-none">No stock units yet.</p>}
+          {item.stock_units.map((u) => (
+            <div className="su-row" key={`${u.id}-${u.name}-${u.qty}`}>
+              <span>1</span>
+              <input
+                className="su-name"
+                defaultValue={u.name}
+                maxLength={20}
+                aria-label="Stock unit name"
+                onBlur={(e) => handleEditStockUnit(u, { name: e.target.value })}
+              />
+              <span>=</span>
+              <input
+                className="su-qty"
+                type="number"
+                min="0"
+                step="any"
+                defaultValue={tidy(Number(u.qty))}
+                aria-label={`How many ${item.base_unit} in one ${u.name}`}
+                onBlur={(e) => handleEditStockUnit(u, { qty: e.target.value })}
+              />
+              <span>{item.base_unit}</span>
+              <button className="rm" title="Remove this stock unit" onClick={() => handleRemoveStockUnit(u)}>
+                ×
+              </button>
+            </div>
+          ))}
+          {packSuggestions.map((p) => (
+            <div className="su-suggest" key={p.key}>
+              {p.supplier} sells this as 1 {p.name} = {tidy(p.qty)} {item.base_unit}.{" "}
+              <button type="button" className="link-btn" disabled={unitBusy} onClick={() => addStockUnit(p.name, String(p.qty))}>
+                Add as a stock unit
+              </button>
+            </div>
+          ))}
+          {!showAddUnit ? (
+            <button type="button" className="addbtn" onClick={() => setShowAddUnit(true)}>
+              + Add a stock unit
+            </button>
+          ) : (
+            <form className="su-row su-add" onSubmit={handleAddUnitSubmit}>
+              <span>1</span>
+              <input
+                className="su-name"
+                value={newUnitName}
+                onChange={(e) => setNewUnitName(e.target.value)}
+                placeholder="e.g. bag"
+                maxLength={20}
+                autoFocus
+                required
+              />
+              <span>=</span>
+              <input
+                className="su-qty"
+                type="number"
+                min="0"
+                step="any"
+                value={newUnitQty}
+                onChange={(e) => setNewUnitQty(e.target.value)}
+                placeholder="1000"
+                required
+              />
+              <span>{item.base_unit}</span>
+              <button className="btn-primary small" type="submit" disabled={unitBusy}>
+                {unitBusy ? "Adding…" : "Add"}
+              </button>
+              <button
+                className="btn-ghost small"
+                type="button"
+                onClick={() => {
+                  setShowAddUnit(false);
+                  setUnitErr(null);
+                }}
+              >
+                Cancel
+              </button>
+            </form>
+          )}
+          {unitErr && <p className="error">{unitErr}</p>}
+        </div>
         <div className="table-scroll">
           <table className="htbl">
             <thead>
               <tr>
                 <th>Department</th>
                 <th>Section</th>
+                <th>Counted in</th>
                 <th className="num">Par level</th>
                 <th className="num">On hand</th>
                 <th>Status</th>
@@ -868,7 +1078,7 @@ export default function ItemDetail({
             <tbody>
               {item.holdings.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="muted empty-row">
+                  <td colSpan={7} className="muted empty-row">
                     Not stocked anywhere yet — add a department below.
                   </td>
                 </tr>
@@ -882,6 +1092,21 @@ export default function ItemDetail({
                       {DEPARTMENTS.find((d) => d.value === h.department)?.label ?? h.department}
                     </td>
                     <td className="muted">{h.section_name ?? "Unassigned"}</td>
+                    <td>
+                      <select
+                        className="su-pick"
+                        value={h.stock_unit ?? ""}
+                        onChange={(e) => handleHoldingUnit(h.id, e.target.value)}
+                        aria-label="Counted in"
+                      >
+                        <option value="">{item.base_unit} only</option>
+                        {item.stock_units.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name} ({tidy(Number(u.qty))} {item.base_unit})
+                          </option>
+                        ))}
+                      </select>
+                    </td>
                     <td className="num">
                       <input
                         className="par-in"
@@ -1196,6 +1421,43 @@ export default function ItemDetail({
                   </div>
                 )}
               </span>
+              <span className="soldas">
+                <label>Sold as</label>
+                <select
+                  className="su-pick"
+                  value={
+                    item.stock_units.find((u) => u.name.toLowerCase() === row.supplier_unit.toLowerCase())?.id ??
+                    (row.supplier_unit && row.supplier_unit !== item.base_unit ? "__other" : "")
+                  }
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === "__new") {
+                      setSoldAsNewRow(row.id);
+                      setSoldAsName("");
+                      setSoldAsQty("");
+                      setUnitErr(null);
+                    } else if (v === "") handleSoldAs(row, null);
+                    else {
+                      const u = item.stock_units.find((x) => x.id === v);
+                      if (u) handleSoldAs(row, { name: u.name, qty: Number(u.qty) });
+                    }
+                  }}
+                  aria-label="Sold as"
+                >
+                  <option value="">{item.base_unit}</option>
+                  {row.supplier_unit &&
+                    row.supplier_unit !== item.base_unit &&
+                    !item.stock_units.some((u) => u.name.toLowerCase() === row.supplier_unit.toLowerCase()) && (
+                      <option value="__other">{row.supplier_unit} (from their catalogue)</option>
+                    )}
+                  {item.stock_units.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} ({tidy(Number(u.qty))} {item.base_unit})
+                    </option>
+                  ))}
+                  <option value="__new">+ New stock unit…</option>
+                </select>
+              </span>
               {itemSuppliers.length > 1 && !isDefault && (
                 <button
                   type="button"
@@ -1209,6 +1471,27 @@ export default function ItemDetail({
             </div>
           );
         })}
+
+        {soldAsNewRow && (() => {
+          const row = itemSuppliers.find((r) => r.id === soldAsNewRow);
+          if (!row) return null;
+          return (
+            <form className="su-row su-add" onSubmit={(e) => handleSoldAsNewSubmit(e, row)}>
+              <span>New stock unit for {row.supplier_name}: 1</span>
+              <input className="su-name" value={soldAsName} onChange={(e) => setSoldAsName(e.target.value)} placeholder="e.g. case" maxLength={20} autoFocus required />
+              <span>=</span>
+              <input className="su-qty" type="number" min="0" step="any" value={soldAsQty} onChange={(e) => setSoldAsQty(e.target.value)} placeholder="24" required />
+              <span>{item.base_unit}</span>
+              <button className="btn-primary small" type="submit" disabled={unitBusy}>
+                {unitBusy ? "Adding…" : "Add & use"}
+              </button>
+              <button className="btn-ghost small" type="button" onClick={() => setSoldAsNewRow(null)}>
+                Cancel
+              </button>
+            </form>
+          );
+        })()}
+        {soldAsNewRow && unitErr && <p className="error">{unitErr}</p>}
 
         {supplierError && <p className="error">{supplierError}</p>}
 
@@ -1337,20 +1620,6 @@ export default function ItemDetail({
       </div>
 
       </fieldset>
-
-      {showStockUnit && (
-        <StockUnitPanel
-          accessToken={accessToken}
-          item={item}
-          suppliers={suppliers}
-          onClose={() => setShowStockUnit(false)}
-          onSaved={(updated) => {
-            setItem(updated);
-            setShowStockUnit(false);
-            onChanged();
-          }}
-        />
-      )}
 
       {showUnitModal && (
         <div className="modal-backdrop" onClick={() => setShowUnitModal(false)}>
