@@ -320,7 +320,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     questions: [
       {
         q: "How do I see current stock levels?",
-        a: "Go to Inventory in the sidebar — it opens on the Live stock tab, showing on-hand quantities by department, calculated from every stock movement recorded so far. Click an item to see how it moved on any day: opening stock, purchases received, sales (one line), waste (its own line), count adjustments, and closing stock, with unit cost and cost. Use the arrows or the date box to change the day. Live stock does not show sections; those are only used when counting. (The other two tabs on that page are Count sheets and Manage sections.)",
+        a: "Go to Inventory in the sidebar — it opens on the Live stock tab, showing on-hand quantities by department, calculated from every stock movement recorded so far. Click an item to see how it moved over a day, a week (the 7 days ending on the date you pick) or a month: opening stock, purchases received, sales (one line), waste (its own line), count adjustments, and closing stock, with unit cost and cost, plus a day-by-day table underneath. Click a day in that table to see just that day. A stock count that finds less than expected and is tagged Spoilage, Breakage, Theft or Over-portioning counts as waste, so it appears under Waste (with a note that it was found at a count); other count differences stay under Count adjustments. Live stock does not show sections; those are only used when counting. (The other two tabs on that page are Count sheets and Manage sections.)",
       },
       {
         q: "How do I do a stock count?",

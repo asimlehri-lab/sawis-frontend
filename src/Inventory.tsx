@@ -344,17 +344,25 @@ export default function Inventory({
 // Live stock
 // ---------------------------------------------------------------------------
 
-// One item's stock movement for a chosen day: opening on hand, one line per
-// kind of movement (all sales as a single line, waste on its own line, and so
-// on), then closing on hand. Worked out from the ledger rows already loaded,
-// so nothing extra is fetched.
-const MOVEMENT_LINES: { type: string; label: string }[] = [
-  { type: "purchase", label: "Purchases received" },
-  { type: "sale", label: "Sales" },
-  { type: "waste", label: "Waste" },
-  { type: "count_adjust", label: "Count adjustments" },
-  { type: "po_reopen", label: "Purchases reversed (order reopened)" },
-  { type: "transfer", label: "Transfers" },
+// One item's stock movement over a day, a week or a month: opening on hand,
+// one line per kind of movement (all sales as a single line, waste on its
+// own line, and so on), closing on hand, then a day-by-day table. Worked out
+// from the ledger rows already loaded, so nothing extra is fetched.
+//
+// A stock count that finds less than expected and is tagged with a real-loss
+// reason (spoilage, breakage, theft, over-portioning) is already treated as
+// waste by the Waste log and reports (the backend logs a waste event for it),
+// so it is shown under Waste here too, with a note that it came from a count.
+// The reasons mirror COUNT_REASONS_THAT_ARE_WASTE in apps/ledger/viewsets.py.
+const COUNT_WASTE_REASONS = new Set(["spoilage", "breakage", "theft", "over_portioning"]);
+
+type MovementKind = "purchase" | "sale" | "waste" | "count_adjust" | "other";
+const KIND_LINES: { kind: MovementKind; label: string }[] = [
+  { kind: "purchase", label: "Purchases received" },
+  { kind: "sale", label: "Sales" },
+  { kind: "waste", label: "Waste" },
+  { kind: "count_adjust", label: "Count adjustments" },
+  { kind: "other", label: "Other (reopened orders, transfers)" },
 ];
 
 function localDay(d: Date): string {
@@ -362,65 +370,151 @@ function localDay(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function shiftDay(day: string, by: number): string {
+function parseDay(day: string): Date {
   const [y, m, d] = day.split("-").map(Number);
-  return localDay(new Date(y, m - 1, d + by));
+  return new Date(y, m - 1, d);
 }
 
-function ItemDayMovements({
+function shiftDay(day: string, by: number): string {
+  const d = parseDay(day);
+  d.setDate(d.getDate() + by);
+  return localDay(d);
+}
+
+function ItemMovementReview({
   holding: h,
   movements,
+  countReasonByLine,
   onHandNow,
   currency,
 }: {
   holding: FlatHolding;
   movements: StockMovementRow[];
+  countReasonByLine: Record<string, string | null>;
   onHandNow: number | undefined;
   currency?: string;
 }) {
   const today = localDay(new Date());
-  const [day, setDay] = useState(today);
-  const dayOf = (m: StockMovementRow) => localDay(new Date(m.occurred_at));
+  const [mode, setMode] = useState<"day" | "week" | "month">("week");
+  const [anchor, setAnchor] = useState(today);
 
-  const opening = movements.filter((m) => dayOf(m) < day).reduce((sum, m) => sum + Number(m.qty_delta), 0);
-  const todays = movements.filter((m) => dayOf(m) === day);
-  const lines = MOVEMENT_LINES.map((l) => {
-    const rows = todays.filter((m) => m.movement_type === l.type);
-    const qty = rows.reduce((sum, m) => sum + Number(m.qty_delta), 0);
-    const cost = rows.reduce((sum, m) => sum + Number(m.qty_delta) * Number(m.unit_cost), 0);
-    return { ...l, count: rows.length, qty, cost, unitCost: qty !== 0 ? cost / qty : rows.length ? Number(rows[0].unit_cost) : 0 };
+  // Week = the 7 days ending on the chosen date, same as the reports; month =
+  // the calendar month containing it.
+  const a = parseDay(anchor);
+  const from =
+    mode === "day" ? anchor : mode === "week" ? shiftDay(anchor, -6) : localDay(new Date(a.getFullYear(), a.getMonth(), 1));
+  const to = mode === "month" ? localDay(new Date(a.getFullYear(), a.getMonth() + 1, 0)) : anchor;
+  const fmtShort = (d: string, year = false) =>
+    parseDay(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", ...(year ? { year: "numeric" } : {}) });
+  const periodLabel =
+    mode === "day"
+      ? parseDay(anchor).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" })
+      : mode === "week"
+        ? `${fmtShort(from)} – ${fmtShort(to, true)}`
+        : a.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  const isLatest = mode === "month" ? anchor.slice(0, 7) >= today.slice(0, 7) : to >= today;
+
+  function step(dir: 1 | -1) {
+    if (mode === "month") {
+      const first = new Date(a.getFullYear(), a.getMonth() + dir, 1);
+      const next = localDay(first);
+      setAnchor(next.slice(0, 7) >= today.slice(0, 7) ? today : next);
+    } else {
+      const next = shiftDay(anchor, dir * (mode === "week" ? 7 : 1));
+      setAnchor(next > today ? today : next);
+    }
+  }
+
+  const dayOf = (m: StockMovementRow) => localDay(new Date(m.occurred_at));
+  const kindOf = (m: StockMovementRow): { kind: MovementKind; fromCount: boolean; reason: string | null } => {
+    const t = m.movement_type as string;
+    if (t === "purchase" || t === "sale" || t === "waste") return { kind: t, fromCount: false, reason: null };
+    if (t === "count_adjust") {
+      const reason = m.source_type === "count_line" ? countReasonByLine[m.source_id] ?? null : null;
+      if (Number(m.qty_delta) < 0 && reason && COUNT_WASTE_REASONS.has(reason)) return { kind: "waste", fromCount: true, reason };
+      return { kind: "count_adjust", fromCount: true, reason };
+    }
+    return { kind: "other", fromCount: false, reason: null };
+  };
+
+  const opening = movements.filter((m) => dayOf(m) < from).reduce((sum, m) => sum + Number(m.qty_delta), 0);
+  const inRange = movements.filter((m) => dayOf(m) >= from && dayOf(m) <= to).map((m) => ({ m, ...kindOf(m) }));
+  const lines = KIND_LINES.map((l) => {
+    const rows = inRange.filter((r) => r.kind === l.kind);
+    const qty = rows.reduce((sum, r) => sum + Number(r.m.qty_delta), 0);
+    const cost = rows.reduce((sum, r) => sum + Number(r.m.qty_delta) * Number(r.m.unit_cost), 0);
+    const counted = rows.filter((r) => r.fromCount);
+    const reasons = Array.from(new Set(counted.map((r) => (r.reason ? reasonLabel(r.reason) : "")).filter(Boolean)));
+    return {
+      ...l,
+      count: rows.length,
+      qty,
+      cost,
+      unitCost: qty !== 0 ? cost / qty : rows.length ? Number(rows[0].m.unit_cost) : 0,
+      countedCount: counted.length,
+      reasons,
+    };
   }).filter((l) => l.count > 0);
   const closing = opening + lines.reduce((sum, l) => sum + l.qty, 0);
+
+  // Day-by-day, only days that had movement (a quiet day would be an empty row).
+  const days: string[] = [];
+  for (let d = from; d <= to && d <= today; d = shiftDay(d, 1)) days.push(d);
+  let running = opening;
+  const dayRows = days.map((d) => {
+    const rows = inRange.filter((r) => dayOf(r.m) === d);
+    const sum = (k: MovementKind) => rows.filter((r) => r.kind === k).reduce((t, r) => t + Number(r.m.qty_delta), 0);
+    const has = (k: MovementKind) => rows.some((r) => r.kind === k);
+    running += rows.reduce((t, r) => t + Number(r.m.qty_delta), 0);
+    return { d, n: rows.length, purchase: sum("purchase"), sale: sum("sale"), waste: sum("waste"), count_adjust: sum("count_adjust"), other: sum("other"), has, closing: running };
+  });
+  const activeDays = dayRows.filter((r) => r.n > 0);
+  const quietDays = dayRows.length - activeDays.length;
   const lastActive = movements.map(dayOf).sort().pop();
 
-  const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${parseFloat(Math.abs(n).toFixed(2))} ${h.baseUnit}`;
+  const num = (n: number) => parseFloat(n.toFixed(2));
+  const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${num(Math.abs(n))} ${h.baseUnit}`;
+  const cell = (n: number, present: boolean) => (present ? `${n > 0 ? "+" : n < 0 ? "−" : ""}${num(Math.abs(n))}` : "–");
   const stockEq = (n: number) => (h.stockUnit ? inStockUnit(h, Math.abs(n)) : "");
-  const dayLabel = new Date(day + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 
   return (
     <div className="idm">
       <div className="idm-head">
         <b>{h.itemName}</b>
-        <span className="muted"> — movement on</span>
-        <button type="button" className="mini" onClick={() => setDay(shiftDay(day, -1))} aria-label="Previous day">
+        <div className="rtabs idm-modes" style={{ margin: 0 }}>
+          {(["day", "week", "month"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              className={`rtab ${mode === m ? "on" : ""}`}
+              onClick={() => setMode(m)}
+            >
+              {m === "day" ? "Day" : m === "week" ? "Week" : "Month"}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="mini" onClick={() => step(-1)} aria-label={`Previous ${mode}`}>
           ‹
         </button>
-        <input type="date" value={day} max={today} onChange={(e) => e.target.value && setDay(e.target.value)} />
-        <button type="button" className="mini" disabled={day >= today} onClick={() => setDay(shiftDay(day, 1))} aria-label="Next day">
+        <span className="idm-period">{periodLabel}</span>
+        <button type="button" className="mini" disabled={isLatest} onClick={() => step(1)} aria-label={`Next ${mode}`}>
           ›
         </button>
-        {day !== today && (
-          <button type="button" className="link-btn" onClick={() => setDay(today)}>
+        <input
+          type="date"
+          value={anchor}
+          max={today}
+          aria-label={mode === "week" ? "Last day of the week" : "Pick a date"}
+          title={mode === "week" ? "The week ends on this day" : mode === "month" ? "Any day in the month" : "The day"}
+          onChange={(e) => e.target.value && setAnchor(e.target.value)}
+        />
+        {anchor !== today && (
+          <button type="button" className="link-btn" onClick={() => setAnchor(today)}>
             Today
           </button>
         )}
-        {lastActive && lastActive !== day && (
-          <button type="button" className="link-btn" onClick={() => setDay(lastActive)}>
-            Last activity ({new Date(lastActive + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })})
-          </button>
-        )}
       </div>
-      <div className="muted idm-day">{dayLabel}</div>
+
       <table className="tbl idm-table">
         <thead>
           <tr>
@@ -434,7 +528,7 @@ function ItemDayMovements({
           <tr className="idm-bal">
             <td>Opening on hand</td>
             <td className="num">
-              {parseFloat(opening.toFixed(2))} {h.baseUnit}
+              {num(opening)} {h.baseUnit}
               {h.stockUnit && <div className="muted idm-eq">{stockEq(opening)}</div>}
             </td>
             <td />
@@ -443,14 +537,31 @@ function ItemDayMovements({
           {lines.length === 0 && (
             <tr>
               <td colSpan={4} className="muted">
-                No stock movement on this day.
+                No stock movement in this {mode}.{" "}
+                {lastActive && (
+                  <button type="button" className="link-btn" onClick={() => setAnchor(lastActive)}>
+                    Go to last activity ({fmtShort(lastActive)})
+                  </button>
+                )}
               </td>
             </tr>
           )}
           {lines.map((l) => (
-            <tr key={l.type}>
+            <tr key={l.kind}>
               <td>
-                {l.label} <span className="muted">· {l.count} {l.count === 1 ? "entry" : "entries"}</span>
+                {l.label}{" "}
+                <span className="muted">
+                  · {l.count} {l.count === 1 ? "entry" : "entries"}
+                </span>
+                {l.countedCount > 0 && (
+                  <div className="muted idm-eq">
+                    {l.kind === "waste"
+                      ? `includes ${l.countedCount} found at a stock count${l.reasons.length ? ` (${l.reasons.join(", ")})` : ""}`
+                      : l.reasons.length
+                        ? `reasons given: ${l.reasons.join(", ")}`
+                        : "no reason given"}
+                  </div>
+                )}
               </td>
               <td className="num">
                 {signed(l.qty)}
@@ -466,7 +577,7 @@ function ItemDayMovements({
           <tr className="idm-bal">
             <td>Closing on hand</td>
             <td className="num">
-              {parseFloat(closing.toFixed(2))} {h.baseUnit}
+              {num(closing)} {h.baseUnit}
               {h.stockUnit && <div className="muted idm-eq">{stockEq(closing)}</div>}
             </td>
             <td />
@@ -474,9 +585,50 @@ function ItemDayMovements({
           </tr>
         </tbody>
       </table>
-      {day === today && onHandNow !== undefined && Math.abs(onHandNow - closing) > 0.005 && (
+
+      {mode !== "day" && activeDays.length > 0 && (
+        <>
+          <div className="idm-sub">Day by day ({h.baseUnit})</div>
+          <div className="table-scroll">
+            <table className="tbl idm-table idm-days">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th className="num">Purchases</th>
+                  <th className="num">Sales</th>
+                  <th className="num">Waste</th>
+                  <th className="num">Count adj.</th>
+                  <th className="num">Other</th>
+                  <th className="num">Closing</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeDays.map((r) => (
+                  <tr key={r.d} className="clickable" title="Show just this day" onClick={() => { setMode("day"); setAnchor(r.d); }}>
+                    <td>{parseDay(r.d).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}</td>
+                    <td className="num">{cell(r.purchase, r.has("purchase"))}</td>
+                    <td className="num">{cell(r.sale, r.has("sale"))}</td>
+                    <td className="num">{cell(r.waste, r.has("waste"))}</td>
+                    <td className="num">{cell(r.count_adjust, r.has("count_adjust"))}</td>
+                    <td className="num">{cell(r.other, r.has("other"))}</td>
+                    <td className="num">
+                      <b>{num(r.closing)}</b>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {quietDays > 0 && (
+            <p className="muted idm-note">
+              {quietDays} day{quietDays === 1 ? "" : "s"} with no movement not shown.
+            </p>
+          )}
+        </>
+      )}
+      {to >= today && from <= today && onHandNow !== undefined && Math.abs(onHandNow - closing) > 0.005 && (
         <p className="muted idm-note">
-          The system currently shows {parseFloat(onHandNow.toFixed(2))} {h.baseUnit}; the difference is from movements recorded outside the list above.
+          The system currently shows {num(onHandNow)} {h.baseUnit}; the difference is from movements recorded outside the list above.
         </p>
       )}
     </div>
@@ -509,6 +661,9 @@ function LiveStockTab({
   // rtabs toggle above, same as Recipes' Dish/Sub-recipe split stays
   // outside its own FilterBar.
   const [liveStockFilters, setLiveStockFilters] = useState<FilterValues>({});
+  // Reason given on each count line, so a count shortfall tagged spoilage etc. can be shown as waste.
+  const countReasonByLine: Record<string, string | null> = {};
+  stockCounts.forEach((c) => c.lines.forEach((l) => (countReasonByLine[l.id] = l.reason)));
 
   const stockValue = holdings.reduce((sum, h) => sum + (onHand[h.id] ?? 0) * (cheapestPrice(h.itemId) ?? 0), 0);
   const belowPar = holdings.filter((h) => (onHand[h.id] ?? 0) < h.parLevel).length;
@@ -660,7 +815,13 @@ function LiveStockTab({
                       {expanded && (
                         <tr>
                           <td colSpan={6} style={{ background: "var(--bg)" }}>
-                            <ItemDayMovements holding={h} movements={rowMovements} onHandNow={oh} currency={currency} />
+                            <ItemMovementReview
+                              holding={h}
+                              movements={rowMovements}
+                              countReasonByLine={countReasonByLine}
+                              onHandNow={oh}
+                              currency={currency}
+                            />
                           </td>
                         </tr>
                       )}
