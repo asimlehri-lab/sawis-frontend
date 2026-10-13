@@ -157,7 +157,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I create a sub-recipe while building a dish?",
-        a: "In the purple Add a sub-recipe box on the recipe page, click + New sub-recipe. The New recipe box opens with A sub-recipe already chosen — give it a name and batch size and create it. You land on the new sub-recipe to add its ingredients; when you are done, use the link at the top to go back to the dish, where the sub-recipe is ready to add.",
+        a: "In the purple Add a sub-recipe box on the recipe page, click + New sub-recipe. The New recipe box opens with A sub-recipe already chosen — give it a name and batch size and create it. You land on the new sub-recipe to add its ingredients; when you are done, use the Back to (dish name) link at the top left, where the sub-recipe is ready to add.",
       },
       {
         q: "What can I put on the Print sheet?",

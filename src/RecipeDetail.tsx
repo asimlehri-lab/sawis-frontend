@@ -305,17 +305,20 @@ export default function RecipeDetail({
 
   return (
     <div>
-      <button className="back-link" onClick={onBack}>
-        ← All recipes
-      </button>
+      {returnTo && onReturn ? (
+        <button className="back-link" onClick={onReturn}>
+          ← Back to {returnTo.name}
+        </button>
+      ) : (
+        <button className="back-link" onClick={onBack}>
+          ← All recipes
+        </button>
+      )}
 
       {returnTo && (
         <p className="return-banner">
-          Building a sub-recipe for <b>{returnTo.name}</b>. Add its ingredients, then{" "}
-          <button type="button" className="link-btn" onClick={onReturn}>
-            go back to {returnTo.name}
-          </button>{" "}
-          to add it.
+          Building a sub-recipe for <b>{returnTo.name}</b>. Add its ingredients, then use “Back to {returnTo.name}” above
+          to add it to the dish.
         </p>
       )}
 
