@@ -182,7 +182,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "What can I filter by?",
-        a: "Items: Category, Supplier, Allergens, Allergen status, Status (Active or Archived — archived items show by default with an Archived badge; pick Active to hide them), Allergen review and Used in recipes (pick “Not used in any recipe” to find leftover or duplicate items). Recipes: Category, Item used, Food or drink, Status (Active or Archived), Cost vs target (On target, Over target, Well over target), Allergens and Allergen status. Live stock: Status (Below par or OK), Section and Category. Procurement: Supplier, Location and Item. Dish vs Sub-recipe, Department and PO status keep their own tabs above the list.",
+        a: "Items: Category, Supplier, Allergens, Allergen status, Status (Active or Archived — archived items show by default with an Archived badge; pick Active to hide them), Allergen review and Used in recipes (pick “Not used in any recipe” to find leftover or duplicate items). Recipes: Category, Item used, Food or drink, Status (Active or Archived), Cost vs target (On target, Over target, Well over target), Allergens and Allergen status. Live stock: Status (Below par or OK) and Category. Procurement: Supplier, Location and Item. Dish vs Sub-recipe, Department and PO status keep their own tabs above the list.",
       },
       {
         q: "How do several filters combine?",
@@ -320,7 +320,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     questions: [
       {
         q: "How do I see current stock levels?",
-        a: "Go to Inventory in the sidebar — it opens on the Live stock tab, showing on-hand quantities by department, calculated from every stock movement recorded so far. (The other two tabs on that page are Count sheets and Manage sections.)",
+        a: "Go to Inventory in the sidebar — it opens on the Live stock tab, showing on-hand quantities by department, calculated from every stock movement recorded so far. Click an item to see how it moved on any day: opening stock, purchases received, sales (one line), waste (its own line), count adjustments, and closing stock, with unit cost and cost. Use the arrows or the date box to change the day. Live stock does not show sections; those are only used when counting. (The other two tabs on that page are Count sheets and Manage sections.)",
       },
       {
         q: "How do I do a stock count?",

@@ -344,6 +344,145 @@ export default function Inventory({
 // Live stock
 // ---------------------------------------------------------------------------
 
+// One item's stock movement for a chosen day: opening on hand, one line per
+// kind of movement (all sales as a single line, waste on its own line, and so
+// on), then closing on hand. Worked out from the ledger rows already loaded,
+// so nothing extra is fetched.
+const MOVEMENT_LINES: { type: string; label: string }[] = [
+  { type: "purchase", label: "Purchases received" },
+  { type: "sale", label: "Sales" },
+  { type: "waste", label: "Waste" },
+  { type: "count_adjust", label: "Count adjustments" },
+  { type: "po_reopen", label: "Purchases reversed (order reopened)" },
+  { type: "transfer", label: "Transfers" },
+];
+
+function localDay(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function shiftDay(day: string, by: number): string {
+  const [y, m, d] = day.split("-").map(Number);
+  return localDay(new Date(y, m - 1, d + by));
+}
+
+function ItemDayMovements({
+  holding: h,
+  movements,
+  onHandNow,
+  currency,
+}: {
+  holding: FlatHolding;
+  movements: StockMovementRow[];
+  onHandNow: number | undefined;
+  currency?: string;
+}) {
+  const today = localDay(new Date());
+  const [day, setDay] = useState(today);
+  const dayOf = (m: StockMovementRow) => localDay(new Date(m.occurred_at));
+
+  const opening = movements.filter((m) => dayOf(m) < day).reduce((sum, m) => sum + Number(m.qty_delta), 0);
+  const todays = movements.filter((m) => dayOf(m) === day);
+  const lines = MOVEMENT_LINES.map((l) => {
+    const rows = todays.filter((m) => m.movement_type === l.type);
+    const qty = rows.reduce((sum, m) => sum + Number(m.qty_delta), 0);
+    const cost = rows.reduce((sum, m) => sum + Number(m.qty_delta) * Number(m.unit_cost), 0);
+    return { ...l, count: rows.length, qty, cost, unitCost: qty !== 0 ? cost / qty : rows.length ? Number(rows[0].unit_cost) : 0 };
+  }).filter((l) => l.count > 0);
+  const closing = opening + lines.reduce((sum, l) => sum + l.qty, 0);
+  const lastActive = movements.map(dayOf).sort().pop();
+
+  const signed = (n: number) => `${n > 0 ? "+" : n < 0 ? "−" : ""}${parseFloat(Math.abs(n).toFixed(2))} ${h.baseUnit}`;
+  const stockEq = (n: number) => (h.stockUnit ? inStockUnit(h, Math.abs(n)) : "");
+  const dayLabel = new Date(day + "T12:00:00").toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+
+  return (
+    <div className="idm">
+      <div className="idm-head">
+        <b>{h.itemName}</b>
+        <span className="muted"> — movement on</span>
+        <button type="button" className="mini" onClick={() => setDay(shiftDay(day, -1))} aria-label="Previous day">
+          ‹
+        </button>
+        <input type="date" value={day} max={today} onChange={(e) => e.target.value && setDay(e.target.value)} />
+        <button type="button" className="mini" disabled={day >= today} onClick={() => setDay(shiftDay(day, 1))} aria-label="Next day">
+          ›
+        </button>
+        {day !== today && (
+          <button type="button" className="link-btn" onClick={() => setDay(today)}>
+            Today
+          </button>
+        )}
+        {lastActive && lastActive !== day && (
+          <button type="button" className="link-btn" onClick={() => setDay(lastActive)}>
+            Last activity ({new Date(lastActive + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })})
+          </button>
+        )}
+      </div>
+      <div className="muted idm-day">{dayLabel}</div>
+      <table className="tbl idm-table">
+        <thead>
+          <tr>
+            <th>Movement</th>
+            <th className="num">Quantity</th>
+            <th className="num">Unit cost</th>
+            <th className="num">Cost</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr className="idm-bal">
+            <td>Opening on hand</td>
+            <td className="num">
+              {parseFloat(opening.toFixed(2))} {h.baseUnit}
+              {h.stockUnit && <div className="muted idm-eq">{stockEq(opening)}</div>}
+            </td>
+            <td />
+            <td />
+          </tr>
+          {lines.length === 0 && (
+            <tr>
+              <td colSpan={4} className="muted">
+                No stock movement on this day.
+              </td>
+            </tr>
+          )}
+          {lines.map((l) => (
+            <tr key={l.type}>
+              <td>
+                {l.label} <span className="muted">· {l.count} {l.count === 1 ? "entry" : "entries"}</span>
+              </td>
+              <td className="num">
+                {signed(l.qty)}
+                {h.stockUnit && <div className="muted idm-eq">{stockEq(l.qty)}</div>}
+              </td>
+              <td className="num">{formatMoney(Math.abs(l.unitCost), currency)}</td>
+              <td className="num">
+                {l.cost < 0 ? "−" : ""}
+                {formatMoney(Math.abs(l.cost), currency)}
+              </td>
+            </tr>
+          ))}
+          <tr className="idm-bal">
+            <td>Closing on hand</td>
+            <td className="num">
+              {parseFloat(closing.toFixed(2))} {h.baseUnit}
+              {h.stockUnit && <div className="muted idm-eq">{stockEq(closing)}</div>}
+            </td>
+            <td />
+            <td />
+          </tr>
+        </tbody>
+      </table>
+      {day === today && onHandNow !== undefined && Math.abs(onHandNow - closing) > 0.005 && (
+        <p className="muted idm-note">
+          The system currently shows {parseFloat(onHandNow.toFixed(2))} {h.baseUnit}; the difference is from movements recorded outside the list above.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function LiveStockTab({
   holdings,
   onHand,
@@ -379,17 +518,10 @@ function LiveStockTab({
     .sort((a, b) => (b.counted_at ?? "").localeCompare(a.counted_at ?? ""))[0];
   const openCount = countsHere.find((c) => c.status === "open");
 
-  // Section/category options are the distinct values actually present on
-  // this location's holdings (same "recomputed on every render, not worth
-  // memoizing" convention as recipeMenuCategoryOptions in App.tsx), with an
-  // explicit "" value standing in for "no section"/"no category" so a
-  // holding that isn't assigned one is still filterable rather than
-  // silently excluded from every facet option.
-  const sectionOptionsMap = new Map<string, string>();
-  holdings.forEach((h) => sectionOptionsMap.set(h.section ?? "", h.sectionName ?? "No section"));
-  const sectionOptions = Array.from(sectionOptionsMap, ([value, label]) => ({ value, label })).sort((a, b) =>
-    a.value === "" ? 1 : b.value === "" ? -1 : a.label.localeCompare(b.label)
-  );
+  // Category options are the distinct values actually present on this
+  // location's holdings, with an explicit "" value standing in for "no
+  // category" so an uncategorised holding is still filterable. Live stock
+  // deliberately has no section column or filter -- sections are for counting.
   const categoryOptionsMap = new Map<string, string>();
   holdings.forEach((h) => categoryOptionsMap.set(h.category ?? "", h.categoryName ?? "No category"));
   const categoryOptions = Array.from(categoryOptionsMap, ([value, label]) => ({ value, label })).sort((a, b) =>
@@ -404,7 +536,6 @@ function LiveStockTab({
         { value: "ok", label: "OK" },
       ],
     },
-    { key: "section", label: "Section", options: sectionOptions },
     { key: "category", label: "Category", options: categoryOptions },
   ];
 
@@ -416,8 +547,6 @@ function LiveStockTab({
       const isLow = onHand[h.id] !== undefined && onHand[h.id]! < h.parLevel;
       if (!statusSel.includes(isLow ? "low" : "ok")) return false;
     }
-    const sectionSel = liveStockFilters.section ?? null;
-    if (sectionSel !== null && !sectionSel.includes(h.section ?? "")) return false;
     const categorySel = liveStockFilters.category ?? null;
     if (categorySel !== null && !categorySel.includes(h.category ?? "")) return false;
     return true;
@@ -493,7 +622,6 @@ function LiveStockTab({
                 <tr>
                   <th>Item</th>
                   <th>Department</th>
-                  <th>Section</th>
                   <th className="num">On hand</th>
                   <th className="num">Par</th>
                   <th>Status</th>
@@ -505,17 +633,16 @@ function LiveStockTab({
                   const oh = onHand[h.id];
                   const low = oh !== undefined && oh < h.parLevel;
                   const expanded = expandedId === h.id;
-                  const rowMovements = stockMovements
-                    .filter((m) => m.item === h.itemId && m.location === activeLocation && m.department === h.department)
-                    .slice()
-                    .sort((a, b) => b.occurred_at.localeCompare(a.occurred_at))
-                    .slice(0, 10);
+                  const rowMovements = expanded
+                    ? stockMovements.filter(
+                        (m) => m.item === h.itemId && m.location === activeLocation && m.department === h.department
+                      )
+                    : [];
                   return (
                     <Fragment key={h.id}>
                       <tr className="clickable" onClick={() => setExpandedId(expanded ? null : h.id)}>
                         <td>{h.itemName}</td>
                         <td className="muted">{deptLabel(h.department)}</td>
-                        <td className="muted">{h.sectionName ?? "—"}</td>
                         <td className="num">
                           {oh === undefined ? "…" : oh.toFixed(2)} {h.baseUnit}
                           {oh !== undefined && h.stockUnit && (
@@ -532,40 +659,8 @@ function LiveStockTab({
                       </tr>
                       {expanded && (
                         <tr>
-                          <td colSpan={7} style={{ background: "var(--bg)" }}>
-                            {rowMovements.length === 0 && (
-                              <p className="muted" style={{ margin: "8px 4px" }}>
-                                No ledger activity recorded yet.
-                              </p>
-                            )}
-                            {rowMovements.length > 0 && (
-                              <div className="table-scroll">
-                                <table className="tbl" style={{ margin: "6px 0" }}>
-                                  <thead>
-                                    <tr>
-                                      <th>When</th>
-                                      <th>Type</th>
-                                      <th className="num">Qty</th>
-                                      <th className="num">Unit cost</th>
-                                      <th>Source</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {rowMovements.map((m) => (
-                                      <tr key={m.id}>
-                                        <td className="muted">
-                                          {new Date(m.occurred_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
-                                        </td>
-                                        <td>{m.movement_type}</td>
-                                        <td className="num">{Number(m.qty_delta) > 0 ? "+" : ""}{Number(m.qty_delta).toFixed(2)}</td>
-                                        <td className="num">{formatMoney(Number(m.unit_cost), currency)}</td>
-                                        <td className="muted">{m.source_type}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                            )}
+                          <td colSpan={6} style={{ background: "var(--bg)" }}>
+                            <ItemDayMovements holding={h} movements={rowMovements} onHandNow={oh} currency={currency} />
                           </td>
                         </tr>
                       )}
@@ -612,7 +707,6 @@ function LiveStockTab({
                   <thead>
                     <tr>
                       <th>Item</th>
-                      <th>Section</th>
                       <th>On hand</th>
                       <th>Par</th>
                       <th>Status</th>
@@ -626,7 +720,6 @@ function LiveStockTab({
                       return (
                         <tr key={h.id}>
                           <td>{h.itemName}</td>
-                          <td>{h.sectionName ?? "—"}</td>
                           <td>
                             {oh.toFixed(2)} {h.baseUnit}
                           </td>
@@ -639,7 +732,7 @@ function LiveStockTab({
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colSpan={5}>
+                      <td colSpan={4}>
                         <b>Department subtotal</b>
                       </td>
                       <td>

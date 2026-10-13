@@ -3106,4 +3106,15 @@ input[type="file"] {
 }
 .count-row .note-show { padding-left: 42px; }
 .count-row .note-panel { margin-left: 42px; }
+/* Live stock: one item's movement for a chosen day */
+.idm { padding: 10px 6px 14px; }
+.idm .muted { margin: 0; }
+.idm-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 14px; }
+.idm-head input[type="date"] { font-family: inherit; font-size: 13px; border: 1px solid var(--border); border-radius: 8px; padding: 5px 8px; background: var(--surface); color: var(--ink); }
+.idm-head .link-btn { margin: 0; }
+.idm-day { margin: 4px 0 8px; font-size: 12.5px; }
+.idm-table { background: var(--surface); border-radius: 10px; margin: 0; }
+.idm-bal td { font-weight: 700; background: var(--bg); }
+.idm-eq { font-size: 11.5px; font-weight: 400; }
+.idm-note { margin: 8px 0 0; font-size: 12px; }
 
