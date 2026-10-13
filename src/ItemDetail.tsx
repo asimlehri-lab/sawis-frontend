@@ -188,7 +188,6 @@ export default function ItemDetail({
   const [showAddHolding, setShowAddHolding] = useState(false);
   const [newLocation, setNewLocation] = useState("");
   const [newDept, setNewDept] = useState(DEPARTMENTS[0].value);
-  const [newSection, setNewSection] = useState("");
   const [newPar, setNewPar] = useState("0");
   const [savingHolding, setSavingHolding] = useState(false);
   const [holdingError, setHoldingError] = useState<string | null>(null);
@@ -438,11 +437,9 @@ export default function ItemDetail({
         item: item.id,
         location: newLocation,
         department: newDept,
-        section: newSection || null,
         par_level: newPar,
       });
       setShowAddHolding(false);
-      setNewSection("");
       setNewPar("0");
       reload();
     } catch (err) {
@@ -603,18 +600,6 @@ export default function ItemDetail({
       onChanged();
     } catch (err) {
       setUnitErr(err instanceof Error ? err.message : "Could not remove the stock unit.");
-    }
-  }
-
-  // Which stock unit a department/section counts in (null = base unit only).
-  async function handleHoldingUnit(holdingId: string, unitId: string) {
-    setUnitErr(null);
-    try {
-      await updateItemHolding(accessToken, holdingId, { stock_unit: unitId || null });
-      reload();
-      onChanged();
-    } catch (err) {
-      setUnitErr(err instanceof Error ? err.message : "Could not save.");
     }
   }
 
@@ -1067,8 +1052,7 @@ export default function ItemDetail({
             <thead>
               <tr>
                 <th>Department</th>
-                <th>Section</th>
-                <th>Counted in</th>
+                <th>Kept in</th>
                 <th className="num">Par level</th>
                 <th className="num">On hand</th>
                 <th>Status</th>
@@ -1078,7 +1062,7 @@ export default function ItemDetail({
             <tbody>
               {item.holdings.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="muted empty-row">
+                  <td colSpan={6} className="muted empty-row">
                     Not stocked anywhere yet — add a department below.
                   </td>
                 </tr>
@@ -1091,21 +1075,18 @@ export default function ItemDetail({
                     <td className="dispname">
                       {DEPARTMENTS.find((d) => d.value === h.department)?.label ?? h.department}
                     </td>
-                    <td className="muted">{h.section_name ?? "Unassigned"}</td>
-                    <td>
-                      <select
-                        className="su-pick"
-                        value={h.stock_unit ?? ""}
-                        onChange={(e) => handleHoldingUnit(h.id, e.target.value)}
-                        aria-label="Counted in"
-                      >
-                        <option value="">{item.base_unit} only</option>
-                        {item.stock_units.map((u) => (
-                          <option key={u.id} value={u.id}>
-                            {u.name} ({tidy(Number(u.qty))} {item.base_unit})
-                          </option>
-                        ))}
-                      </select>
+                    <td className="kept-in">
+                      {h.placements.length === 0 && <span className="muted">Not in a section</span>}
+                      {h.placements.map((p) => (
+                        <div key={p.id}>
+                          {p.section_name}
+                          <span className="muted">
+                            {" "}
+                            · counted in {p.stock_unit_name ?? item.base_unit}
+                            {p.max_qty !== null ? ` · most that fits ${tidy(Number(p.max_qty))} ${item.base_unit}` : ""}
+                          </span>
+                        </div>
+                      ))}
                     </td>
                     <td className="num">
                       <input

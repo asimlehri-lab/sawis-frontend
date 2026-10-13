@@ -3053,7 +3053,7 @@ input[type="file"] {
 .il-selected { max-height: min(34vh, 300px); }
 .il-others { max-height: min(38vh, 380px); }
 .il-title { position: sticky; top: 0; z-index: 1; padding: 8px 12px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.4px; text-transform: uppercase; color: var(--muted); background: var(--bg); border-bottom: 1px solid var(--border); }
-.il-head, .il-row { display: grid; grid-template-columns: 26px minmax(0, 1fr) 120px minmax(0, 250px); align-items: center; gap: 10px; padding: 7px 12px; }
+.il-head, .il-row { display: grid; grid-template-columns: 26px minmax(0, 1fr) 110px minmax(0, 220px) 100px; align-items: center; gap: 10px; padding: 7px 12px; }
 .il-head { position: sticky; top: 33px; z-index: 1; background: var(--surface); font-size: 11px; font-weight: 600; letter-spacing: 0.3px; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); padding-top: 5px; padding-bottom: 5px; }
 .il-row { border-bottom: 1px solid var(--border); font-size: 13.5px; }
 .il-row:last-child { border-bottom: none; }
@@ -3061,6 +3061,8 @@ input[type="file"] {
 .il-row input[type="checkbox"] { margin: 0; width: auto; }
 .il-name { cursor: pointer; font-weight: 600; overflow-wrap: anywhere; text-transform: none; letter-spacing: 0; }
 .il-dept { font-size: 12.5px; margin: 0; }
+.il-also { font-weight: 400; font-size: 12px; margin: 0; }
+.il-max input { width: 100%; font-family: inherit; font-size: 12.5px; border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; background: var(--surface); color: var(--ink); }
 .il-empty { margin: 0; padding: 12px; font-size: 12.5px; }
 .il-unit .link-btn { margin: 0; font-size: 12.5px; }
 @media (max-width: 640px) {
@@ -3068,12 +3070,15 @@ input[type="file"] {
   .il-row { grid-template-columns: 26px minmax(0, 1fr); }
   .il-dept { display: none; }
   .il-unit { grid-column: 2; }
+  .il-max { grid-column: 2; }
 }
 .sections-modal .item-checklist-toolbar { flex-wrap: nowrap; margin: 6px 0 0; }
 .sections-modal .item-checklist-search { width: auto; flex: 1 1 200px; min-width: 0; }
 .sections-modal .item-checklist-category { width: auto; flex: 0 0 auto; max-width: 200px; }
 .sections-modal .item-checklist-toolbar .btn-ghost { white-space: nowrap; flex: 0 0 auto; }
 .il-row { min-height: 38px; }
+.kept-in div { line-height: 1.45; }
+.cr-sys-sub { font-size: 12px; max-width: 360px; }
 .il-unit .item-check-unit { padding: 4px 8px; }
 @media (max-width: 640px) { .sections-modal .item-checklist-toolbar { flex-wrap: wrap; } }
 /* Count sheet row: tick | item + what the system says | count box(es) | difference | note */

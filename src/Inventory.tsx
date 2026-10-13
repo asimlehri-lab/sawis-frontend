@@ -5,9 +5,11 @@ import type { FilterFacet, FilterValues } from "./FilterBar";
 import {
   createCountAssignment,
   createCountLine,
+  createHoldingSection,
   createSection,
   createStockCount,
   createStockMovement,
+  deleteHoldingSection,
   deleteSection,
   fetchOnHand,
   fetchPurchaseOrders,
@@ -15,7 +17,7 @@ import {
   markSectionCounted,
   scanCountSheet,
   updateCountAssignment,
-  updateItemHolding,
+  updateHoldingSection,
   updateSection,
   updateStockCount,
 } from "./api";
@@ -145,11 +147,31 @@ function cleanNumeric(raw: string | null): string {
   return cleaned;
 }
 
+// One place an item is kept: a section, the stock unit that section counts it
+// in, and an optional maximum (base unit) that only warns on a count sheet.
+interface FlatPlacement {
+  id: string;
+  section: string;
+  sectionName: string;
+  stockUnitId: string;
+  stockUnit: string;
+  stockUnitQty: number | null;
+  maxQty: number | null;
+}
+
+// An item at this location and department. `placements` lists every section it
+// sits in. The section fields below are only filled in by holdingsInSection(),
+// which gives the view of the item from inside one section (that section's
+// unit and maximum); on Live stock they stay empty and stockUnit is only set
+// when every section counts the item in the same unit.
 interface FlatHolding {
   id: string;
   itemId: string;
   itemName: string;
   baseUnit: string;
+  placements: FlatPlacement[];
+  placementId: string;
+  maxQty: number | null;
   // The stock unit this section counts this item in (chosen in Manage sections),
   // e.g. bag = 1000 g. Counts can be typed in either unit but are saved in baseUnit.
   stockUnitId: string;
@@ -163,6 +185,26 @@ interface FlatHolding {
   parLevel: number;
   category: string | null;
   categoryName: string | null;
+}
+
+// The items kept in one section, each seen from inside that section.
+function holdingsInSection(holdings: FlatHolding[], sectionId: string): FlatHolding[] {
+  return holdings.flatMap((h) => {
+    const p = h.placements.find((x) => x.section === sectionId);
+    if (!p) return [];
+    return [
+      {
+        ...h,
+        section: sectionId,
+        sectionName: p.sectionName,
+        placementId: p.id,
+        maxQty: p.maxQty,
+        stockUnitId: p.stockUnitId,
+        stockUnit: p.stockUnit,
+        stockUnitQty: p.stockUnitQty,
+      },
+    ];
+  });
 }
 
 // "2.5 bag" for a base-unit quantity, or "" when the item has no stock unit.
@@ -202,22 +244,39 @@ export default function Inventory({
   const holdingsAtLocation: FlatHolding[] = activeItems.flatMap((it) =>
     it.holdings
       .filter((h) => h.location === activeLocation)
-      .map((h) => ({
-        id: h.id,
-        itemId: it.id,
-        itemName: it.name,
-        baseUnit: it.base_unit,
-        stockUnitId: h.stock_unit ?? "",
-        stockUnit: h.stock_unit_name ?? "",
-        stockUnitQty: h.stock_unit && h.stock_unit_qty ? Number(h.stock_unit_qty) : null,
-        itemStockUnits: it.stock_units,
-        department: h.department as "kitchen" | "bar" | "foh",
-        section: h.section,
-        sectionName: h.section_name,
-        parLevel: Number(h.par_level),
-        category: it.category,
-        categoryName: it.category_name,
-      }))
+      .map((h) => {
+        const placements: FlatPlacement[] = h.placements.map((p) => ({
+          id: p.id,
+          section: p.section,
+          sectionName: p.section_name,
+          stockUnitId: p.stock_unit ?? "",
+          stockUnit: p.stock_unit_name ?? "",
+          stockUnitQty: p.stock_unit && p.stock_unit_qty ? Number(p.stock_unit_qty) : null,
+          maxQty: p.max_qty !== null ? Number(p.max_qty) : null,
+        }));
+        // A single stock-unit hint for the whole item, only when every section counts it in the same unit.
+        const unitIds = new Set(placements.map((p) => p.stockUnitId));
+        const shared = placements.length > 0 && unitIds.size === 1 ? placements[0] : null;
+        return {
+          id: h.id,
+          itemId: it.id,
+          itemName: it.name,
+          baseUnit: it.base_unit,
+          placements,
+          placementId: "",
+          maxQty: null,
+          stockUnitId: shared?.stockUnitId ?? "",
+          stockUnit: shared?.stockUnit ?? "",
+          stockUnitQty: shared?.stockUnitQty ?? null,
+          itemStockUnits: it.stock_units,
+          department: h.department as "kitchen" | "bar" | "foh",
+          section: null,
+          sectionName: null,
+          parLevel: Number(h.par_level),
+          category: it.category,
+          categoryName: it.category_name,
+        };
+      })
   );
 
   useEffect(() => {
@@ -1010,6 +1069,8 @@ function SectionsTab({
   const [modalChecked, setModalChecked] = useState<Record<string, boolean>>({});
   // Stock unit chosen per ticked item in this section ('' = base unit only); a missing key keeps what is saved.
   const [modalUnit, setModalUnit] = useState<Record<string, string>>({});
+  // Maximum typed per ticked item ('' = no limit); a missing key keeps what is saved.
+  const [modalMax, setModalMax] = useState<Record<string, string>>({});
   const [modalCadence, setModalCadence] = useState<"weekly" | "monthly" | null>(null);
   const [modalDueDate, setModalDueDate] = useState("");
   const [saving, setSaving] = useState(false);
@@ -1023,6 +1084,7 @@ function SectionsTab({
     setModalName("");
     setModalChecked({});
     setModalUnit({});
+    setModalMax({});
     setModalCadence(null);
     setModalDueDate("");
     setErr(null);
@@ -1035,8 +1097,9 @@ function SectionsTab({
   function openEdit(s: Section) {
     setEditing(s);
     setModalName(s.name);
-    setModalChecked(Object.fromEntries(holdings.filter((h) => h.section === s.id).map((h) => [h.id, true])));
+    setModalChecked(Object.fromEntries(holdingsInSection(holdings, s.id).map((h) => [h.id, true])));
     setModalUnit({});
+    setModalMax({});
     setModalCadence(s.count_cadence);
     setModalDueDate(s.next_count_due ?? "");
     setErr(null);
@@ -1064,6 +1127,14 @@ function SectionsTab({
     setSaving(true);
     setErr(null);
     try {
+      // Check the typed maximums before anything is saved, so a typo can't leave a half-saved section.
+      for (const h of holdings) {
+        if (!modalChecked[h.id]) continue;
+        const text = (modalMax[h.id] ?? "").trim();
+        if (text !== "" && !(Number.isFinite(Number(text)) && Number(text) >= 0)) {
+          throw new Error(`The maximum for ${h.itemName} must be a number, or left blank for no limit.`);
+        }
+      }
       const schedule = {
         count_cadence: modalCadence,
         next_count_due: modalCadence ? modalDueDate || new Date().toISOString().slice(0, 10) : null,
@@ -1072,15 +1143,25 @@ function SectionsTab({
         ? (await updateSection(accessToken, editing.id, { name: modalName.trim(), ...schedule })).id
         : (await createSection(accessToken, { location: activeLocation, name: modalName.trim(), ...schedule })).id;
 
-      const changes: [FlatHolding, { section?: string | null; stock_unit?: string | null }][] = [];
+      // An item can sit in several sections, so ticking adds it to this one
+      // (it is never moved out of another) and un-ticking removes only this one.
+      const jobs: Promise<unknown>[] = [];
       for (const h of holdings) {
         const inSection = !!modalChecked[h.id];
-        const patch: { section?: string | null; stock_unit?: string | null } = {};
-        if ((h.section === sectionId) !== inSection) patch.section = inSection ? sectionId : null;
-        if (inSection && (modalUnit[h.id] ?? h.stockUnitId) !== h.stockUnitId) patch.stock_unit = modalUnit[h.id] || null;
-        if (Object.keys(patch).length) changes.push([h, patch]);
+        const p = h.placements.find((x) => x.section === sectionId);
+        const unit = modalUnit[h.id] ?? p?.stockUnitId ?? "";
+        const savedMax = p?.maxQty != null ? String(p.maxQty) : "";
+        const maxText = (modalMax[h.id] ?? savedMax).trim();
+        const max = maxText === "" ? null : maxText;
+        if (inSection && !p) {
+          jobs.push(createHoldingSection(accessToken, { holding: h.id, section: sectionId, stock_unit: unit || null, max_qty: max }));
+        } else if (!inSection && p) {
+          jobs.push(deleteHoldingSection(accessToken, p.id));
+        } else if (inSection && p && (unit !== p.stockUnitId || maxText !== savedMax)) {
+          jobs.push(updateHoldingSection(accessToken, p.id, { stock_unit: unit || null, max_qty: max }));
+        }
       }
-      await Promise.all(changes.map(([h, patch]) => updateItemHolding(accessToken, h.id, patch)));
+      await Promise.all(jobs);
 
       setModalOpen(false);
       onSectionsChanged();
@@ -1126,6 +1207,8 @@ function SectionsTab({
   const otherVisible = visibleHoldings.filter((h) => !modalChecked[h.id]).sort(byName);
 
   function renderItemRow(h: FlatHolding, selected: boolean) {
+    const here = editing ? h.placements.find((x) => x.section === editing.id) : undefined;
+    const elsewhere = h.placements.filter((x) => x.section !== editing?.id).map((x) => x.sectionName);
     return (
       <div key={h.id} className={`il-row ${selected ? "on" : ""}`}>
         <input
@@ -1136,6 +1219,7 @@ function SectionsTab({
         />
         <span className="il-name" onClick={() => setModalChecked((c) => ({ ...c, [h.id]: !selected }))}>
           {h.itemName}
+          {elsewhere.length > 0 && <span className="muted il-also"> also in {elsewhere.join(", ")}</span>}
         </span>
         <span className="muted il-dept">{deptLabel(h.department)}</span>
         <span className="il-unit">
@@ -1145,7 +1229,7 @@ function SectionsTab({
                 className="item-check-unit"
                 aria-label={`Count ${h.itemName} in`}
                 title="Which unit this section counts it in"
-                value={modalUnit[h.id] ?? h.stockUnitId}
+                value={modalUnit[h.id] ?? here?.stockUnitId ?? ""}
                 onChange={(e) => setModalUnit((m) => ({ ...m, [h.id]: e.target.value }))}
               >
                 <option value="">{h.baseUnit} only</option>
@@ -1162,6 +1246,20 @@ function SectionsTab({
                 </button>
               )
             ))}
+        </span>
+        <span className="il-max">
+          {selected && (
+            <input
+              type="number"
+              min="0"
+              step="any"
+              placeholder="no limit"
+              aria-label={`Most ${h.itemName} that fits in this section, in ${h.baseUnit}`}
+              title={`The most that fits in this section (${h.baseUnit}). Leave blank for no limit. Counts above it show a warning, never a block.`}
+              value={modalMax[h.id] ?? (here?.maxQty != null ? String(here.maxQty) : "")}
+              onChange={(e) => setModalMax((m) => ({ ...m, [h.id]: e.target.value }))}
+            />
+          )}
         </span>
       </div>
     );
@@ -1202,7 +1300,7 @@ function SectionsTab({
 
       <div className="section-grid">
         {sections.map((s) => {
-          const itemsInSection = holdings.filter((h) => h.section === s.id);
+          const itemsInSection = holdingsInSection(holdings, s.id);
           const icon = sectionIcon(s.name);
           return (
             <div className="card section-card" key={s.id}>
@@ -1319,6 +1417,7 @@ function SectionsTab({
                       <span>Item</span>
                       <span>Department</span>
                       <span>Counted in</span>
+                      <span>Most that fits</span>
                     </div>
                     {selectedVisible.length === 0 && (
                       <p className="muted il-empty">
@@ -1466,7 +1565,8 @@ function CountSheetsTab({
         accessToken={accessToken}
         count={openCount}
         section={openSection}
-        holdings={holdings.filter((h) => h.section === openSection.id)}
+        holdings={holdingsInSection(holdings, openSection.id)}
+        allCounts={(stockCounts ?? []).filter((c) => c.location === activeLocation)}
         onHand={onHand}
         cheapestPrice={cheapestPrice}
         onBack={() => setOpenSectionId(null)}
@@ -1479,7 +1579,7 @@ function CountSheetsTab({
     );
   }
 
-  const sectionsWithItems = sections.filter((s) => holdings.some((h) => h.section === s.id));
+  const sectionsWithItems = sections.filter((s) => holdings.some((h) => h.placements.some((p) => p.section === s.id)));
 
   return (
     <>
@@ -1501,7 +1601,7 @@ function CountSheetsTab({
           below. Hidden on screen, shown only by @media print (App.css). */}
       <div className="print-only">
         {sectionsWithItems.map((s, i) => {
-          const sectionHoldings = holdings.filter((h) => h.section === s.id);
+          const sectionHoldings = holdingsInSection(holdings, s.id);
           return (
             <div key={s.id} className={`print-sheet-page ${i === sectionsWithItems.length - 1 ? "last" : ""}`}>
               <h1>{s.name} — Count sheet</h1>
@@ -1539,9 +1639,10 @@ function CountSheetsTab({
       {sections.length === 0 && <p className="muted">No sections set up yet — add some under "Manage sections" first.</p>}
       <div className="section-grid">
         {sections.map((s) => {
-          const sectionHoldings = holdings.filter((h) => h.section === s.id);
+          const sectionHoldings = holdingsInSection(holdings, s.id);
           const itemIds = Array.from(new Set(sectionHoldings.map((h) => h.itemId)));
-          const countedIds = new Set(openCount.lines.map((l) => l.item));
+          // Counted in THIS section (older counts did not record a section; those count for every section).
+          const countedIds = new Set(openCount.lines.filter((l) => l.section === s.id || l.section === null).map((l) => l.item));
           const doneCount = itemIds.filter((id) => countedIds.has(id)).length;
           const pct = itemIds.length ? Math.round((doneCount / itemIds.length) * 100) : 0;
           const assignment = openCount.assignments.find((a) => a.section === s.id);
@@ -1646,6 +1747,7 @@ function CountSheet({
   count,
   section,
   holdings,
+  allCounts,
   onHand,
   cheapestPrice,
   onBack,
@@ -1656,6 +1758,7 @@ function CountSheet({
   count: StockCountRow;
   section: Section;
   holdings: FlatHolding[];
+  allCounts: StockCountRow[];
   onHand: Record<string, number>;
   cheapestPrice: (itemId: string) => number | null;
   onBack: () => void;
@@ -1709,7 +1812,8 @@ function CountSheet({
         // checked/qty state the manual table already uses, so every row
         // still passes through the counter's own review before Submit.
         newChecked[best.h.id] = true;
-        newQty[best.h.id] = cleanNumeric(row.qty_text) || (onHand[best.h.id] ?? 0).toFixed(2);
+        const expectedScan = expectedHere(best.h);
+        newQty[best.h.id] = cleanNumeric(row.qty_text) || (expectedScan === null ? "" : Math.max(0, expectedScan).toFixed(2));
         newConfidence[best.h.id] = row.confidence;
       }
 
@@ -1724,12 +1828,47 @@ function CountSheet({
     }
   }
 
+  // An item can sit in several sections, and its total on hand is the latest
+  // count of each section added up. So what this section is expected to hold is
+  // the system's total less what the OTHER sections last counted. An item in a
+  // single section is simply compared with its total. If another section has
+  // never been counted, the split is unknown: the count is saved but the total
+  // is not adjusted until that section has been counted too.
+  const latestCount: Record<string, { qty: number; at: string }> = {};
+  allCounts.forEach((c) =>
+    c.lines.forEach((l) => {
+      if (!l.section) return;
+      const key = `${l.item}|${l.section}`;
+      if (!latestCount[key] || l.created_at > latestCount[key].at) latestCount[key] = { qty: Number(l.counted_qty), at: l.created_at };
+    })
+  );
+  function otherSections(h: FlatHolding) {
+    const known: { name: string; qty: number; at: string }[] = [];
+    const unknown: string[] = [];
+    h.placements
+      .filter((p) => p.section !== section.id)
+      .forEach((p) => {
+        const last = latestCount[`${h.itemId}|${p.section}`];
+        if (last) known.push({ name: p.sectionName, qty: last.qty, at: last.at });
+        else unknown.push(p.sectionName);
+      });
+    return { known, unknown, sum: known.reduce((t, k) => t + k.qty, 0) };
+  }
+  // What the system expects in this section, or null when another section has never been counted.
+  function expectedHere(h: FlatHolding): number | null {
+    const o = otherSections(h);
+    if (o.unknown.length > 0) return null;
+    return (onHand[h.id] ?? 0) - o.sum;
+  }
+  const shortDate = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+
   function variance(h: FlatHolding): number | null {
     const q = qty[h.id];
     if (!checked[h.id] || q === undefined || q === "") return null;
     const num = Number(q);
     if (!Number.isFinite(num)) return null;
-    return num - (onHand[h.id] ?? 0);
+    const expected = expectedHere(h);
+    return expected === null ? null : num - expected;
   }
 
   // A checked row that can't actually be saved -- empty, not a number, or
@@ -1776,7 +1915,8 @@ function CountSheet({
     if (isChecked) {
       // Prefill with the expected quantity — most items will match, so the
       // counter only has to touch items that actually differ.
-      setQty((q) => ({ ...q, [h.id]: (onHand[h.id] ?? 0).toFixed(2) }));
+      const expected = expectedHere(h);
+      setQty((q) => ({ ...q, [h.id]: expected === null ? "" : Math.max(0, expected).toFixed(2) }));
     } else {
       setQty((q) => ({ ...q, [h.id]: "" }));
       if (openNoteId === h.id) setOpenNoteId(null);
@@ -1795,7 +1935,8 @@ function CountSheet({
       return rest;
     });
     const num = Number(value);
-    const off = value !== "" && Number.isFinite(num) && Math.abs(num - (onHand[h.id] ?? 0)) > 0.001;
+    const expectedNow = expectedHere(h);
+    const off = value !== "" && Number.isFinite(num) && expectedNow !== null && Math.abs(num - expectedNow) > 0.001;
     if (off && !reason[h.id] && !note[h.id]) {
       setOpenNoteId(h.id);
     } else if (!off && openNoteId === h.id) {
@@ -1833,6 +1974,7 @@ function CountSheet({
           count: count.id,
           item: h.itemId,
           counted_qty: countedQty.toFixed(3),
+          section: section.id,
           reason: varQty && varQty !== 0 ? reason[h.id] ?? "miscount" : null,
           note: varQty && varQty !== 0 ? note[h.id] || null : null,
         });
@@ -1976,10 +2118,42 @@ function CountSheet({
                 />
                 <div className="cr-item">
                   <div className="cr-name">{h.itemName}</div>
-                  <div className="cr-sys">
-                    System says {parseFloat((onHand[h.id] ?? 0).toFixed(2))} {h.baseUnit}
-                    {h.stockUnit ? ` · ${inStockUnit(h, onHand[h.id] ?? 0)}` : ""}
-                  </div>
+                  {(() => {
+                    const o = otherSections(h);
+                    if (h.placements.length <= 1) {
+                      return (
+                        <div className="cr-sys">
+                          System says {parseFloat((onHand[h.id] ?? 0).toFixed(2))} {h.baseUnit}
+                          {h.stockUnit ? ` · ${inStockUnit(h, onHand[h.id] ?? 0)}` : ""}
+                        </div>
+                      );
+                    }
+                    const total = onHand[h.id] ?? 0;
+                    const expected = expectedHere(h);
+                    return (
+                      <>
+                        <div className="cr-sys">
+                          {expected === null ? (
+                            <>
+                              Total on hand {parseFloat(total.toFixed(2))} {h.baseUnit}
+                            </>
+                          ) : (
+                            <>
+                              System expects about {parseFloat(Math.max(0, expected).toFixed(2))} {h.baseUnit} here
+                              {h.stockUnit ? ` · ${inStockUnit(h, Math.max(0, expected))}` : ""}
+                            </>
+                          )}
+                        </div>
+                        <div className="cr-sys cr-sys-sub">
+                          {expected === null
+                            ? `${o.unknown.join(" and ")} ${o.unknown.length === 1 ? "hasn't" : "haven't"} been counted yet, so the total can't be checked. Your count is saved, and the total updates once ${o.unknown.length === 1 ? "it has" : "they have"} been counted.`
+                            : `${parseFloat(total.toFixed(2))} ${h.baseUnit} in total; ${o.known
+                                .map((k) => `${k.name} counted ${parseFloat(k.qty.toFixed(2))} on ${shortDate(k.at)}`)
+                                .join(", ")}${expected < 0 ? ". Those counts add up to more than the system total." : ""}`}
+                        </div>
+                      </>
+                    );
+                  })()}
                   {lowConfidence && (
                     <span className="badge warn" title="The scan wasn't fully confident reading this handwritten number — double-check it.">
                       ⚠ check scan
@@ -2029,6 +2203,12 @@ function CountSheet({
                     ) : null}
                   </div>
                   {invalid && <div className="cr-warn">⚠ {invalid}</div>}
+                  {!invalid && checked[h.id] && h.maxQty !== null && Number(qty[h.id]) > h.maxQty && (
+                    <div className="cr-warn" title="Only a warning — the count is saved as entered.">
+                      ⚠ More than the {parseFloat(h.maxQty.toFixed(2))} {h.baseUnit}
+                      {h.stockUnit ? ` (${inStockUnit(h, h.maxQty)})` : ""} that fits in this section
+                    </div>
+                  )}
                 </div>
                 <div className={`cr-var ${varQty === null ? "v-none" : off ? (varQty < 0 ? "v-short" : "v-over") : "v-ok"}`}>
                   {varQty === null ? (

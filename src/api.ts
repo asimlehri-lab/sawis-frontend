@@ -169,11 +169,21 @@ export interface ItemHolding {
   item: string;
   location: string;
   department: string;
-  section: string | null;
-  section_name: string | null;
   par_level: string;
-  // Which of the item's stock units this holding is counted in (null = base
-  // unit only). Chosen in Manage sections; the count sheet just uses it.
+  // The sections of this location the item sits in (several allowed).
+  placements: HoldingSectionRow[];
+}
+
+// One place an item is kept: a section, which of the item's stock units that
+// section counts it in (null = base unit only), and an optional maximum (in
+// the base unit) that only ever warns on a count sheet. Chosen in Inventory →
+// Manage sections.
+export interface HoldingSectionRow {
+  id: string;
+  holding: string;
+  section: string;
+  section_name: string;
+  max_qty: string | null;
   stock_unit: string | null;
   stock_unit_name: string | null;
   stock_unit_qty: string | null;
@@ -1234,7 +1244,6 @@ export interface NewHoldingInput {
   item: string;
   location: string;
   department: string;
-  section: string | null;
   par_level: string;
 }
 
@@ -1263,7 +1272,7 @@ export async function createItemHolding(accessToken: string, input: NewHoldingIn
 export async function updateItemHolding(
   accessToken: string,
   id: string,
-  patch: { par_level?: string; section?: string | null; stock_unit?: string | null }
+  patch: { par_level?: string }
 ): Promise<ItemHolding> {
   const res = await fetch(`${API_URL}/api/catalog/item-holdings/${id}/`, {
     method: "PATCH",
@@ -1275,6 +1284,50 @@ export async function updateItemHolding(
   });
   if (!res.ok) throw new Error("Could not save par level.");
   return res.json();
+}
+
+async function placementError(res: Response, fallback: string): Promise<Error> {
+  const body = await res.json().catch(() => null);
+  const first =
+    body && typeof body === "object"
+      ? Object.values(body as Record<string, unknown>).flatMap((v) => (Array.isArray(v) ? v : [v]))[0]
+      : null;
+  return new Error(typeof first === "string" && first ? first : fallback);
+}
+
+export async function createHoldingSection(
+  accessToken: string,
+  input: { holding: string; section: string; stock_unit?: string | null; max_qty?: string | null }
+): Promise<HoldingSectionRow> {
+  const res = await fetch(`${API_URL}/api/catalog/holding-sections/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw await placementError(res, "Could not add the item to that section.");
+  return res.json();
+}
+
+export async function updateHoldingSection(
+  accessToken: string,
+  id: string,
+  patch: { stock_unit?: string | null; max_qty?: string | null }
+): Promise<HoldingSectionRow> {
+  const res = await fetch(`${API_URL}/api/catalog/holding-sections/${id}/`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw await placementError(res, "Could not save that section's settings.");
+  return res.json();
+}
+
+export async function deleteHoldingSection(accessToken: string, id: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/catalog/holding-sections/${id}/`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("Could not take the item out of that section.");
 }
 
 export async function deleteItemHolding(accessToken: string, id: string): Promise<void> {
@@ -2485,9 +2538,12 @@ export interface CountLineRow {
   item: string;
   item_name: string;
   counted_qty: string;
+  // The section this was counted in (null on counts made before sections were recorded).
+  section: string | null;
   reason: string | null;
   note: string | null;
   counted_by: string | null;
+  created_at: string;
 }
 
 export interface StockCountRow {
@@ -2570,6 +2626,7 @@ export interface NewCountLineInput {
   count: string;
   item: string;
   counted_qty: string;
+  section?: string | null;
   reason?: string | null;
   note?: string | null;
 }
