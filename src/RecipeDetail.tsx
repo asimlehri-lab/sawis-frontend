@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   fetchRecipe,
   updateRecipe,
+  createRecipe,
   deleteRecipe,
   login,
   createRecipeLine,
@@ -42,6 +43,15 @@ interface Props {
   // quick-add below, same as ItemDetail's own onChanged -- items is a
   // prop here, so this component can't refresh it on its own.
   onItemsChanged: () => void;
+  // "+ New sub-recipe" in the purple section: App.tsx opens the sub-recipe that
+  // was just created (to add its ingredients) and remembers where to come back to.
+  onCreateSubRecipe?: (newRecipeId: string) => void;
+  // Set when this recipe was opened from another recipe's "+ New sub-recipe":
+  // shows a way back to it.
+  returnTo?: { id: string; name: string } | null;
+  onReturn?: () => void;
+  // The sub-recipe to have ready in the picker (the one just built).
+  preselectSubId?: string | null;
 }
 
 export default function RecipeDetail({
@@ -58,6 +68,10 @@ export default function RecipeDetail({
   onChanged,
   onOpenRecipe,
   onItemsChanged,
+  onCreateSubRecipe,
+  returnTo,
+  onReturn,
+  preselectSubId,
 }: Props) {
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +85,14 @@ export default function RecipeDetail({
   const [addSubId, setAddSubId] = useState("");
   const [addSubQty, setAddSubQty] = useState("1");
   const [savingLine, setSavingLine] = useState(false);
+
+  // "+ New sub-recipe" inline form in the purple section.
+  const [newSubOpen, setNewSubOpen] = useState(false);
+  const [newSubName, setNewSubName] = useState("");
+  const [newSubYield, setNewSubYield] = useState("1");
+  const [newSubUnit, setNewSubUnit] = useState<string>(YIELD_UNITS[0]);
+  const [newSubSaving, setNewSubSaving] = useState(false);
+  const [newSubError, setNewSubError] = useState<string | null>(null);
 
   // Archive / delete (danger zone at the bottom), same behaviour as items.
   const [archiving, setArchiving] = useState(false);
@@ -115,6 +137,12 @@ export default function RecipeDetail({
     if (subRecipeChoices.length && !addSubId) setAddSubId(subRecipeChoices[0].id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subRecipeChoices.length]);
+
+  // Coming back from a sub-recipe that was just built: have it ready in the picker.
+  useEffect(() => {
+    if (preselectSubId && subRecipeChoices.some((r) => r.id === preselectSubId)) setAddSubId(preselectSubId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preselectSubId, subRecipeChoices.length]);
 
   async function saveField(patch: Parameters<typeof updateRecipe>[2]) {
     if (!recipe) return;
@@ -212,6 +240,29 @@ export default function RecipeDetail({
     }
   }
 
+  async function handleCreateSub() {
+    const name = newSubName.trim();
+    if (!name) return;
+    setNewSubSaving(true);
+    setNewSubError(null);
+    try {
+      const created = await createRecipe(accessToken, {
+        kind: "sub",
+        name,
+        yield_qty: newSubYield || "1",
+        yield_unit: newSubUnit,
+      });
+      onChanged();
+      setNewSubOpen(false);
+      setNewSubName("");
+      onCreateSubRecipe?.(created.id);
+    } catch (err) {
+      setNewSubError(err instanceof Error ? err.message : "Could not create the sub-recipe.");
+    } finally {
+      setNewSubSaving(false);
+    }
+  }
+
   async function handleAddSub() {
     if (!recipe || !addSubId) return;
     const sub = subRecipeChoices.find((r) => r.id === addSubId);
@@ -287,6 +338,16 @@ export default function RecipeDetail({
       <button className="back-link" onClick={onBack}>
         ← All recipes
       </button>
+
+      {returnTo && (
+        <p className="return-banner">
+          Building a sub-recipe for <b>{returnTo.name}</b>. Add its ingredients, then{" "}
+          <button type="button" className="link-btn" onClick={onReturn}>
+            go back to {returnTo.name}
+          </button>{" "}
+          to add it.
+        </p>
+      )}
 
       {readOnly && <p className="ro-banner">View only — changes to recipes need a manager or admin.</p>}
       <fieldset className="ro-fieldset" disabled={readOnly}>
@@ -547,10 +608,60 @@ export default function RecipeDetail({
                   </div>
                 </div>
               ) : (
-                <p className="sub-empty">
-                  No sub-recipes yet. Create one from <b>+ New recipe → A sub-recipe</b> and it'll appear
-                  here to drop into any dish.
-                </p>
+                <p className="sub-empty">No sub-recipes yet. Create one here and it'll be ready to drop into this dish.</p>
+              )}
+              {!newSubOpen ? (
+                <button type="button" className="link-btn" onClick={() => setNewSubOpen(true)}>
+                  + New sub-recipe
+                </button>
+              ) : (
+                <div className="newsub">
+                  <input
+                    value={newSubName}
+                    onChange={(e) => setNewSubName(e.target.value)}
+                    placeholder="Sub-recipe name, e.g. Caramel sauce"
+                    autoFocus
+                  />
+                  <div className="addrow-bottom">
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={newSubYield}
+                      onChange={(e) => setNewSubYield(e.target.value)}
+                      aria-label="Batch yields"
+                    />
+                    <select value={newSubUnit} onChange={(e) => setNewSubUnit(e.target.value)} aria-label="Yield unit">
+                      {YIELD_UNITS.map((u) => (
+                        <option key={u} value={u}>
+                          {u}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="addrow-bottom">
+                    <button
+                      type="button"
+                      className="mini"
+                      onClick={() => {
+                        setNewSubOpen(false);
+                        setNewSubName("");
+                        setNewSubError(null);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="add-btn violet-btn"
+                      onClick={handleCreateSub}
+                      disabled={newSubSaving || !newSubName.trim()}
+                    >
+                      {newSubSaving ? "Creating…" : "Create & add ingredients"}
+                    </button>
+                  </div>
+                  {newSubError && <p className="error">{newSubError}</p>}
+                </div>
               )}
             </div>
           </div>

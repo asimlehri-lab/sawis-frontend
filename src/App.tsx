@@ -531,6 +531,10 @@ export default function App() {
   const [recipes, setRecipes] = useState<Recipe[] | null>(null);
   const [recipesError, setRecipesError] = useState<string | null>(null);
   const [showNewRecipe, setShowNewRecipe] = useState(false);
+  // Set when a sub-recipe is created from inside another recipe's "+ New
+  // sub-recipe": where to return to, and which sub-recipe to have ready there.
+  const [subReturn, setSubReturn] = useState<{ id: string; name: string } | null>(null);
+  const [preselectSub, setPreselectSub] = useState<string | null>(null);
   const [newRecipeKind, setNewRecipeKind] = useState<"dish" | "sub">("dish");
   const [newRecipeName, setNewRecipeName] = useState("");
   const [newYieldQty, setNewYieldQty] = useState("1");
@@ -1979,6 +1983,7 @@ export default function App() {
         {showHelp && <HelpChat onClose={() => setShowHelp(false)} />}
         {activePage === "Recipes" && selectedRecipeId && accessToken ? (
           <RecipeDetail
+            key={selectedRecipeId}
             recipeId={selectedRecipeId}
             readOnly={!canManage(me)}
             accessToken={accessToken}
@@ -1988,10 +1993,29 @@ export default function App() {
             allergens={allergens}
             venue={me.org.name}
             locations={locations}
-            onBack={() => setSelectedRecipeId(null)}
+            onBack={() => {
+              setSelectedRecipeId(null);
+              setSubReturn(null);
+              setPreselectSub(null);
+            }}
             onChanged={() => loadRecipes(accessToken)}
             onOpenRecipe={(id) => setSelectedRecipeId(id)}
             onItemsChanged={() => loadItems(accessToken)}
+            onCreateSubRecipe={(newId) => {
+              const parentId = selectedRecipeId;
+              const parentName = (recipes ?? []).find((r) => r.id === parentId)?.name || "this recipe";
+              setSubReturn({ id: parentId, name: parentName });
+              setPreselectSub(null);
+              setSelectedRecipeId(newId);
+            }}
+            returnTo={subReturn && subReturn.id !== selectedRecipeId ? subReturn : null}
+            onReturn={() => {
+              if (!subReturn) return;
+              setPreselectSub(selectedRecipeId);
+              setSelectedRecipeId(subReturn.id);
+              setSubReturn(null);
+            }}
+            preselectSubId={preselectSub}
           />
         ) : activePage === "Items" && selectedItemId && accessToken ? (
           <ItemDetail

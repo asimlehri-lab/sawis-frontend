@@ -152,6 +152,14 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "A recipe's allergens are worked out from its ingredients, sub-recipes included. If any ingredient hasn't been confirmed, the recipe page warns that the list may be incomplete — it is not an all-clear — and printed sheets mark that recipe with a †. Confirm those ingredients (the By dish tab on Review allergens is the quickest way) and the warning goes away.",
       },
       {
+        q: "How do I archive or delete a recipe I no longer make?",
+        a: "Open the recipe and scroll to the Danger zone. Archive hides it from End of day, allergen review, the Print sheet and the import template, keeps its sales history, and can be undone with Unarchive. Archived recipes still show in the Recipes list with an Archived badge; use Filter → Status → Active to hide them. Delete permanently only works when the recipe has no sales recorded and is not used inside another recipe; otherwise archive it. A sub-recipe that other recipes still use can't be archived until it is taken out of them.",
+      },
+      {
+        q: "How do I create a sub-recipe while building a dish?",
+        a: "In the purple Add a sub-recipe box on the recipe page, click + New sub-recipe, give it a name and batch size, then Create & add ingredients. You land on the new sub-recipe to add its ingredients; when you are done, use the link at the top to go back to the dish, where the sub-recipe is ready to add.",
+      },
+      {
         q: "What can I put on the Print sheet?",
         a: "Go to Recipes and click 🖨 Print sheet. Choose What to print (Allergens, Ingredients and quantities, or both), Which recipes (everything, or what's showing now) and Which kind (dishes, sub-recipes only, or both). With Allergens ticked you can also print only recipes that have chosen allergens, and decide whether to include May contain and recipes with none. The line under the options says how many recipes will print. Costs and prices never print, so anyone, including Staff, can use it.",
         fact: "💡 Filter the Recipes list first (for example Allergens → Milk), then open Print sheet and keep “What is showing now” to print just that group.",
@@ -174,7 +182,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "What can I filter by?",
-        a: "Items: Category, Supplier, Allergens, Allergen status, Status (Active or Archived — archived items show by default with an Archived badge; pick Active to hide them), Allergen review and Used in recipes (pick “Not used in any recipe” to find leftover or duplicate items). Recipes: Category, Item used, Food or drink, Cost vs target (On target, Over target, Well over target), Allergens and Allergen status. Live stock: Status (Below par or OK), Section and Category. Procurement: Supplier, Location and Item. Dish vs Sub-recipe, Department and PO status keep their own tabs above the list.",
+        a: "Items: Category, Supplier, Allergens, Allergen status, Status (Active or Archived — archived items show by default with an Archived badge; pick Active to hide them), Allergen review and Used in recipes (pick “Not used in any recipe” to find leftover or duplicate items). Recipes: Category, Item used, Food or drink, Status (Active or Archived), Cost vs target (On target, Over target, Well over target), Allergens and Allergen status. Live stock: Status (Below par or OK), Section and Category. Procurement: Supplier, Location and Item. Dish vs Sub-recipe, Department and PO status keep their own tabs above the list.",
       },
       {
         q: "How do several filters combine?",
