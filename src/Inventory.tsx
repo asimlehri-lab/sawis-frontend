@@ -795,6 +795,53 @@ function SectionsTab({
   });
 
   const selectedCount = Object.values(modalChecked).filter(Boolean).length;
+  // Ticked items sit in their own panel at the top so the selection stays in
+  // view while the rest of the list scrolls below it.
+  const byName = (a: FlatHolding, b: FlatHolding) => a.itemName.localeCompare(b.itemName) || a.department.localeCompare(b.department);
+  const selectedVisible = visibleHoldings.filter((h) => modalChecked[h.id]).sort(byName);
+  const otherVisible = visibleHoldings.filter((h) => !modalChecked[h.id]).sort(byName);
+
+  function renderItemRow(h: FlatHolding, selected: boolean) {
+    return (
+      <div key={h.id} className={`il-row ${selected ? "on" : ""}`}>
+        <input
+          type="checkbox"
+          checked={selected}
+          aria-label={`${selected ? "Remove" : "Add"} ${h.itemName}`}
+          onChange={(e) => setModalChecked((c) => ({ ...c, [h.id]: e.target.checked }))}
+        />
+        <span className="il-name" onClick={() => setModalChecked((c) => ({ ...c, [h.id]: !selected }))}>
+          {h.itemName}
+        </span>
+        <span className="muted il-dept">{deptLabel(h.department)}</span>
+        <span className="il-unit">
+          {selected &&
+            (h.itemStockUnits.length > 0 ? (
+              <select
+                className="item-check-unit"
+                aria-label={`Count ${h.itemName} in`}
+                title="Which unit this section counts it in"
+                value={modalUnit[h.id] ?? h.stockUnitId}
+                onChange={(e) => setModalUnit((m) => ({ ...m, [h.id]: e.target.value }))}
+              >
+                <option value="">{h.baseUnit} only</option>
+                {h.itemStockUnits.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    also in {u.name} ({parseFloat(Number(u.qty).toFixed(4))} {h.baseUnit})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              onOpenItem && (
+                <button type="button" className="link-btn" title="Stock units are set up on the item page" onClick={() => onOpenItem(h.itemId)}>
+                  + stock unit
+                </button>
+              )
+            ))}
+        </span>
+      </div>
+    );
+  }
 
   // Bulk actions only ever touch what's currently visible under the
   // search/category filter -- so narrowing the list, selecting, then
@@ -867,7 +914,7 @@ function SectionsTab({
 
       {modalOpen && (
         <div className="modal-backdrop" onClick={() => !saving && setModalOpen(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal sections-modal" onClick={(e) => e.stopPropagation()}>
             <h2>{editing ? `Edit ${editing.name}` : "New section"}</h2>
             <p className="muted" style={{ fontSize: 12.5, marginTop: 0 }}>
               {editing
@@ -941,48 +988,25 @@ function SectionsTab({
                     </button>
                   </div>
                   {visibleHoldings.length === 0 && <p className="muted" style={{ fontSize: 12.5 }}>No items match.</p>}
-                  <div className="item-checklist">
-                    {visibleHoldings.map((h) => (
-                      <label key={h.id} className="item-check">
-                        <input
-                          type="checkbox"
-                          checked={!!modalChecked[h.id]}
-                          onChange={(e) => setModalChecked((c) => ({ ...c, [h.id]: e.target.checked }))}
-                        />
-                        {h.itemName} <span className="muted">({deptLabel(h.department)})</span>
-                        {modalChecked[h.id] &&
-                          (h.itemStockUnits.length > 0 ? (
-                            <select
-                              className="item-check-unit"
-                              aria-label={`Count ${h.itemName} in`}
-                              title="Which unit this section counts it in"
-                              value={modalUnit[h.id] ?? h.stockUnitId}
-                              onChange={(e) => setModalUnit((m) => ({ ...m, [h.id]: e.target.value }))}
-                            >
-                              <option value="">{h.baseUnit} only</option>
-                              {h.itemStockUnits.map((u) => (
-                                <option key={u.id} value={u.id}>
-                                  also in {u.name} ({parseFloat(Number(u.qty).toFixed(4))} {h.baseUnit})
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            onOpenItem && (
-                              <button
-                                type="button"
-                                className="link-btn"
-                                title="Stock units are set up on the item page"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  onOpenItem(h.itemId);
-                                }}
-                              >
-                                + stock unit
-                              </button>
-                            )
-                          ))}
-                      </label>
-                    ))}
+                  <div className="il-panel il-selected">
+                    <div className="il-title">In this section · {selectedVisible.length}</div>
+                    <div className="il-head">
+                      <span />
+                      <span>Item</span>
+                      <span>Department</span>
+                      <span>Counted in</span>
+                    </div>
+                    {selectedVisible.length === 0 && (
+                      <p className="muted il-empty">
+                        {selectedCount === 0 ? "Nothing selected yet — tick items in the list below." : "No selected items match the search."}
+                      </p>
+                    )}
+                    {selectedVisible.map((h) => renderItemRow(h, true))}
+                  </div>
+                  <div className="il-panel il-others">
+                    <div className="il-title">Add more items · {otherVisible.length}</div>
+                    {otherVisible.length === 0 && <p className="muted il-empty">Every item shown is already in this section.</p>}
+                    {otherVisible.map((h) => renderItemRow(h, false))}
                   </div>
                 </>
               )}
