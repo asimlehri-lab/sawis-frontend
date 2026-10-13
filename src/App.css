@@ -3076,4 +3076,34 @@ input[type="file"] {
 .il-row { min-height: 38px; }
 .il-unit .item-check-unit { padding: 4px 8px; }
 @media (max-width: 640px) { .sections-modal .item-checklist-toolbar { flex-wrap: wrap; } }
+/* Count sheet row: tick | item + what the system says | count box(es) | difference | note */
+.count-row { padding: 14px 18px; }
+.cr-main { display: grid; grid-template-columns: 22px minmax(150px, 1.2fr) minmax(0, auto) minmax(110px, 140px) 84px; gap: 8px 20px; align-items: center; }
+.cr-tick { width: 18px; height: 18px; margin: 0; }
+.cr-item { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; min-width: 0; }
+.cr-name { font-size: 15px; font-weight: 600; color: var(--ink); line-height: 1.3; text-transform: none; letter-spacing: 0; overflow-wrap: anywhere; }
+.cr-sys { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1.35; }
+.cr-counts { display: flex; flex-direction: column; gap: 4px; min-width: 330px; }
+.cr-counts-row { display: flex; align-items: center; gap: 10px; }
+.cr-field { display: flex; align-items: center; gap: 6px; }
+.cr-field input { width: 96px; font-family: inherit; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; border: 1.5px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--surface); color: var(--ink); }
+.cr-field input:disabled { background: var(--bg); color: var(--muted); }
+.cr-field input.bad { border-color: var(--warn); background: var(--warn-soft); }
+.cr-unit { font-size: 13px; color: var(--muted); min-width: 24px; }
+.cr-eq { font-size: 15px; color: var(--muted); }
+.cr-warn { font-size: 12px; color: var(--warn); max-width: 280px; }
+.cr-var { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; line-height: 1.3; }
+.cr-var-sub { font-size: 12px; font-weight: 500; opacity: 0.85; }
+.cr-main .note-btn-sm { justify-self: end; white-space: nowrap; }
+@media (max-width: 760px) {
+  .cr-main { grid-template-columns: 22px minmax(0, 1fr) auto; }
+  .cr-counts { grid-column: 2 / 4; min-width: 0; }
+  .cr-counts-row { flex-wrap: wrap; gap: 8px; }
+  .cr-field input { width: 84px; }
+  .cr-eq { display: none; }
+  .cr-var { grid-column: 2; text-align: left; }
+  .cr-main .note-btn-sm { grid-column: 3; }
+}
+.count-row .note-show { padding-left: 42px; }
+.count-row .note-panel { margin-left: 42px; }
 

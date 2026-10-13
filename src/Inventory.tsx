@@ -1642,81 +1642,90 @@ function CountSheet({
           const lowConfidence = scanConf !== undefined && scanConf !== null && scanConf < 80;
           return (
             <div key={h.id} className={`count-row ${checked[h.id] ? "done" : ""}`}>
-              <div className="count-row-main">
-                <label style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 600, minWidth: 170 }}>
-                  <input type="checkbox" checked={!!checked[h.id]} onChange={(e) => handleTick(h, e.target.checked)} />
-                  {h.itemName}
-                </label>
-                {lowConfidence && (
-                  <span className="badge warn" title="The scan wasn't fully confident reading this handwritten number — double-check it.">
-                    ⚠ check scan
-                  </span>
-                )}
-                <span className="muted" style={{ fontSize: 11.5, fontFamily: "monospace" }}>
-                  system says {(onHand[h.id] ?? 0).toFixed(2)} {h.baseUnit}
-                  {h.stockUnit ? ` (${inStockUnit(h, onHand[h.id] ?? 0)})` : ""}
-                </span>
+              <div className="cr-main">
                 <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  placeholder="—"
-                  disabled={!checked[h.id]}
-                  value={qty[h.id] ?? ""}
-                  onChange={(e) => {
-                    clearDraft(h);
-                    handleQtyChange(h, e.target.value);
-                  }}
-                  style={{
-                    width: 96,
-                    fontFamily: "monospace",
-                    textAlign: "right",
-                    border: invalid ? "1.5px solid var(--warn)" : "1.5px solid var(--border)",
-                    background: invalid ? "var(--warn-soft)" : undefined,
-                    borderRadius: 8,
-                    padding: "8px 10px",
-                  }}
+                  type="checkbox"
+                  className="cr-tick"
+                  aria-label={`Counted ${h.itemName}`}
+                  checked={!!checked[h.id]}
+                  onChange={(e) => handleTick(h, e.target.checked)}
                 />
-                <span className="cunit muted" style={{ fontSize: 12.5, minWidth: 40 }}>
-                  {h.baseUnit}
-                </span>
-                {h.stockUnit && h.stockUnitQty ? (
-                  <>
-                    <span className="muted" style={{ fontSize: 12.5 }}>
-                      or
+                <div className="cr-item">
+                  <div className="cr-name">{h.itemName}</div>
+                  <div className="cr-sys">
+                    System says {parseFloat((onHand[h.id] ?? 0).toFixed(2))} {h.baseUnit}
+                    {h.stockUnit ? ` · ${inStockUnit(h, onHand[h.id] ?? 0)}` : ""}
+                  </div>
+                  {lowConfidence && (
+                    <span className="badge warn" title="The scan wasn't fully confident reading this handwritten number — double-check it.">
+                      ⚠ check scan
                     </span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="any"
-                      placeholder="—"
-                      aria-label={`Counted in ${h.stockUnit}`}
-                      disabled={!checked[h.id]}
-                      value={stockShown(h)}
-                      onChange={(e) => handleStockChange(h, e.target.value)}
-                      style={{
-                        width: 80,
-                        fontFamily: "monospace",
-                        textAlign: "right",
-                        border: "1.5px solid var(--border)",
-                        borderRadius: 8,
-                        padding: "8px 10px",
-                      }}
-                    />
-                    <span className="cunit muted" style={{ fontSize: 12.5, minWidth: 40 }} title={`1 ${h.stockUnit} = ${h.stockUnitQty} ${h.baseUnit}`}>
-                      {h.stockUnit}
-                    </span>
-                  </>
-                ) : null}
-
-                {invalid && (
-                  <span className="badge warn" title={invalid}>
-                    ⚠ {invalid}
-                  </span>
-                )}
-                <span className={`cvar ${varQty === null ? "v-none" : off ? (varQty < 0 ? "v-short" : "v-over") : "v-ok"}`} style={{ minWidth: 100, textAlign: "right", fontFamily: "monospace", fontSize: 12.5, fontWeight: 700 }}>
-                  {varQty === null ? "—" : !off ? "✓ matches" : `${varQty > 0 ? "+" : "−"}${Math.abs(varQty).toFixed(2)} ${h.baseUnit}`}
-                </span>
+                  )}
+                </div>
+                <div className="cr-counts">
+                  <div className="cr-counts-row">
+                    <div className="cr-field">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="—"
+                        aria-label={`Counted in ${h.baseUnit}`}
+                        disabled={!checked[h.id]}
+                        value={qty[h.id] ?? ""}
+                        className={invalid ? "bad" : undefined}
+                        onChange={(e) => {
+                          clearDraft(h);
+                          handleQtyChange(h, e.target.value);
+                        }}
+                      />
+                      <span className="cr-unit">{h.baseUnit}</span>
+                    </div>
+                    {h.stockUnit && h.stockUnitQty ? (
+                      <>
+                        <span className="cr-eq" title={`1 ${h.stockUnit} = ${h.stockUnitQty} ${h.baseUnit}`}>
+                          =
+                        </span>
+                        <div className="cr-field">
+                          <input
+                            type="number"
+                            min="0"
+                            step="any"
+                            placeholder="—"
+                            aria-label={`Counted in ${h.stockUnit}`}
+                            disabled={!checked[h.id]}
+                            value={stockShown(h)}
+                            onChange={(e) => handleStockChange(h, e.target.value)}
+                          />
+                          <span className="cr-unit" title={`1 ${h.stockUnit} = ${h.stockUnitQty} ${h.baseUnit}`}>
+                            {h.stockUnit}
+                          </span>
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+                  {invalid && <div className="cr-warn">⚠ {invalid}</div>}
+                </div>
+                <div className={`cr-var ${varQty === null ? "v-none" : off ? (varQty < 0 ? "v-short" : "v-over") : "v-ok"}`}>
+                  {varQty === null ? (
+                    "—"
+                  ) : !off ? (
+                    "✓ matches"
+                  ) : (
+                    <>
+                      <div>
+                        {varQty > 0 ? "+" : "−"}
+                        {parseFloat(Math.abs(varQty).toFixed(2))} {h.baseUnit}
+                      </div>
+                      {h.stockUnit && h.stockUnitQty ? (
+                        <div className="cr-var-sub">
+                          {varQty > 0 ? "+" : "−"}
+                          {inStockUnit(h, Math.abs(varQty))}
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </div>
                 <button type="button" className={btnCls} onClick={() => setOpenNoteId(isOpen ? null : h.id)}>
                   {btnTxt}
                 </button>
