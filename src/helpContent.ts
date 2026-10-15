@@ -439,6 +439,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "Go to Reports in the sidebar (managers and above). Overview shows the key figures with a small trend line and a comparison with the period before, food cost by day, and where waste and ingredient cost went. Menu engineering sorts every dish into Headliners, Crowd pleasers, Hidden gems and the Chop list, with a suggested next step for each. The Export CSV button is for Admins only, and it asks for your password every time.",
       },
       {
+        q: "How do I see a different week or month on Reports?",
+        a: "Use Week or Month at the top of Reports. The arrows step to the week or month before (and back again), and the calendar button lets you jump to any date: pick a day and you get that Monday-to-Sunday week, or that whole month. Without a choice, Week shows the last 7 days and Month shows this month so far. Every figure is compared with the week or month before the one you're looking at, and Download PDF prints whatever is on screen.",
+      },
+      {
         q: "How do I download a report as a PDF?",
         a: "Admins see a Download PDF button on Reports. Click it, tick the sections you want, and type your password (it asks every time; nothing downloads if it's wrong). Your browser's print window then opens: choose Save as PDF as the printer. On a phone, the same print option offers Save as PDF or Share.",
       },

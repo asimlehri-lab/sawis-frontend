@@ -25,7 +25,8 @@ export function Sparkline({ values, tone = "brand", label }: { values: (number |
   return (
     <svg className={`rp-spark ${tone}`} viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label} preserveAspectRatio="none">
       <polyline points={pts.map((p) => `${x(p.i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ")} fill="none" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-      <circle cx={x(last.i)} cy={y(last.v)} r="3" />
+      {/* A zero-length round-capped line is a dot that stays round when the chart stretches. */}
+      <line className="rp-spark-end" x1={x(last.i)} y1={y(last.v)} x2={x(last.i)} y2={y(last.v)} strokeWidth="7" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }

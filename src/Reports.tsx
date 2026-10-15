@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchReportsSummary } from "./api";
 import type { Location, ReportsSummary } from "./api";
 import PasswordConfirmModal from "./PasswordConfirmModal";
@@ -9,6 +9,7 @@ import { FoodCostBars } from "./ReportCharts";
 import MenuEngineering from "./MenuEngineering";
 import { CategoryCard, MenuTable, ReportTiles, SplitBar, WasteCard, ZeroCostNote } from "./ReportParts";
 import { sectionHeadStyle } from "./reportFormat";
+import { addDays, addMonths, monthEndOf, monthLabel, monthStartOf, mondayOf, todayIso, weekLabel } from "./reportPeriod";
 
 interface Props {
   accessToken: string;
@@ -26,7 +27,7 @@ const TABS: { key: Tab; label: string }[] = [
 
 const COMPARED_WITH: Record<ReportsSummary["period"], string> = {
   week: "the 7 days before",
-  month: "the same days last month",
+  month: "the month before (the same number of days, while this month is still going)",
   lastmonth: "the month before",
 };
 
@@ -54,7 +55,56 @@ export default function Reports({ accessToken, locations, isAdmin }: Props) {
   const activeLocation = locations.find((l) => l.id === location);
   const foodTarget = activeLocation ? Number(activeLocation.target_food_cost_pct) || 30 : 30;
   const drinkTarget = activeLocation ? Number(activeLocation.target_drink_cost_pct) || 30 : 30;
-  const [period, setPeriod] = useState<"week" | "month" | "lastmonth">("week");
+  // Which week or month is on screen. null means "now": the last 7 days, or
+  // the month so far. A chosen week is Monday to Sunday; a chosen month is a
+  // whole calendar month.
+  const [mode, setMode] = useState<"week" | "month">("week");
+  const [weekStart, setWeekStart] = useState<string | null>(null);
+  const [monthStart, setMonthStart] = useState<string | null>(null);
+  const dateRef = useRef<HTMLInputElement>(null);
+  const today = todayIso();
+  const curMonday = mondayOf(today);
+  const curMonth = monthStartOf(today);
+  const period: "week" | "month" = mode;
+  const reqDate = mode === "week" ? (weekStart ? addDays(weekStart, 6) : undefined) : monthStart ? monthEndOf(monthStart) : undefined;
+  const reqKey = `${location}-${period}-${reqDate ?? "now"}`;
+  const atNow = mode === "week" ? weekStart === null : monthStart === null;
+  const shownStart = mode === "week" ? (weekStart ?? curMonday) : (monthStart ?? curMonth);
+  const periodLabel =
+    mode === "week" ? (weekStart ? weekLabel(weekStart) : "Last 7 days") : monthStart ? monthLabel(monthStart) : `${monthLabel(curMonth)} so far`;
+  const unit = mode === "week" ? "week" : "month";
+
+  function step(dir: -1 | 1) {
+    if (mode === "week") {
+      const n = addDays(shownStart, dir * 7);
+      setWeekStart(n >= curMonday ? null : n);
+    } else {
+      const n = addMonths(shownStart, dir);
+      setMonthStart(n >= curMonth ? null : n);
+    }
+  }
+
+  function jumpTo(v: string) {
+    if (!v) return;
+    if (mode === "week") {
+      const m = mondayOf(v);
+      setWeekStart(m >= curMonday ? null : m);
+    } else {
+      const ms = monthStartOf(v);
+      setMonthStart(ms >= curMonth ? null : ms);
+    }
+  }
+
+  function openCalendar() {
+    const el = dateRef.current;
+    if (!el) return;
+    try {
+      el.showPicker();
+    } catch {
+      el.focus();
+      el.click();
+    }
+  }
   const [tab, setTab] = useState<Tab>("overview");
   const [report, setReport] = useState<ReportsSummary | null>(null);
   const [loading, setLoading] = useState(false);
@@ -70,7 +120,7 @@ export default function Reports({ accessToken, locations, isAdmin }: Props) {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchReportsSummary(accessToken, location, period)
+    fetchReportsSummary(accessToken, location, period, reqDate)
       .then((data) => {
         if (!cancelled) setReport(data);
       })
@@ -83,7 +133,7 @@ export default function Reports({ accessToken, locations, isAdmin }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, location, period]);
+  }, [accessToken, location, period, reqDate]);
 
   // Printing: the sheet is mounted first (setPrinting), then the browser's
   // print window opens once it has rendered, and the sheet is removed again
@@ -110,8 +160,6 @@ export default function Reports({ accessToken, locations, isAdmin }: Props) {
     return <p className="error">No locations yet — add one before there's anything to report on.</p>;
   }
 
-  const periodName = period === "week" ? "the last 7 days" : period === "month" ? "this month" : "last month";
-
   return (
     <div className="rp-page">
       <div className="eod-toolbar">
@@ -124,16 +172,45 @@ export default function Reports({ accessToken, locations, isAdmin }: Props) {
             ))}
           </select>
         )}
-        <div className="rtabs" style={{ marginBottom: 0 }}>
-          <button className={`rtab ${period === "week" ? "on" : ""}`} onClick={() => setPeriod("week")}>
-            This week
+        <div className="rtabs" style={{ marginBottom: 0 }} role="group" aria-label="Weekly or monthly report">
+          <button className={`rtab ${mode === "week" ? "on" : ""}`} aria-pressed={mode === "week"} onClick={() => setMode("week")}>
+            Week
           </button>
-          <button className={`rtab ${period === "month" ? "on" : ""}`} onClick={() => setPeriod("month")}>
-            This month
+          <button className={`rtab ${mode === "month" ? "on" : ""}`} aria-pressed={mode === "month"} onClick={() => setMode("month")}>
+            Month
           </button>
-          <button className={`rtab ${period === "lastmonth" ? "on" : ""}`} onClick={() => setPeriod("lastmonth")}>
-            Last month
+        </div>
+        <div className="rp-nav">
+          <button type="button" className="rp-nav-btn" aria-label={`Previous ${unit}`} onClick={() => step(-1)}>
+            ‹
           </button>
+          <div className="rp-nav-pick">
+            <button type="button" className="rp-nav-label" onClick={openCalendar} aria-label={`${periodLabel}. Choose another ${unit} from the calendar`}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3.5" y="5" width="17" height="15.5" rx="2.5" />
+                <path d="M3.5 10h17M8 3v4M16 3v4" />
+              </svg>
+              {periodLabel}
+            </button>
+            <input
+              ref={dateRef}
+              type="date"
+              className="rp-date-input"
+              tabIndex={-1}
+              value={shownStart}
+              max={today}
+              aria-label={`Pick any day in the ${unit} you want`}
+              onChange={(e) => jumpTo(e.target.value)}
+            />
+          </div>
+          <button type="button" className="rp-nav-btn" aria-label={`Next ${unit}`} disabled={atNow} onClick={() => step(1)}>
+            ›
+          </button>
+          {!atNow && (
+            <button type="button" className="open-link" onClick={() => (mode === "week" ? setWeekStart(null) : setMonthStart(null))}>
+              {mode === "week" ? "Back to last 7 days" : "Back to this month"}
+            </button>
+          )}
         </div>
         {report && isAdmin && (
           <div className="rp-actions">
@@ -162,7 +239,7 @@ export default function Reports({ accessToken, locations, isAdmin }: Props) {
       {choosingPdf && report && (
         <ReportPdfModal
           accessToken={accessToken}
-          context={`${activeLocation?.name ?? "This location"} · ${periodName}.`}
+          context={`${activeLocation?.name ?? "This location"} · ${periodLabel}.`}
           onConfirmed={(sections) => {
             setChoosingPdf(false);
             setPrinting(sections);
@@ -217,7 +294,7 @@ export default function Reports({ accessToken, locations, isAdmin }: Props) {
                     No sales recorded in this period yet.
                   </p>
                 ) : (
-                  <FoodCostBars key={`${location}-${period}`} trend={report.trend} target={foodTarget} currency={currency} />
+                  <FoodCostBars key={reqKey} trend={report.trend} target={foodTarget} currency={currency} />
                 )}
               </section>
               <SplitBar report={report} currency={currency} />
@@ -232,7 +309,7 @@ export default function Reports({ accessToken, locations, isAdmin }: Props) {
             <div className="rp-stack">
               <section className="card rp-card">
                 <h2 style={sectionHeadStyle}>Which dishes earn their place</h2>
-                <MenuEngineering key={`${location}-${period}`} rows={report.menu} currency={currency} />
+                <MenuEngineering key={reqKey} rows={report.menu} currency={currency} />
               </section>
               <MenuTable rows={report.menu} currency={currency} foodTarget={foodTarget} drinkTarget={drinkTarget} />
             </div>

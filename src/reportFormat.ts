@@ -30,7 +30,7 @@ export function signedMoney(n: number, currency?: string, d = 2): string {
 }
 
 export function compareLabel(period: ReportsSummary["period"]): string {
-  return period === "week" ? "vs week before" : period === "month" ? "vs last month" : "vs month before";
+  return period === "week" ? "vs week before" : "vs month before";
 }
 
 export function fmtDay(iso: string): string {
