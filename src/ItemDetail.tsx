@@ -37,6 +37,7 @@ import type {
   AllergenSuggestion,
 } from "./api";
 import AllergenIcon from "./AllergenIcon";
+import ItemHistory from "./ItemHistory";
 
 interface Props {
   itemId: string;
@@ -156,6 +157,8 @@ export default function ItemDetail({
   onOpenRecipe,
 }: Props) {
   const [item, setItem] = useState<CatalogItem | null>(null);
+  // History is for managers and admins only; everyone else just sees the details.
+  const [tab, setTab] = useState<"details" | "history">("details");
   const [error, setError] = useState<string | null>(null);
   // Unsaved edits to the Contains / May contain chips. Nothing is saved
   // until a person presses Confirm -- tagging is a review decision, not an
@@ -756,7 +759,26 @@ export default function ItemDetail({
       </button>
 
       {readOnly && <p className="ro-banner">View only — changes to items need a manager or admin.</p>}
-      <fieldset className="ro-fieldset" disabled={readOnly}>
+      {!readOnly && (
+        <div className="rp-tabs" role="tablist" aria-label="Item sections">
+          {(["details", "history"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              role="tab"
+              aria-selected={tab === t}
+              className={`rp-tab ${tab === t ? "on" : ""}`}
+              onClick={() => setTab(t)}
+            >
+              {t === "details" ? "Details" : "History"}
+            </button>
+          ))}
+        </div>
+      )}
+      {!readOnly && tab === "history" && (
+        <ItemHistory itemId={item.id} itemName={item.name} accessToken={accessToken} currency={currency} />
+      )}
+      <fieldset className="ro-fieldset" disabled={readOnly} hidden={!readOnly && tab === "history"}>
       <div className="detail-head">
         <input
           className="name-edit"

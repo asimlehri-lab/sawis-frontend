@@ -3170,6 +3170,49 @@ input[type="file"] {
 .rp-card .table-scroll { width: 0; min-width: 100%; }
 .rp-hint { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin: 0; }
 
+/* Item History tab */
+.ih { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.ih .ih-card { margin: 0; }
+.ih-title { margin: 0; color: var(--ink); font-size: 22px; letter-spacing: -0.3px; overflow-wrap: anywhere; }
+.ih-eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.ih-price-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 6px 0 8px; }
+.ih-price { font-size: 28px; font-weight: 700; letter-spacing: -0.6px; }
+.ih-chart { width: 100%; height: 70px; display: block; }
+.ih-grid { stroke: var(--border); opacity: 0.7; }
+.ih-area { fill: var(--brand); fill-opacity: 0.1; }
+.ih-line { stroke: var(--brand); }
+.ih-end { stroke: var(--brand); }
+.ih-axis { display: flex; justify-content: space-between; gap: 8px; font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+.ih .chip-row { margin: 0; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; width: 0; min-width: 100%; }
+.ih .chip-row::-webkit-scrollbar { display: none; }
+.ih-chip { flex: none; min-height: 36px; padding: 0 14px; font-size: 13px; background: var(--surface); }
+.ih-chip.active { background: var(--brand); }
+.ih-chip-n { opacity: 0.7; margin-left: 5px; }
+.ih-day { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); padding: 10px 0 8px; }
+.ih-row { display: flex; gap: 12px; }
+.ih-rail { width: 24px; flex: none; display: flex; flex-direction: column; align-items: center; }
+.ih-dot { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex: none; }
+.ih-dot svg { stroke: var(--surface); }
+.ih-dot.up { background: var(--caution); }
+.ih-dot.down { background: var(--good); }
+.ih-dot.stock { background: var(--brand); }
+.ih-dot.details { background: var(--muted); }
+.ih-stem { flex: 1; width: 2px; margin-top: 3px; background: var(--border); }
+.ih-body { flex: 1; min-width: 0; padding: 1px 0 16px; display: flex; flex-direction: column; gap: 5px; }
+.ih-text { font-size: 14px; line-height: 1.4; overflow-wrap: anywhere; }
+.ih-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.ih-change { font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.ih-tag { font-size: 11.5px; color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 1px 8px; }
+.ih-time { font-size: 11.5px; color: var(--muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+.ih-more { width: 100%; margin-top: 4px; }
+.ih-actors { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.ih-actor { display: grid; grid-template-columns: minmax(64px, 28%) minmax(0, 1fr) 28px; align-items: center; gap: 10px; font-size: 13px; }
+.ih-actor-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ih-actor-track { height: 8px; border-radius: 4px; background: var(--bg); overflow: hidden; }
+.ih-actor-bar { display: block; height: 100%; border-radius: 4px; background: var(--brand); }
+.ih-actor-n { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ih-note { background: var(--warn-soft); color: var(--warn); border-radius: 14px; padding: 12px 14px; font-size: 12.5px; line-height: 1.5; margin: 0; }
+
 /* Section tabs: underline style, scroll sideways on a phone. */
 /* width:0 + min-width:100% stops the scrolling row from widening the whole page on a phone (a scroll container still reports its content width to its parent). */
 .rp-tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--border); margin-bottom: 16px; overflow-x: auto; scrollbar-width: none; width: 0; min-width: 100%; }

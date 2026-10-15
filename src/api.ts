@@ -2460,6 +2460,54 @@ export async function fetchReportsSummary(
   return authedFetch(`/api/ledger/sales/reports_summary/?${params.toString()}`, accessToken);
 }
 
+// ---- History (managers and above) -------------------------------------
+export type HistoryFilter = "all" | "cost" | "stock" | "details";
+
+export interface HistoryEvent {
+  id: string;
+  at: string;
+  kind: "cost" | "stock" | "details";
+  actor_name: string | null;
+  action: string;
+  field: string;
+  value_type: "money" | "qty" | "percent" | "text";
+  old_value: string;
+  new_value: string;
+  unit: string;
+  delta_pct: number | null;
+  context: string;
+  source: string;
+}
+
+export interface HistoryPriceCard {
+  supplier: string;
+  unit: string;
+  current: string;
+  earlier: string;
+  earlier_at: string;
+  change_pct: number | null;
+  points: { at: string | null; price: string }[];
+}
+
+export interface ItemHistoryData {
+  events: HistoryEvent[];
+  next_before: string | null;
+  counts: Record<HistoryFilter, number>;
+  price: HistoryPriceCard | null;
+  actors: { name: string; count: number }[];
+}
+
+export async function fetchItemHistory(
+  accessToken: string,
+  itemId: string,
+  kind: HistoryFilter,
+  before?: string | null
+): Promise<ItemHistoryData> {
+  const params = new URLSearchParams({ kind, limit: "40" });
+  if (before) params.set("before", before);
+  return authedFetch(`/api/catalog/items/${itemId}/history/?${params.toString()}`, accessToken);
+}
+
 // The ledger is append-only and has no auto-posting signals, so every write
 // that should move stock (waste, count adjustments, …) must also POST a
 // StockMovement itself — see StockMovementViewSet.on_hand / apps/ledger.
