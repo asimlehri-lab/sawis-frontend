@@ -102,12 +102,10 @@ function TodayCard({ today, currency }: { today: RecipeHistoryData["today"]; cur
 
 export default function RecipeHistory({
   recipeId,
-  recipeName,
   accessToken,
   currency,
 }: {
   recipeId: string;
-  recipeName: string;
   accessToken: string;
   currency?: string | null;
 }) {
@@ -146,7 +144,6 @@ export default function RecipeHistory({
 
   return (
     <div className="ih ih-wide">
-      <h2 className="ih-title">{recipeName}</h2>
       <p className="muted ih-lede">
         What changed this dish, and what it did to the cost. Edits by people, and automatic cost moves when an
         ingredient’s price changed.

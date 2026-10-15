@@ -76,12 +76,10 @@ function PriceCard({ card, currency }: { card: HistoryPriceCard; currency?: stri
 
 export default function ItemHistory({
   itemId,
-  itemName,
   accessToken,
   currency,
 }: {
   itemId: string;
-  itemName: string;
   accessToken: string;
   currency?: string | null;
 }) {
@@ -120,8 +118,6 @@ export default function ItemHistory({
 
   return (
     <div className="ih">
-      <h2 className="ih-title">{itemName}</h2>
-
       {data?.price && <PriceCard card={data.price} currency={currency} />}
 
       <HistoryChips filters={FILTERS} value={filter} counts={data?.counts} onChange={setFilter} />

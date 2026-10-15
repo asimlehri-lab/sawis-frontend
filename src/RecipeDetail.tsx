@@ -331,6 +331,30 @@ export default function RecipeDetail({
       )}
 
       {readOnly && <p className="ro-banner">View only — changes to recipes need a manager or admin.</p>}
+      <fieldset className="ro-fieldset" disabled={readOnly}>
+      <div className="detail-head">
+        <input
+          className="name-edit"
+          value={recipe.name}
+          onChange={(e) => setRecipe({ ...recipe, name: e.target.value })}
+          onBlur={(e) => saveField({ name: e.target.value })}
+          placeholder={`Name this ${isSub ? "sub-recipe" : "dish"}…`}
+        />
+        <span className={`kind-tag ${recipe.kind}`}>{isSub ? "SUB-RECIPE" : "DISH"}</span>
+        {recipe.archived && (
+          <span className="archived-badge" title="Archived: kept for history, hidden from End of day and the other lists">
+            Archived
+          </span>
+        )}
+      </div>
+      <p className="muted detail-sub">
+        {isSub
+          ? "In-house prep used inside other recipes — costed per portion."
+          : "Ingredient costs pull live from inventory and any sub-recipes used."}
+      </p>
+
+      </fieldset>
+
       <div className="rp-tabs" role="tablist" aria-label="Recipe sections">
         {(readOnly
           ? (["ingredients", "cost", "allergens"] as const)
@@ -357,31 +381,8 @@ export default function RecipeDetail({
         ))}
       </div>
       {!readOnly && tab === "history" && (
-        <RecipeHistory recipeId={recipe.id} recipeName={recipe.name} accessToken={accessToken} currency={currency} />
+        <RecipeHistory recipeId={recipe.id} accessToken={accessToken} currency={currency} />
       )}
-      <fieldset className="ro-fieldset" disabled={readOnly} hidden={tab === "history"}>
-      <div className="detail-head">
-        <input
-          className="name-edit"
-          value={recipe.name}
-          onChange={(e) => setRecipe({ ...recipe, name: e.target.value })}
-          onBlur={(e) => saveField({ name: e.target.value })}
-          placeholder={`Name this ${isSub ? "sub-recipe" : "dish"}…`}
-        />
-        <span className={`kind-tag ${recipe.kind}`}>{isSub ? "SUB-RECIPE" : "DISH"}</span>
-        {recipe.archived && (
-          <span className="archived-badge" title="Archived: kept for history, hidden from End of day and the other lists">
-            Archived
-          </span>
-        )}
-      </div>
-      <p className="muted detail-sub">
-        {isSub
-          ? "In-house prep used inside other recipes — costed per portion."
-          : "Ingredient costs pull live from inventory and any sub-recipes used."}
-      </p>
-
-      </fieldset>
 
       {/* Outside the read-only fieldset on purpose: staff can't edit, but
           they can read the allergens and print the card. */}

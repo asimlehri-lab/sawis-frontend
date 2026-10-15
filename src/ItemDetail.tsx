@@ -764,6 +764,20 @@ export default function ItemDetail({
       </button>
 
       {readOnly && <p className="ro-banner">View only — changes to items need a manager or admin.</p>}
+      <fieldset className="ro-fieldset" disabled={readOnly}>
+      <div className="detail-head">
+        <input
+          className="name-edit"
+          value={item.name}
+          onChange={(e) => setItem({ ...item, name: e.target.value })}
+          onBlur={(e) => saveField({ name: e.target.value })}
+        />
+      </div>
+      <p className="muted detail-sub">
+        One catalog record, shared across every department and branch.
+      </p>
+      </fieldset>
+
       <div className="rp-tabs" role="tablist" aria-label="Item sections">
         {(readOnly ? (["details", "stock", "suppliers"] as const) : (["details", "stock", "suppliers", "history"] as const)).map((t) => (
           <button
@@ -782,20 +796,9 @@ export default function ItemDetail({
         ))}
       </div>
       {!readOnly && tab === "history" && (
-        <ItemHistory itemId={item.id} itemName={item.name} accessToken={accessToken} currency={currency} />
+        <ItemHistory itemId={item.id} accessToken={accessToken} currency={currency} />
       )}
       <fieldset className="ro-fieldset" disabled={readOnly} hidden={tab === "history"}>
-      <div className="detail-head">
-        <input
-          className="name-edit"
-          value={item.name}
-          onChange={(e) => setItem({ ...item, name: e.target.value })}
-          onBlur={(e) => saveField({ name: e.target.value })}
-        />
-      </div>
-      <p className="muted detail-sub">
-        One catalog record, shared across every department and branch.
-      </p>
 
       {error && <p className="error">{error}</p>}
 
