@@ -3133,3 +3133,214 @@ input[type="file"] {
 .idm-days td, .idm-days th { padding-top: 8px; padding-bottom: 8px; }
 .idm-head { margin-bottom: 10px; }
 
+
+/* ---------------------------------------------------------------------- */
+/* Reports v2 — tabs, KPI tiles with sparklines, bar charts, menu          */
+/* engineering chart, and the PDF print sheet. All rp-* so they can't      */
+/* collide with the older Reports/End-of-day rules above.                  */
+/* ---------------------------------------------------------------------- */
+
+:root {
+  /* Menu engineering groups: Headliners / Crowd pleasers / Hidden gems / Chop list. */
+  --rp-headliners: #2E54E8;
+  --rp-crowd: #E0A526;
+  --rp-gems: #1F9E8F;
+  --rp-chop: #9A9486;
+}
+
+.rp-page { min-width: 0; }
+.rp-actions { margin-left: auto; display: flex; gap: 8px; }
+.rp-range { margin: -6px 0 12px; font-size: 11.5px; color: var(--muted); }
+.rp-stack { display: flex; flex-direction: column; gap: 16px; }
+.rp-two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .rp-two { grid-template-columns: minmax(0, 1fr); } }
+.rp-card { margin: 0; display: flex; flex-direction: column; gap: 12px; }
+.rp-card-h { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.rp-card-total { font-size: 12px; color: var(--muted); }
+/* Same width:0 trick as .rp-tabs: a wide table scrolls inside its card instead of widening the page. */
+.rp-card .table-scroll { width: 0; min-width: 100%; }
+.rp-hint { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin: 0; }
+
+/* Section tabs: underline style, scroll sideways on a phone. */
+/* width:0 + min-width:100% stops the scrolling row from widening the whole page on a phone (a scroll container still reports its content width to its parent). */
+.rp-tabs { display: flex; gap: 24px; border-bottom: 1px solid var(--border); margin-bottom: 16px; overflow-x: auto; scrollbar-width: none; width: 0; min-width: 100%; }
+.rp-tabs::-webkit-scrollbar { display: none; }
+.rp-tab { flex: none; font-family: inherit; font-size: 14px; font-weight: 600; color: var(--muted); background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 10px 0; min-height: 44px; cursor: pointer; white-space: nowrap; }
+.rp-tab:hover { color: var(--ink); }
+.rp-tab.on { color: var(--brand); border-bottom-color: var(--brand); font-weight: 700; }
+
+/* KPI tiles */
+.rp-tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 1100px) { .rp-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 700px) { .rp-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; } .rp-tile-span { grid-column: span 2; } }
+.rp-tile { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 14px 14px 10px; display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.rp-tile-label { font-size: 12px; font-weight: 600; color: var(--muted); }
+.rp-tile-value { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; line-height: 1.15; }
+.rp-tile-value.good { color: var(--good); }
+.rp-tile-value.caution { color: var(--caution); }
+.rp-tile-value.warn { color: var(--warn); }
+.rp-tile-value.danger { color: var(--brick); }
+.rp-tile-sub { font-size: 11.5px; color: var(--muted); }
+.rp-pill { align-self: flex-start; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 20px; line-height: 1.5; }
+.rp-pill.good { background: var(--good-soft); color: var(--good); }
+.rp-pill.caution { background: var(--caution-soft); color: var(--caution); }
+.rp-pill.warn { background: var(--warn-soft); color: var(--warn); }
+.rp-pill.muted { background: var(--bg); color: var(--muted); }
+.rp-spark { width: 100%; height: 30px; margin-top: 2px; overflow: visible; }
+.rp-spark polyline { stroke: var(--brand); }
+.rp-spark circle { fill: var(--brand); }
+.rp-spark.caution polyline { stroke: var(--caution); }
+.rp-spark.caution circle { fill: var(--caution); }
+.rp-spark-empty { height: 30px; }
+
+/* Food cost bars */
+.rp-plot-wrap { display: flex; gap: 8px; margin-top: 18px; }
+.rp-yaxis { position: relative; width: 34px; flex: none; height: 190px; }
+.rp-yaxis span { position: absolute; right: 0; transform: translateY(50%); font-size: 11px; color: var(--muted); }
+.rp-plot { position: relative; flex: 1; min-width: 0; height: 190px; }
+.rp-grid { position: absolute; left: 0; right: 0; border-top: 1px solid var(--border); }
+.rp-grid.base { border-top-color: var(--muted); opacity: 0.5; }
+.rp-target { position: absolute; left: 0; right: 0; border-top: 1.5px dashed var(--muted); z-index: 1; pointer-events: none; }
+.rp-bars { position: absolute; inset: 0; display: flex; gap: 6px; padding: 0 4px; z-index: 2; }
+.rp-bar-col { flex: 1; min-width: 0; position: relative; background: none; border: none; padding: 0; margin: 0; font: inherit; cursor: pointer; }
+div.rp-bar-col { cursor: default; }
+.rp-bar-col:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
+.rp-bar { position: absolute; bottom: 0; left: 50%; width: 70%; max-width: 40px; transform: translateX(-50%); border-radius: 5px 5px 0 0; }
+.rp-bar.under { background: var(--brand); }
+.rp-bar.over { background: var(--caution); }
+.rp-bar.empty { background: var(--border); }
+.rp-bar.sel { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 22%, transparent); }
+.rp-bar-col:hover .rp-bar { opacity: 0.85; }
+.rp-bar-val { position: absolute; left: 0; right: 0; text-align: center; font-size: 10.5px; font-weight: 600; color: var(--muted); }
+.rp-xaxis { display: flex; gap: 6px; padding: 6px 4px 0 42px; }
+.rp-xaxis span { flex: 1; text-align: center; font-size: 11px; color: var(--muted); min-width: 0; }
+.rp-legend { display: flex; gap: 16px; margin-top: 12px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.rp-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.rp-sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.rp-sw.under { background: var(--brand); }
+.rp-sw.over { background: var(--caution); }
+.rp-sw.tgt { width: 16px; height: 0; border-radius: 0; border-top: 2px dashed var(--muted); }
+.rp-detail { margin-top: 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+.rp-detail-h { font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rp-detail-g { font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.rp-detail-s { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.rp-detail-a { font-size: 12.5px; margin-top: 6px; line-height: 1.45; }
+
+/* Horizontal bars */
+.rp-hbars { display: flex; flex-direction: column; gap: 14px; }
+.rp-hbar-h { display: flex; justify-content: space-between; gap: 10px; font-size: 13.5px; margin-bottom: 6px; }
+.rp-hbar-share { color: var(--muted); }
+.rp-hbar-track { height: 10px; background: var(--bg); border-radius: 6px; overflow: hidden; }
+.rp-hbar-fill { height: 100%; border-radius: 6px; }
+.rp-hbar-fill.brand { background: var(--brand); }
+.rp-hbar-fill.caution { background: var(--caution); }
+
+/* Menu engineering */
+.rp-me { display: grid; grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.rp-me-main { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.rp-me-side { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.rp-me-list { grid-column: 1 / -1; }
+/* The full dish list is the phone-friendly way in; on a wide screen the group cards and the table below already cover it, so it only shows once a group is picked. */
+@media (min-width: 901px) { .rp-narrow-only { display: none; } }
+@media (max-width: 900px) { .rp-me { grid-template-columns: minmax(0, 1fr); } }
+.rp-quad-wrap { position: relative; padding: 4px 6px 52px 54px; }
+.rp-quad { position: relative; height: 460px; }
+@media (max-width: 700px) { .rp-quad { height: 320px; } .rp-quad-wrap { padding-left: 46px; padding-right: 2px; } }
+.rp-quad-ytitle { position: absolute; left: 10px; top: calc(50% - 22px); transform: translate(-50%, -50%) rotate(-90deg); white-space: nowrap; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.rp-quad-yaxis { position: absolute; left: 22px; top: 4px; bottom: 52px; width: 30px; }
+.rp-quad-yaxis span { position: absolute; right: 0; transform: translateY(-50%); font-size: 11px; color: var(--muted); }
+.rp-quad-xtitle { position: absolute; left: 54px; right: 6px; bottom: 6px; text-align: center; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.rp-quad-xtick { position: absolute; top: calc(100% + 8px); transform: translateX(-50%); font-size: 11px; color: var(--muted); }
+.rp-qt { position: absolute; }
+.rp-qt.headliners { background: color-mix(in srgb, var(--rp-headliners) 7%, transparent); }
+.rp-qt.crowd { background: color-mix(in srgb, var(--rp-crowd) 11%, transparent); }
+.rp-qt.gems { background: color-mix(in srgb, var(--rp-gems) 9%, transparent); }
+.rp-qt.chop { background: color-mix(in srgb, var(--rp-chop) 9%, transparent); }
+.rp-qgrid { position: absolute; left: 0; right: 0; border-top: 1px solid var(--border); opacity: 0.7; }
+.rp-qgrid.base { border-top-color: var(--muted); opacity: 0.5; }
+.rp-qavg { position: absolute; border: 0 dashed var(--muted); }
+.rp-qavg.v { top: 0; bottom: 0; border-left-width: 1.5px; }
+.rp-qavg.h { left: 0; right: 0; border-top-width: 1.5px; }
+.rp-qname { position: absolute; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.rp-qname.gems { left: 10px; top: 8px; color: var(--rp-gems); }
+.rp-qname.headliners { right: 10px; top: 8px; color: var(--rp-headliners); }
+.rp-qname.chop { left: 10px; bottom: 8px; color: var(--muted); }
+.rp-qname.crowd { right: 10px; bottom: 8px; color: var(--warn); }
+@media (max-width: 700px) { .rp-qname { font-size: 9.5px; letter-spacing: 0.03em; } }
+/* The dot is a 28px tap target around a 14px mark. */
+.rp-dot { position: absolute; width: 28px; height: 28px; transform: translate(-50%, -50%); padding: 0; border: none; background: none; display: block; cursor: pointer; z-index: 3; }
+span.rp-dot { cursor: default; width: 14px; height: 14px; }
+.rp-dot::after { content: ""; position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; transform: translate(-50%, -50%); border-radius: 50%; border: 2px solid var(--surface); box-sizing: border-box; background: var(--rp-chop); transition: transform 0.1s; }
+.rp-dot.g-headliners::after { background: var(--rp-headliners); }
+.rp-dot.g-crowd::after { background: var(--rp-crowd); }
+.rp-dot.g-gems::after { background: var(--rp-gems); }
+.rp-dot.g-chop::after { background: var(--rp-chop); }
+.rp-dot.dim::after { opacity: 0.25; }
+.rp-dot.on { z-index: 5; }
+.rp-dot.on::after { transform: translate(-50%, -50%) scale(1.45); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ink) 30%, transparent); }
+.rp-dot:focus-visible { outline: none; }
+.rp-dot:focus-visible::after { box-shadow: 0 0 0 3px var(--ink); }
+.rp-dot-label { position: absolute; transform: translate(12px, -50%); font-size: 11.5px; font-weight: 600; white-space: nowrap; pointer-events: none; z-index: 4; }
+@media (max-width: 700px) { .rp-dot-label { display: none; } }
+.rp-gsw { width: 11px; height: 11px; border-radius: 50%; flex: none; display: inline-block; background: var(--rp-chop); }
+.rp-gsw.g-headliners { background: var(--rp-headliners); }
+.rp-gsw.g-crowd { background: var(--rp-crowd); }
+.rp-gsw.g-gems { background: var(--rp-gems); }
+.rp-gsw.g-chop { background: var(--rp-chop); }
+.rp-gcard { display: flex; flex-direction: column; gap: 6px; text-align: left; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px 16px; }
+button.rp-gcard { cursor: pointer; min-height: 44px; }
+button.rp-gcard:hover { border-color: var(--muted); }
+.rp-gcard.on { border: 2px solid var(--brand); padding: 13px 15px; }
+.rp-gcard-h { display: flex; align-items: center; gap: 8px; }
+.rp-gcard-name { font-size: 14px; font-weight: 700; flex: 1; }
+.rp-gcard-n { font-size: 12px; font-weight: 700; color: var(--muted); background: var(--bg); padding: 2px 10px; border-radius: 20px; }
+.rp-gcard-d { font-size: 12.5px; color: var(--ink); opacity: 0.8; line-height: 1.45; }
+.rp-gcard-a { font-size: 12.5px; line-height: 1.45; }
+.rp-me-list-h { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 4px 0 8px; }
+.rp-me-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; font: inherit; color: var(--ink); text-align: left; background: none; border: none; border-top: 1px solid var(--border); padding: 6px 8px; cursor: pointer; }
+.rp-me-row:hover, .rp-me-row.on { background: var(--brand-soft); }
+.rp-me-row-n { flex: 1; min-width: 0; font-size: 14px; font-weight: 600; display: flex; flex-direction: column; }
+.rp-me-row small, .rp-me-row-v small { font-size: 11.5px; font-weight: 400; color: var(--muted); }
+.rp-me-row-v { text-align: right; font-size: 14px; font-weight: 700; display: flex; flex-direction: column; }
+
+/* PDF dialog */
+.rp-pdf-checks { display: flex; flex-direction: column; margin: 4px 0 12px; }
+.rp-pdf-check { display: flex; align-items: center; gap: 12px; min-height: 40px; font-size: 14px; cursor: pointer; }
+.rp-pdf-check input { width: 20px; height: 20px; flex: none; }
+
+/* Print sheet: always light, whatever the screen theme. */
+.rp-print-block { margin-top: 14px; }
+/* (.print-only already hides this on screen -- no display rule here, or it
+   would also override .print-only's display:block when printing.) */
+@media print {
+  .rp-print {
+    --bg: #FAF8F3; --surface: #FFFFFF; --border: #D9D2C3; --ink: #211F1B; --muted: #6B6455;
+    --brand: #2E54E8; --brand-soft: #E9ECFC; --good: #1D6B4F; --good-soft: #E4F0EA;
+    --caution: #C2611D; --caution-soft: #F7E9DC; --warn: #8A6410; --warn-soft: #F6EDD6; --brick: #A33636;
+    --rp-headliners: #2E54E8; --rp-crowd: #E0A526; --rp-gems: #1F9E8F; --rp-chop: #9A9486;
+    background: #fff; color: var(--ink); font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  .rp-print * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .rp-print-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .rp-print-brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; }
+  .rp-print-logo { width: 18px; height: 18px; border-radius: 5px; background: #2E54E8; display: inline-block; }
+  .rp-print-meta { font-size: 12px; color: var(--muted); }
+  .rp-print h1 { font-size: 24px; margin: 0 0 14px; }
+  .rp-print .rp-tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+  .rp-print .rp-tile { padding: 10px; border-radius: 10px; }
+  .rp-print .rp-tile-span { grid-column: auto; }
+  .rp-print .rp-tile-value { font-size: 19px; }
+  .rp-print .rp-pill { font-size: 9.5px; }
+  .rp-print .card { box-shadow: none; border: 1px solid var(--border); border-radius: 10px; padding: 14px; background: #fff; }
+  .rp-print .rp-print-block, .rp-print .rp-card, .rp-print .rp-tiles { break-inside: avoid; }
+  .rp-print .rp-me { grid-template-columns: 1fr 1fr; }
+  .rp-print .rp-quad { height: 300px; }
+  .rp-print .rp-dot-label { display: block; }
+  .rp-print .rp-bars button { cursor: default; }
+  .rp-print .rp-hint, .rp-print .rp-detail { font-size: 10.5px; }
+  .rp-print .rp-gcard { padding: 8px 10px; break-inside: avoid; }
+  .rp-print .rp-gcard-d, .rp-print .rp-gcard-a { font-size: 10.5px; }
+  .rp-print table { margin-top: 6px; }
+  .rp-print-foot { display: flex; justify-content: space-between; margin-top: 18px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 10px; color: var(--muted); }
+}

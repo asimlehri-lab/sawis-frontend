@@ -436,7 +436,15 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "Where do I see menu-item performance?",
-        a: "Go to Reports in the sidebar (managers and above) — it has a full menu-performance table with a trend chart. The Export CSV button is for Admins only, and it asks for your password every time.",
+        a: "Go to Reports in the sidebar (managers and above). Overview shows the key figures with a small trend line and a comparison with the period before, food cost by day, and where waste and ingredient cost went. Menu engineering sorts every dish into Headliners, Crowd pleasers, Hidden gems and the Chop list, with a suggested next step for each. The Export CSV button is for Admins only, and it asks for your password every time.",
+      },
+      {
+        q: "How do I download a report as a PDF?",
+        a: "Admins see a Download PDF button on Reports. Click it, tick the sections you want, and type your password (it asks every time; nothing downloads if it's wrong). Your browser's print window then opens: choose Save as PDF as the printer. On a phone, the same print option offers Save as PDF or Share.",
+      },
+      {
+        q: "What do Headliners, Crowd pleasers, Hidden gems and Chop list mean?",
+        a: "On Reports → Menu engineering each dish is placed by how much of the menu it sells and how much each one earns, against this period's averages. Headliners sell well and earn well: protect them. Crowd pleasers sell well but earn little: reprice or trim the cost. Hidden gems earn well but sell little: promote them. The Chop list sells little and earns little: rework or drop them. Dishes with an ingredient that has no price on file are left out until the price is fixed.",
       },
       {
         q: "Does linking a new supplier price change past reports?",

@@ -1,7 +1,14 @@
 import { useEffect, useState } from "react";
-import { fetchReportsSummary, formatMoney, currencySymbol, costBand, costBandColor } from "./api";
-import type { Location, ReportsMenuRow, ReportsSummary } from "./api";
+import { fetchReportsSummary } from "./api";
+import type { Location, ReportsSummary } from "./api";
 import PasswordConfirmModal from "./PasswordConfirmModal";
+import ReportPdfModal from "./ReportPdfModal";
+import type { PdfSections } from "./ReportPdfModal";
+import ReportPrintSheet from "./ReportPrintSheet";
+import { FoodCostBars } from "./ReportCharts";
+import MenuEngineering from "./MenuEngineering";
+import { CategoryCard, MenuTable, ReportTiles, SplitBar, WasteCard, ZeroCostNote } from "./ReportParts";
+import { sectionHeadStyle } from "./reportFormat";
 
 interface Props {
   accessToken: string;
@@ -9,40 +16,49 @@ interface Props {
   isAdmin: boolean;
 }
 
-function pct(n: number | null, d = 1) {
-  return n === null ? "—" : `${n.toFixed(d)}%`;
-}
+type Tab = "overview" | "menu" | "waste" | "category";
+const TABS: { key: Tab; label: string }[] = [
+  { key: "overview", label: "Overview" },
+  { key: "menu", label: "Menu engineering" },
+  { key: "waste", label: "Waste" },
+  { key: "category", label: "Cost by category" },
+];
 
-const sectionHeadStyle: React.CSSProperties = {
-  fontSize: 13,
-  textTransform: "uppercase",
-  letterSpacing: "0.06em",
-  color: "var(--muted)",
-  fontWeight: 700,
-  margin: 0,
+const COMPARED_WITH: Record<ReportsSummary["period"], string> = {
+  week: "the 7 days before",
+  month: "the same days last month",
+  lastmonth: "the month before",
+};
+
+const PERIOD_TITLE: Record<ReportsSummary["period"], string> = {
+  week: "Weekly report",
+  month: "Monthly report",
+  lastmonth: "Monthly report",
 };
 
 export default function Reports({ accessToken, locations, isAdmin }: Props) {
   const [location, setLocation] = useState(locations[0]?.id ?? "");
-  // Export is restricted to admins and gated behind a password
-  // re-confirmation (see PasswordConfirmModal) -- this report includes
-  // per-dish cost and margin data.
+  // CSV export and PDF download are restricted to admins and gated behind a
+  // password re-confirmation (see PasswordConfirmModal / ReportPdfModal) --
+  // this report includes per-dish cost and margin data.
   const [confirmingExport, setConfirmingExport] = useState(false);
+  const [choosingPdf, setChoosingPdf] = useState(false);
+  const [printing, setPrinting] = useState<PdfSections | null>(null);
   const currency = locations.find((l) => l.id === location)?.currency;
   // This location's own food/drink-cost-% targets (Settings > Locations),
   // defaulting to 30 if this location somehow has neither set. The
   // report's single top-line food-cost % blends food+drink sales
   // together, so it compares against the food target as a reference line
-  // -- only the per-dish table below (which knows each row's own
-  // menu_group) actually splits food vs drink.
+  // -- only the per-dish table (which knows each row's own menu_group)
+  // actually splits food vs drink.
   const activeLocation = locations.find((l) => l.id === location);
   const foodTarget = activeLocation ? Number(activeLocation.target_food_cost_pct) || 30 : 30;
   const drinkTarget = activeLocation ? Number(activeLocation.target_drink_cost_pct) || 30 : 30;
   const [period, setPeriod] = useState<"week" | "month" | "lastmonth">("week");
+  const [tab, setTab] = useState<Tab>("overview");
   const [report, setReport] = useState<ReportsSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [trendAsTable, setTrendAsTable] = useState(false);
 
   useEffect(() => {
     if (!location && locations[0]) setLocation(locations[0].id);
@@ -69,15 +85,38 @@ export default function Reports({ accessToken, locations, isAdmin }: Props) {
     };
   }, [accessToken, location, period]);
 
+  // Printing: the sheet is mounted first (setPrinting), then the browser's
+  // print window opens once it has rendered, and the sheet is removed again
+  // when that window closes. The page title becomes the suggested PDF file
+  // name for the moment it is open.
+  useEffect(() => {
+    if (!printing || !report) return;
+    const previousTitle = document.title;
+    document.title = `SAWIS report ${report.range.start} to ${report.range.end}`;
+    const done = () => {
+      document.title = previousTitle;
+      setPrinting(null);
+    };
+    window.addEventListener("afterprint", done, { once: true });
+    const t = window.setTimeout(() => window.print(), 250);
+    return () => {
+      window.clearTimeout(t);
+      window.removeEventListener("afterprint", done);
+      document.title = previousTitle;
+    };
+  }, [printing, report]);
+
   if (!locations.length) {
     return <p className="error">No locations yet — add one before there's anything to report on.</p>;
   }
 
+  const periodName = period === "week" ? "the last 7 days" : period === "month" ? "this month" : "last month";
+
   return (
-    <div>
+    <div className="rp-page">
       <div className="eod-toolbar">
         {locations.length > 1 && (
-          <select value={location} onChange={(e) => setLocation(e.target.value)}>
+          <select value={location} onChange={(e) => setLocation(e.target.value)} aria-label="Location">
             {locations.map((l) => (
               <option key={l.id} value={l.id}>
                 {l.name}
@@ -97,15 +136,17 @@ export default function Reports({ accessToken, locations, isAdmin }: Props) {
           </button>
         </div>
         {report && isAdmin && (
-          <button
-            className="btn-primary small"
-            style={{ marginLeft: "auto" }}
-            onClick={() => setConfirmingExport(true)}
-          >
-            Export CSV
-          </button>
+          <div className="rp-actions">
+            <button className="btn-ghost small" onClick={() => setConfirmingExport(true)}>
+              Export CSV
+            </button>
+            <button className="btn-primary small" onClick={() => setChoosingPdf(true)}>
+              Download PDF
+            </button>
+          </div>
         )}
       </div>
+
       {confirmingExport && report && (
         <PasswordConfirmModal
           accessToken={accessToken}
@@ -118,311 +159,103 @@ export default function Reports({ accessToken, locations, isAdmin }: Props) {
           onClose={() => setConfirmingExport(false)}
         />
       )}
+      {choosingPdf && report && (
+        <ReportPdfModal
+          accessToken={accessToken}
+          context={`${activeLocation?.name ?? "This location"} · ${periodName}.`}
+          onConfirmed={(sections) => {
+            setChoosingPdf(false);
+            setPrinting(sections);
+          }}
+          onClose={() => setChoosingPdf(false)}
+        />
+      )}
+      {printing && report && (
+        <ReportPrintSheet
+          report={report}
+          currency={currency}
+          venue={activeLocation?.name ?? ""}
+          title={PERIOD_TITLE[report.period]}
+          sections={printing}
+          target={foodTarget}
+          foodTarget={foodTarget}
+          drinkTarget={drinkTarget}
+        />
+      )}
 
       {error && <p className="error">{error}</p>}
       {loading && !report && <p className="muted">Loading…</p>}
 
       {report && (
         <>
-          <div className="muted" style={{ marginTop: -6, marginBottom: 16, fontSize: 11.5 }}>
-            {report.range.start} – {report.range.end}
+          <div className="rp-range">
+            {report.range.start} – {report.range.end} · compared with {COMPARED_WITH[report.period]}
           </div>
-          <RptKpis report={report} currency={currency} target={foodTarget} />
-          <TrendChart report={report} asTable={trendAsTable} setAsTable={setTrendAsTable} target={foodTarget} />
-          <SplitBar report={report} currency={currency} />
-          <MenuTable rows={report.menu} currency={currency} foodTarget={foodTarget} drinkTarget={drinkTarget} />
+          <div className="rp-tabs" role="tablist" aria-label="Report sections">
+            {TABS.map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                aria-selected={tab === t.key}
+                className={`rp-tab ${tab === t.key ? "on" : ""}`}
+                onClick={() => setTab(t.key)}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {tab === "overview" && (
+            <div className="rp-stack">
+              <ReportTiles report={report} currency={currency} target={foodTarget} />
+              <ZeroCostNote report={report} />
+              <section className="card rp-card">
+                <h2 style={sectionHeadStyle}>Food cost % by {report.period === "week" ? "day" : "week"}</h2>
+                {report.trend.every((t) => t.food_cost_pct === null) ? (
+                  <p className="muted" style={{ margin: 0 }}>
+                    No sales recorded in this period yet.
+                  </p>
+                ) : (
+                  <FoodCostBars key={`${location}-${period}`} trend={report.trend} target={foodTarget} currency={currency} />
+                )}
+              </section>
+              <SplitBar report={report} currency={currency} />
+              <div className="rp-two">
+                <WasteCard report={report} currency={currency} />
+                <CategoryCard report={report} currency={currency} />
+              </div>
+            </div>
+          )}
+
+          {tab === "menu" && (
+            <div className="rp-stack">
+              <section className="card rp-card">
+                <h2 style={sectionHeadStyle}>Which dishes earn their place</h2>
+                <MenuEngineering key={`${location}-${period}`} rows={report.menu} currency={currency} />
+              </section>
+              <MenuTable rows={report.menu} currency={currency} foodTarget={foodTarget} drinkTarget={drinkTarget} />
+            </div>
+          )}
+
+          {tab === "waste" && (
+            <div className="rp-stack">
+              <WasteCard report={report} currency={currency} wide />
+            </div>
+          )}
+
+          {tab === "category" && (
+            <div className="rp-stack">
+              <CategoryCard report={report} currency={currency} wide />
+            </div>
+          )}
         </>
       )}
     </div>
   );
 }
 
-function RptKpis({ report, currency, target }: { report: ReportsSummary; currency?: string; target: number }) {
-  const fc = report.food_cost_pct;
-  const fcBand = costBand(fc, target);
-  const gp = report.gross_profit_pct;
-  const wastePct = report.waste_pct;
-  const variance = report.variance;
-  // A real dish essentially never costs £0 to make — if food cost is
-  // driven to (near) zero because ingredients had no supplier price on
-  // file, showing a reassuring green "On target" tag would actively
-  // mislead rather than just be incomplete. Same honesty pattern as the
-  // zero_cost_items note itself, just extended to the tag/color, not only
-  // the footnote underneath it.
-  const hasZeroCostItems = report.zero_cost_items.length > 0;
-
-  return (
-    <>
-      <div className="kpi-grid kpi-grid-5">
-        <div className="kpi-card">
-          <div className="kpi-label">Net sales</div>
-          <div className="kpi-value">{formatMoney(report.net_sales, currency, 0)}</div>
-          <div className="kpi-sub">this period</div>
-        </div>
-
-        <div className="kpi-card">
-          <div className="kpi-label">Food cost</div>
-          {fc === null ? (
-            <div className="kv-empty">No sales yet</div>
-          ) : (
-            <>
-              <div className="kpi-value" style={{ color: hasZeroCostItems ? "var(--warn)" : costBandColor(fcBand) }}>
-                {fc.toFixed(1)}%
-              </div>
-              <div className="kpi-sub">
-                {hasZeroCostItems ? (
-                  <span className="tag warn">Cost incomplete</span>
-                ) : (
-                  <span className={`tag ${fcBand === "good" ? "good" : fcBand === "caution" ? "bad" : "danger"}`}>
-                    {fcBand === "good" ? "On target" : fcBand === "caution" ? "Over target" : "Well over target"}
-                  </span>
-                )}{" "}
-                · target {target}%
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="kpi-card">
-          <div className="kpi-label">Gross profit</div>
-          <div className="kpi-value" style={{ color: gp !== null ? (hasZeroCostItems ? "var(--warn)" : "var(--good)") : undefined }}>
-            {pct(gp)}
-          </div>
-          <div className="kpi-sub">{hasZeroCostItems ? "incomplete — see note below" : "of net sales"}</div>
-        </div>
-
-        <div className="kpi-card">
-          <div className="kpi-label">Waste</div>
-          <div className="kpi-value">{pct(wastePct)}</div>
-          <div className="kpi-sub">{wastePct === null ? "no sales to compare" : `${formatMoney(report.waste_cost, currency, 2)} of sales`}</div>
-        </div>
-
-        <div className="kpi-card">
-          <div className="kpi-label">Stock variance</div>
-          <div className="kpi-value" style={{ color: variance < 0 ? "var(--brick)" : variance > 0 ? "var(--good)" : undefined }}>
-            {formatMoney(variance, currency, 2)}
-          </div>
-          <div className="kpi-sub">
-            {variance < 0 ? "shrinkage vs counts" : variance > 0 ? "surplus vs counts" : "no counts logged, or matched exactly"}
-          </div>
-        </div>
-      </div>
-
-      {report.zero_cost_items.length > 0 && (
-        <div className="kpi-note">
-          {report.zero_cost_items.length} ingredient{report.zero_cost_items.length === 1 ? "" : "s"} sold this period
-          with no supplier price on file — food cost and gross profit are likely understated. Link a supplier in
-          Items to fix this: {report.zero_cost_items.join(", ")}.
-        </div>
-      )}
-    </>
-  );
-}
-
-function TrendChart({
-  report,
-  asTable,
-  setAsTable,
-  target,
-}: {
-  report: ReportsSummary;
-  asTable: boolean;
-  setAsTable: (v: boolean) => void;
-  target: number;
-}) {
-  const values = report.trend.map((t) => t.food_cost_pct).filter((v): v is number => v !== null);
-  const hasData = values.length > 0;
-  const scaleMax = Math.ceil(Math.max(target + 10, ...(hasData ? values : [0])) / 10) * 10;
-  const tgtBottomPct = (target / scaleMax) * 100;
-
-  return (
-    <section className="card" style={{ marginTop: 16 }}>
-      <div className="cmp-h">
-        <h2 style={sectionHeadStyle}>Food cost % trend</h2>
-        {hasData && (
-          <button className="open-link" onClick={() => setAsTable(!asTable)}>
-            {asTable ? "View as chart" : "View as table"}
-          </button>
-        )}
-      </div>
-
-      {!hasData ? (
-        <p className="muted" style={{ margin: 0 }}>
-          No sales recorded in this period yet.
-        </p>
-      ) : asTable ? (
-        <div className="table-scroll">
-          <table className="tbl" style={{ marginTop: 4 }}>
-            <thead>
-              <tr>
-                <th>Period</th>
-                <th className="num">Food cost %</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.trend.map((t) => (
-                <tr key={t.label}>
-                  <td>{t.label}</td>
-                  <td className="num">{pct(t.food_cost_pct)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <>
-          <div className="trend-chart">
-            <div className="trend-tgtline" style={{ bottom: `${tgtBottomPct}%` }} />
-            {report.trend.map((t) => (
-              <div className="trend-bar-col" key={t.label}>
-                {t.food_cost_pct !== null ? (
-                  <div
-                    className={`trend-bar ${t.food_cost_pct > target ? "over" : "under"}`}
-                    style={{ height: `${Math.max((t.food_cost_pct / scaleMax) * 100, 2)}%` }}
-                    title={`${t.label}: ${t.food_cost_pct.toFixed(1)}%`}
-                  />
-                ) : (
-                  <div className="trend-bar empty" title={`${t.label}: no sales`} />
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="trend-labels">
-            {report.trend.map((t) => (
-              <span key={t.label}>{t.label}</span>
-            ))}
-          </div>
-          <div className="trend-legend">
-            <span className="trend-lg-item">
-              <i className="sw sw-under" /> On target (≤30%)
-            </span>
-            <span className="trend-lg-item">
-              <i className="sw sw-over" /> Over target
-            </span>
-            <span className="trend-lg-item">
-              <i className="sw sw-tgt" /> 30% target
-            </span>
-          </div>
-        </>
-      )}
-    </section>
-  );
-}
-
-function SplitBar({ report, currency }: { report: ReportsSummary; currency?: string }) {
-  const fc = report.food_cost_pct;
-  const gp = report.gross_profit_pct;
-
-  return (
-    <section className="card" style={{ marginTop: 16 }}>
-      <h2 style={{ ...sectionHeadStyle, marginBottom: 12 }}>Where each {currencySymbol(currency)} of sales went</h2>
-      {fc === null || gp === null ? (
-        <p className="muted" style={{ margin: 0 }}>
-          No sales recorded in this period yet.
-        </p>
-      ) : (
-        <>
-          <div className="split-bar">
-            <div className="split-fc" style={{ width: `${fc}%` }} title={`Food cost: ${fc.toFixed(1)}%`} />
-            <div className="split-gp" style={{ width: `${gp}%` }} title={`Gross profit: ${gp.toFixed(1)}%`} />
-          </div>
-          <div className="trend-legend" style={{ marginTop: 12 }}>
-            <span className="trend-lg-item">
-              <i className="sw sw-over" /> Food cost · {pct(fc)}
-            </span>
-            <span className="trend-lg-item">
-              <i className="sw sw-under" /> Gross profit · {pct(gp)}
-            </span>
-          </div>
-          {report.zero_cost_items.length > 0 && (
-            <p className="muted" style={{ marginTop: 10, marginBottom: 0, fontSize: 11.5 }}>
-              Some ingredient costs are missing this period, so this split leans more green than it really is — see
-              the note above the trend chart.
-            </p>
-          )}
-        </>
-      )}
-    </section>
-  );
-}
-
-function MenuTable({
-  rows,
-  currency,
-  foodTarget,
-  drinkTarget,
-}: {
-  rows: ReportsMenuRow[];
-  currency?: string;
-  foodTarget: number;
-  drinkTarget: number;
-}) {
-  return (
-    <section className="card" style={{ marginTop: 16 }}>
-      <h2 style={{ ...sectionHeadStyle, marginBottom: 12 }}>Menu performance</h2>
-      {rows.length === 0 ? (
-        <p className="muted" style={{ margin: 0 }}>
-          No dishes sold in this period yet.
-        </p>
-      ) : (
-        <div className="table-scroll">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Dish</th>
-                <th className="num">Sold</th>
-                <th className="num">Food cost</th>
-                <th className="num">GP / dish</th>
-                <th className="num">GP contribution</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const rowTarget = r.menu_group === "drink" ? drinkTarget : foodTarget;
-                const rowBand = costBand(r.food_cost_pct, rowTarget);
-                const rowBadgeClass = rowBand === "good" ? "b-ok" : rowBand === "caution" ? "b-low" : "b-bad";
-                return (
-                <tr key={r.recipe_id}>
-                  <td className="dish">{r.name}</td>
-                  <td className="num">{r.qty}</td>
-                  <td className="num">
-                    {r.food_cost_pct === null ? (
-                      "—"
-                    ) : r.food_cost_pct === 0 ? (
-                      // A dish with real ingredients essentially never costs
-                      // literally £0 to make — a flat 0.0% almost always means
-                      // an ingredient had no supplier price on file, not that
-                      // margin is perfect. Flag it rather than badge it green.
-                      <span
-                        className="badge warn"
-                        title="Likely incomplete — a real dish essentially never costs £0 to make. Check this recipe's ingredients for one with no supplier price on file."
-                      >
-                        0.0%*
-                      </span>
-                    ) : (
-                      <span
-                        className={`badge ${rowBadgeClass}`}
-                        title={`Target: ${rowTarget}% (${r.menu_group})`}
-                      >
-                        {r.food_cost_pct.toFixed(1)}%
-                      </span>
-                    )}
-                  </td>
-                  <td className="num">{formatMoney(r.gp_per_unit, currency, 2)}</td>
-                  <td className="num">{formatMoney(r.gp_contribution, currency, 2)}</td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </section>
-  );
-}
-
-// Real client-side export (the reference mockup's "Export" button is a fake
-// toast with no actual file) — builds the CSV straight from the same data
+// Real client-side export -- builds the CSV straight from the same data
 // already on screen, no extra request or library.
 function exportMenuCsv(report: ReportsSummary) {
   const header = ["Dish", "Sold", "Revenue", "Cost", "Food cost %", "GP per dish", "GP contribution"];

@@ -2369,7 +2369,41 @@ export async function fetchEodReport(
 
 export interface ReportsTrendPoint {
   label: string;
+  // First and last day this point covers (YYYY-MM-DD) -- a day for the
+  // week view, a calendar week for the month views.
+  start: string;
+  end: string;
   food_cost_pct: number | null;
+  net_sales: number;
+  gross_profit_pct: number | null;
+  waste_cost: number;
+  variance: number;
+}
+
+// The five tile figures for the period just before the one on screen
+// (the 7 days before a week, the month before a month) -- what the tiles'
+// "up 6% on last month" pills compare against.
+export interface ReportsPrevious {
+  range: { start: string; end: string };
+  net_sales: number;
+  food_cost_pct: number | null;
+  gross_profit_pct: number | null;
+  waste_cost: number;
+  waste_pct: number | null;
+  variance: number;
+}
+
+export interface ReportsWasteReason {
+  reason: string;
+  label: string;
+  cost: number;
+  share_pct: number;
+}
+
+export interface ReportsCostCategory {
+  category: string;
+  cost: number;
+  share_pct: number;
 }
 
 export interface ReportsMenuRow {
@@ -2406,6 +2440,9 @@ export interface ReportsSummary {
   // food_cost_pct (and anything derived from it) is a likely undercount.
   zero_cost_items: string[];
   trend: ReportsTrendPoint[];
+  previous: ReportsPrevious;
+  waste_by_reason: ReportsWasteReason[];
+  cost_by_category: ReportsCostCategory[];
   menu: ReportsMenuRow[];
 }
 
