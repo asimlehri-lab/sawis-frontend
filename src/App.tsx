@@ -61,7 +61,7 @@ import type {
 } from "./api";
 import RecipeDetail from "./RecipeDetail";
 import ItemDetail from "./ItemDetail";
-import type { ItemTab } from "./itemTabs";
+import type { ItemTab, RecipeTab } from "./itemTabs";
 import AllergenIcon from "./AllergenIcon";
 import AllergenPrintSheet from "./AllergenPrintSheet";
 import AllergenReview from "./AllergenReview";
@@ -548,6 +548,7 @@ export default function App() {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   // Tab the Item page opens on (undefined = Details); cleared whenever we leave the page.
   const [itemTab, setItemTab] = useState<ItemTab | undefined>(undefined);
+  const [recipeTab, setRecipeTab] = useState<RecipeTab | undefined>(undefined);
   // Jumped from Inventory to an item page (e.g. to add a stock unit): keep Inventory mounted but hidden
   // so a half-filled count sheet or section form is still there on the way back.
   const [inventoryParked, setInventoryParked] = useState(false);
@@ -1118,6 +1119,7 @@ export default function App() {
     setSelectedRecipeId(null);
     setSelectedItemId(null);
     setItemTab(undefined);
+    setRecipeTab(undefined);
     setShowImport(false);
     setShowAllergenReview(false);
     setSelectedPOId(null);
@@ -2033,8 +2035,10 @@ export default function App() {
             allergens={allergens}
             venue={me.org.name}
             locations={locations}
+            initialTab={recipeTab}
             onBack={() => {
               setSelectedRecipeId(null);
+              setRecipeTab(undefined);
               setSubReturn(null);
               setPreselectSub(null);
             }}
@@ -2570,17 +2574,19 @@ export default function App() {
                 itemSupplierLinks={itemSupplierLinks}
                 stockMovements={stockMovements}
                 initialTab={eodInitialTab}
-                onOpenRecipe={(id) => {
+                onOpenRecipe={(id, tab) => {
                   goToNav("Recipes");
                   setSelectedRecipeId(id);
+                  setRecipeTab(tab);
                 }}
                 onOpenPO={(id) => {
                   goToNav("Procurement");
                   setSelectedPOId(id);
                 }}
-                onOpenItem={(id) => {
+                onOpenItem={(id, tab) => {
                   goToNav("Items");
                   setSelectedItemId(id);
+                  setItemTab(tab);
                 }}
                 onNavigateApp={(label) => goToNav(label)}
                 onReviewAllergens={() => {

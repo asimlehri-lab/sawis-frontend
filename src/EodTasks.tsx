@@ -29,9 +29,9 @@ interface Props {
   recipes: Recipe[];
   items: CatalogItem[];
   stockMovements: StockMovementRow[];
-  onOpenRecipe: (id: string) => void;
+  onOpenRecipe: (id: string, tab?: "history") => void;
   onOpenPO: (id: string) => void;
-  onOpenItem: (id: string) => void;
+  onOpenItem: (id: string, tab?: "history") => void;
   onReviewAllergens: () => void;
   onItemsChanged: () => void;
   onViewReorder: () => void;
@@ -238,9 +238,9 @@ function ManagerTasks({
   items: CatalogItem[];
   stockMovements: StockMovementRow[];
   notifications: AppNotification[];
-  onOpenRecipe: (id: string) => void;
+  onOpenRecipe: (id: string, tab?: "history") => void;
   onOpenPO: (id: string) => void;
-  onOpenItem: (id: string) => void;
+  onOpenItem: (id: string, tab?: "history") => void;
   onReviewAllergens: () => void;
   onItemsChanged: () => void;
   onViewReorder: () => void;
@@ -444,6 +444,13 @@ function ManagerTasks({
     return recipes.some((r) => r.id === e.target_id) ? () => onOpenRecipe(e.target_id) : null;
   }
 
+  // "View history" opens the item's or recipe's History tab (managers see this feed; the server checks again).
+  function feedHistory(e: ActivityEvent): (() => void) | null {
+    if (e.target_type === "item") return items.some((i) => i.id === e.target_id) ? () => onOpenItem(e.target_id, "history") : null;
+    if (e.target_type === "recipe") return recipes.some((r) => r.id === e.target_id) ? () => onOpenRecipe(e.target_id, "history") : null;
+    return null;
+  }
+
   return (
     <div>
       <p className="muted" style={{ marginTop: -4, marginBottom: 16, fontSize: 12.5 }}>
@@ -645,10 +652,18 @@ function ManagerTasks({
                     </span>
                   </>
                 );
+                const history = feedHistory(e);
                 return open ? (
-                  <button key={e.id} type="button" className="feed-row feed-row-clickable" onClick={open}>
-                    {body}
-                  </button>
+                  <div key={e.id} className="feed-item">
+                    <button type="button" className="feed-row feed-row-clickable" onClick={open}>
+                      {body}
+                    </button>
+                    {history && (
+                      <button type="button" className="link-btn feed-hist" onClick={history}>
+                        View history
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   <div key={e.id} className="feed-row">
                     {body}

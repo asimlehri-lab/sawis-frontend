@@ -2760,6 +2760,10 @@ input[type="file"] {
 }
 .feed-row:last-child { border-bottom: 0; }
 .feed-row-clickable { cursor: pointer; }
+.feed-item { border-bottom: 1px solid var(--border); }
+.feed-item:last-child { border-bottom: 0; }
+.feed-item .feed-row { border-bottom: 0; padding-bottom: 2px; }
+.feed-hist { margin: 0 0 10px 44px; font-size: 12px; color: var(--brand); }
 .feed-row-clickable:hover { background: var(--bg); }
 .feed-row-clickable:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
 .feed-ic { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex: none; background: var(--bg); }
@@ -3171,7 +3175,7 @@ input[type="file"] {
 .rp-hint { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin: 0; }
 
 .it-tab-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--caution); margin-left: 6px; vertical-align: middle; }
-.card[hidden], .ro-fieldset[hidden] { display: none; }
+.card[hidden], .ro-fieldset[hidden], .allergen-block[hidden] { display: none; }
 
 /* Item History tab */
 .ih { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
@@ -3215,6 +3219,33 @@ input[type="file"] {
 .ih-actor-bar { display: block; height: 100%; border-radius: 4px; background: var(--brand); }
 .ih-actor-n { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .ih-note { background: var(--warn-soft); color: var(--warn); border-radius: 14px; padding: 12px 14px; font-size: 12.5px; line-height: 1.5; margin: 0; }
+
+.ih-sub { font-size: 12px; color: var(--muted); line-height: 1.45; overflow-wrap: anywhere; }
+.ih-dot.ingredients { background: var(--brand); }
+.ih-dot.price { background: var(--good); }
+.ih-dot.auto { background: var(--muted); }
+.ih-lede { margin: -6px 0 0; font-size: 13px; line-height: 1.5; }
+.ih-cols { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.ih-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.ih-side { min-width: 0; }
+/* On a phone the side cards are split around the list: cost chart first, "today" and who-touched-it after. */
+.ih-side { display: contents; }
+.ih-main { order: 1; }
+.ih-first { order: 0; }
+.ih-last { order: 2; }
+@media (min-width: 900px) {
+  .ih-cols { flex-direction: row; align-items: flex-start; gap: 22px; }
+  .ih-main { flex: 1.7; }
+  .ih-side { display: flex; flex-direction: column; gap: 14px; flex: 1; position: sticky; top: 16px; }
+  .ih-main { order: 0; }
+}
+.ih-steps { width: 100%; height: auto; display: block; margin-top: 4px; }
+.ih-node { fill: var(--surface); stroke: var(--brand); }
+.ih-end-dot { fill: var(--brand); stroke: var(--surface); }
+.ih-steps-label { font-size: 10px; fill: var(--muted); }
+.ih-today { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.ih-today > div { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.ih-today span { color: var(--muted); }
 
 /* Section tabs: underline style, scroll sideways on a phone. */
 /* width:0 + min-width:100% stops the scrolling row from widening the whole page on a phone (a scroll container still reports its content width to its parent). */

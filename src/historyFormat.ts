@@ -1,8 +1,8 @@
 import { formatMoney } from "./api";
 import type { HistoryEvent } from "./api";
 
-// Wording and number formatting for the History timeline. Kept apart from
-// the component so the Recipe history (next) reads its events the same way.
+// Wording and number formatting for the History timelines (Items and
+// Recipes read their events the same way).
 
 const MINUS = "−";
 
@@ -13,6 +13,13 @@ export function fmtPrice(value: string, currency?: string | null): string {
   // a trailing zero past the usual 2 (5.5000 -> 5.50, 0.0123 -> 0.0123).
   const decimals = n.toFixed(4).replace(/0+$/, "").split(".")[1]?.length ?? 0;
   return formatMoney(n, currency, Math.max(2, decimals));
+}
+
+/** A cost per portion: always pence, however many decimals the server keeps. */
+export function fmtMoney2(value: string | number, currency?: string | null): string {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return String(value);
+  return formatMoney(n, currency, 2);
 }
 
 export function fmtQty(value: string): string {
@@ -32,6 +39,10 @@ function fmtSigned(value: string, unit: string): string {
 export function changeText(e: HistoryEvent, currency?: string | null): string | null {
   if (e.kind === "stock") return fmtSigned(e.new_value, e.unit);
   if (e.action === "created") return null;
+  if (e.kind === "auto") return `${fmtMoney2(e.old_value, currency)} → ${fmtMoney2(e.new_value, currency)} per portion`;
+  // An import replaces a recipe's lines wholesale; the server writes the summary.
+  if (e.field === "Ingredients") return e.new_value;
+  if (e.field === "Amount") return `${e.context}: ${e.old_value} → ${e.new_value}`;
   const none = "none";
   let from: string;
   let to: string;
@@ -69,6 +80,7 @@ const STOCK_WORDS: Record<string, { verb: string; plain: string }> = {
 const FIELD_WORDS: Record<string, string> = {
   SKU: "SKU",
   "VAT rate": "VAT rate",
+  "POS ID": "POS ID",
   Contains: "allergens it contains",
   "May contain": "may-contain allergens",
 };
@@ -77,6 +89,14 @@ const FIELD_WORDS: Record<string, string> = {
 export function describe(e: HistoryEvent): { verb: string; plain: string } {
   if (e.kind === "stock") return STOCK_WORDS[e.action] ?? { verb: e.field.toLowerCase(), plain: e.field };
   if (e.field === "Item" && e.action === "created") return { verb: "created this item", plain: "Item created" };
+  if (e.field === "Recipe" && e.action === "created") return { verb: "created this recipe", plain: "Recipe created" };
+  if (e.field === "Ingredient") {
+    if (e.action === "added") return { verb: "added an ingredient", plain: "Ingredient added" };
+    if (e.action === "removed") return { verb: "removed an ingredient", plain: "Ingredient removed" };
+    return { verb: "swapped an ingredient", plain: "Ingredient swapped" };
+  }
+  if (e.field === "Amount") return { verb: "changed an amount", plain: "Amount changed" };
+  if (e.field === "Ingredients") return { verb: "updated the ingredients", plain: "Ingredients updated" };
   if (e.field === "Price") {
     if (e.action === "added")
       return { verb: `linked ${e.context} as a supplier`, plain: `${e.context} linked as a supplier` };
@@ -91,24 +111,82 @@ export function describe(e: HistoryEvent): { verb: string; plain: string } {
   }
   if (e.field === "Status") {
     return e.new_value === "Archived"
-      ? { verb: "archived this item", plain: "Item archived" }
-      : { verb: "restored this item", plain: "Item restored" };
+      ? { verb: "archived it", plain: "Archived" }
+      : { verb: "restored it", plain: "Restored" };
   }
   if (e.field === "Category") return { verb: "moved it to another category", plain: "Moved to another category" };
   const word = FIELD_WORDS[e.field] ?? e.field.toLowerCase();
   return { verb: `changed the ${word}`, plain: `${e.field} changed` };
 }
 
-export type DotTone = "up" | "down" | "stock" | "details";
+export type DotTone = "up" | "down" | "stock" | "details" | "auto" | "ingredients" | "price";
 
 export function dotTone(e: HistoryEvent): DotTone {
   if (e.kind === "stock") return "stock";
+  if (e.kind === "auto") return "auto";
+  if (e.kind === "ingredients") return "ingredients";
+  if (e.kind === "price") return "price";
   if (e.kind === "cost") {
     if (e.delta_pct !== null) return e.delta_pct > 0 ? "up" : "down";
     if (e.action === "removed") return "down";
     return "up";
   }
   return "details";
+}
+
+function num(v: string | null | undefined): number | null {
+  if (v === null || v === undefined || v === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** What a recipe change did to cost per portion, for the pill and the second line. */
+export function costEffect(
+  e: HistoryEvent,
+  currency?: string | null
+): { pill: string | null; tone: "caution" | "good"; line: string | null } | null {
+  const meta = e.meta ?? {};
+  if (e.field === "Menu price" && meta.fc_before !== undefined && meta.fc_after !== undefined) {
+    const a = num(meta.fc_before);
+    const b = num(meta.fc_after);
+    if (a === null || b === null) return null;
+    return { pill: `Food cost ${a.toFixed(1)}% → ${b.toFixed(1)}%`, tone: b <= a ? "good" : "caution", line: null };
+  }
+  const before = e.kind === "auto" ? num(e.old_value) : num(meta.cost_before);
+  const after = e.kind === "auto" ? num(e.new_value) : num(meta.cost_after);
+  if (before === null || after === null) return null;
+  const delta = after - before;
+  const pill =
+    Math.abs(delta) < 0.005 ? null : `${delta > 0 ? "+" : MINUS}${fmtMoney2(Math.abs(delta), currency)}`;
+  return {
+    pill,
+    tone: delta > 0 ? "caution" : "good",
+    line: e.kind === "auto" ? null : `Cost ${fmtMoney2(before, currency)} → ${fmtMoney2(after, currency)} per portion`,
+  };
+}
+
+/** The headline for an Automatic entry, e.g. "Oat Milk price went up, so it costs more". */
+export function autoHeadline(e: HistoryEvent): string {
+  const meta = e.meta ?? {};
+  const name = meta.name ?? e.context;
+  const before = num(e.old_value);
+  const after = num(e.new_value);
+  const more = before !== null && after !== null && after > before;
+  if (meta.cause === "recipe") return `${name} costs ${more ? "more" : "less"} per portion, so this does too`;
+  const pa = num(meta.old_price);
+  const pb = num(meta.new_price);
+  const went = pa !== null && pb !== null && pb > pa ? "up" : "down";
+  return `${name} price went ${went}, so it costs ${more ? "more" : "less"}`;
+}
+
+/** The detail line under an Automatic entry: which price moved, and who moved it. */
+export function autoCause(e: HistoryEvent, currency?: string | null): string | null {
+  const meta = e.meta ?? {};
+  if (!meta.old_price || !meta.new_price) return null;
+  const name = meta.name ?? e.context;
+  const unit = meta.price_unit ? ` ${meta.price_unit}` : "";
+  const by = meta.by ? `, changed by ${meta.by}${meta.cause === "recipe" ? " in the recipe" : " on the item"}` : "";
+  return `${name} ${fmtPrice(meta.old_price, currency)} → ${fmtPrice(meta.new_price, currency)}${unit}${by}`;
 }
 
 export function dayLabel(iso: string, now = new Date()): string {

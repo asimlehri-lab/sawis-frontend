@@ -7,3 +7,6 @@ export const ITEM_TAB_LABELS: Record<ItemTab, string> = {
   suppliers: "Suppliers",
   history: "History",
 };
+
+// The Recipe page's sections (History is only offered to managers and admins).
+export type RecipeTab = "details" | "history";

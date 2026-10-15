@@ -19,6 +19,8 @@ import type { Recipe, CatalogItem, Location, Allergen } from "./api";
 import SearchSelect from "./SearchSelect";
 import AllergenIcon from "./AllergenIcon";
 import { AllergenSheetBody } from "./AllergenPrintSheet";
+import RecipeHistory from "./RecipeHistory";
+import type { RecipeTab } from "./itemTabs";
 
 interface Props {
   recipeId: string;
@@ -51,6 +53,8 @@ interface Props {
   onReturn?: () => void;
   // The sub-recipe to have ready in the picker (the one just built).
   preselectSubId?: string | null;
+  // Which tab to land on ("View history" in End of day opens History).
+  initialTab?: RecipeTab;
 }
 
 export default function RecipeDetail({
@@ -71,8 +75,11 @@ export default function RecipeDetail({
   returnTo,
   onReturn,
   preselectSubId,
+  initialTab,
 }: Props) {
   const [recipe, setRecipe] = useState<Recipe | null>(null);
+  // History is for managers and admins only; everyone else just sees the details.
+  const [tab, setTab] = useState<RecipeTab>(initialTab === "history" && readOnly ? "details" : initialTab ?? "details");
   const [error, setError] = useState<string | null>(null);
   // Recipe cost/menu price are org-wide, not tied to one location — falls
   // back to the org's first location's currency (see defaultCurrency's own
@@ -323,7 +330,26 @@ export default function RecipeDetail({
       )}
 
       {readOnly && <p className="ro-banner">View only — changes to recipes need a manager or admin.</p>}
-      <fieldset className="ro-fieldset" disabled={readOnly}>
+      {!readOnly && (
+        <div className="rp-tabs" role="tablist" aria-label="Recipe sections">
+          {(["details", "history"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              role="tab"
+              aria-selected={tab === t}
+              className={`rp-tab ${tab === t ? "on" : ""}`}
+              onClick={() => setTab(t)}
+            >
+              {t === "details" ? "Details" : "History"}
+            </button>
+          ))}
+        </div>
+      )}
+      {!readOnly && tab === "history" && (
+        <RecipeHistory recipeId={recipe.id} recipeName={recipe.name} accessToken={accessToken} currency={currency} />
+      )}
+      <fieldset className="ro-fieldset" disabled={readOnly} hidden={tab === "history"}>
       <div className="detail-head">
         <input
           className="name-edit"
@@ -349,7 +375,7 @@ export default function RecipeDetail({
 
       {/* Outside the read-only fieldset on purpose: staff can't edit, but
           they can read the allergens and print the card. */}
-      <div className="allergen-block">
+      <div className="allergen-block" hidden={tab === "history"}>
         <div className="allergen-badge-row">
           {recipeAllergens.length > 0 ? (
             <>
@@ -424,7 +450,7 @@ export default function RecipeDetail({
         <AllergenSheetBody recipes={[recipe]} allergens={allergens} venue={venue} includeMay variant="card" />
       </div>
 
-      <fieldset className="ro-fieldset" disabled={readOnly}>
+      <fieldset className="ro-fieldset" disabled={readOnly} hidden={tab === "history"}>
 
       {error && <p className="error">{error}</p>}
 

@@ -2466,7 +2466,7 @@ export type HistoryFilter = "all" | "cost" | "stock" | "details";
 export interface HistoryEvent {
   id: string;
   at: string;
-  kind: "cost" | "stock" | "details";
+  kind: "cost" | "stock" | "details" | "ingredients" | "price" | "auto";
   actor_name: string | null;
   action: string;
   field: string;
@@ -2477,6 +2477,8 @@ export interface HistoryEvent {
   delta_pct: number | null;
   context: string;
   source: string;
+  // Extra facts: a recipe's cost before/after, or which price moved and who moved it.
+  meta: Record<string, string | null>;
 }
 
 export interface HistoryPriceCard {
@@ -2495,6 +2497,35 @@ export interface ItemHistoryData {
   counts: Record<HistoryFilter, number>;
   price: HistoryPriceCard | null;
   actors: { name: string; count: number }[];
+}
+
+export type RecipeHistoryFilter = "all" | "ingredients" | "price" | "details" | "auto";
+
+export interface RecipeHistoryCost {
+  current: string;
+  earlier: string;
+  earlier_at: string;
+  points: { at: string | null; cost: string; label: string }[];
+}
+
+export interface RecipeHistoryData {
+  events: HistoryEvent[];
+  next_before: string | null;
+  counts: Record<RecipeHistoryFilter, number>;
+  cost: RecipeHistoryCost | null;
+  today: { menu_price: string | null; cost_per_portion: string; food_cost_pct: number | null };
+  actors: { name: string; count: number }[];
+}
+
+export async function fetchRecipeHistory(
+  accessToken: string,
+  recipeId: string,
+  kind: RecipeHistoryFilter,
+  before?: string | null
+): Promise<RecipeHistoryData> {
+  const params = new URLSearchParams({ kind, limit: "40" });
+  if (before) params.set("before", before);
+  return authedFetch(`/api/catalog/recipes/${recipeId}/history/?${params.toString()}`, accessToken);
 }
 
 export async function fetchItemHistory(

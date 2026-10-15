@@ -25,14 +25,14 @@ interface Props {
   // Jumps to a recipe's own detail page (Recipes tab) -- used by the Tasks
   // tab's cost-breach rows. Lives at the App.tsx level since it's a
   // cross-page navigation, not something EndOfDay owns.
-  onOpenRecipe: (id: string) => void;
+  onOpenRecipe: (id: string, tab?: "history") => void;
   // Opens a PurchaseOrder's detail page (Procurement tab) -- used by the
   // Tasks tab's upcoming-deliveries rows. Same callback shape as
   // NotificationBell's own onOpenPO in App.tsx.
   onOpenPO: (id: string) => void;
   // Opens an Item's detail page (Items tab) -- used by the Tasks tab's
   // "Latest updates" news rows for new/updated items.
-  onOpenItem: (id: string) => void;
+  onOpenItem: (id: string, tab?: "history") => void;
   onReviewAllergens: () => void;
   onItemsChanged: () => void;
   // Cross-page nav for the Tasks tab (e.g. "Inventory" for an assigned

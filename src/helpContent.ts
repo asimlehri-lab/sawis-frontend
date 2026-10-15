@@ -61,6 +61,10 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
     questions: [
       {
+        q: "Why did a dish's cost change, and who changed its recipe?",
+        a: "Open the recipe and tap History (managers and admins only). It lists what people changed, with the effect on cost per portion: ingredients added, removed or re-measured, the menu price (with the food cost before and after), the batch yield and other details. Lines marked Automatic are cost moves nobody typed into the recipe: an ingredient's cheapest supplier price went up or down, or a sub-recipe it uses got cheaper or dearer. The chart at the top shows how cost per portion has stepped over the last 30 days. Entries can't be edited or deleted.",
+      },
+      {
         q: "Where is everything on the item page?",
         a: "The item page is split into tabs. Details has the name, category, VAT, allergens, the recipes that use the item, and the danger zone. Stock has the stock units, par levels, on-hand and the waste target. Suppliers has the linked suppliers and last prices; an orange dot on that tab means no supplier is linked yet. History (managers and admins only) shows who changed what. Tapping + stock unit in Inventory takes you straight to the Stock tab.",
       },
@@ -217,7 +221,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "What's the Latest updates feed?",
-        a: "A seven-day news feed under the tiles of what changed: waste logged, and items and recipes created or edited. Use the All, Waste, Items and Recipes chips to narrow it, click a row to open that item, recipe or the Waste log, and Show N more to see older entries. Several edits to one item on the same day collapse into one row. Bulk imports aren't listed.",
+        a: "A seven-day news feed under the tiles of what changed: waste logged, and items and recipes created or edited. Use the All, Waste, Items and Recipes chips to narrow it, click a row to open that item, recipe or the Waste log, and Show N more to see older entries. Under each item or recipe row, View history opens its History tab to show exactly what changed, who changed it and what it did to cost. Several edits to one item on the same day collapse into one row here (History keeps every one). Bulk imports aren't listed.",
       },
       {
         q: "What does Cost breaching target show?",
