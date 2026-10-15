@@ -62,7 +62,11 @@ export const HELP_TOPICS: HelpTopic[] = [
     questions: [
       {
         q: "Why did a dish's cost change, and who changed its recipe?",
-        a: "Open the recipe and tap History (managers and admins only). It lists what people changed, with the effect on cost per portion: ingredients added, removed or re-measured, the menu price (with the food cost before and after), the batch yield and other details. Lines marked Automatic are cost moves nobody typed into the recipe: an ingredient's cheapest supplier price went up or down, or a sub-recipe it uses got cheaper or dearer. The chart at the top shows how cost per portion has stepped over the last 30 days. Entries can't be edited or deleted.",
+        a: "Open the recipe and tap its History tab (managers and admins only). It lists what people changed, with the effect on cost per portion: ingredients added, removed or re-measured, the menu price (with the food cost before and after), the batch yield and other details. Lines marked Automatic are cost moves nobody typed into the recipe: an ingredient's cheapest supplier price went up or down, or a sub-recipe it uses got cheaper or dearer. The chart at the top shows how cost per portion has stepped over the last 30 days. Entries can't be edited or deleted.",
+      },
+      {
+        q: "Where is everything on the recipe page?",
+        a: "The recipe page is split into tabs. Ingredients has the batch recipe lines and the danger zone. Cost & margin has the batch yield, the menu price, cost per portion and food cost. Allergens shows what the dish contains and may contain, and the print button for the allergen card; an orange dot on that tab means some ingredients' allergens haven't been confirmed yet. History (managers and admins only) shows who changed what and what it did to cost. Staff see the first three tabs.",
       },
       {
         q: "Where is everything on the item page?",

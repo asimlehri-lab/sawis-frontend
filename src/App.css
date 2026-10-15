@@ -1475,6 +1475,9 @@ nav {
   align-items: start;
 }
 @media (max-width: 840px) { .det-grid { grid-template-columns: 1fr; } }
+/* The recipe page shows one of the two cards per tab, so each takes the full row. */
+.det-grid.single { grid-template-columns: minmax(0, 1fr); }
+.det-grid.cost { max-width: 640px; }
 
 .card h2 {
   font-size: 12px;

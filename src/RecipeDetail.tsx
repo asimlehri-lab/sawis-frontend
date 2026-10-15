@@ -20,6 +20,7 @@ import SearchSelect from "./SearchSelect";
 import AllergenIcon from "./AllergenIcon";
 import { AllergenSheetBody } from "./AllergenPrintSheet";
 import RecipeHistory from "./RecipeHistory";
+import { RECIPE_TAB_LABELS } from "./itemTabs";
 import type { RecipeTab } from "./itemTabs";
 
 interface Props {
@@ -79,7 +80,7 @@ export default function RecipeDetail({
 }: Props) {
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   // History is for managers and admins only; everyone else just sees the details.
-  const [tab, setTab] = useState<RecipeTab>(initialTab === "history" && readOnly ? "details" : initialTab ?? "details");
+  const [tab, setTab] = useState<RecipeTab>(initialTab === "history" && readOnly ? "ingredients" : initialTab ?? "ingredients");
   const [error, setError] = useState<string | null>(null);
   // Recipe cost/menu price are org-wide, not tied to one location — falls
   // back to the org's first location's currency (see defaultCurrency's own
@@ -330,22 +331,31 @@ export default function RecipeDetail({
       )}
 
       {readOnly && <p className="ro-banner">View only — changes to recipes need a manager or admin.</p>}
-      {!readOnly && (
-        <div className="rp-tabs" role="tablist" aria-label="Recipe sections">
-          {(["details", "history"] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              role="tab"
-              aria-selected={tab === t}
-              className={`rp-tab ${tab === t ? "on" : ""}`}
-              onClick={() => setTab(t)}
-            >
-              {t === "details" ? "Details" : "History"}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="rp-tabs" role="tablist" aria-label="Recipe sections">
+        {(readOnly
+          ? (["ingredients", "cost", "allergens"] as const)
+          : (["ingredients", "cost", "allergens", "history"] as const)
+        ).map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            aria-selected={tab === t}
+            className={`rp-tab ${tab === t ? "on" : ""}`}
+            onClick={() => setTab(t)}
+          >
+            {RECIPE_TAB_LABELS[t]}
+            {t === "allergens" && unchecked > 0 && (
+              <span
+                className="it-tab-dot"
+                role="img"
+                aria-label="Some ingredients' allergens haven't been confirmed"
+                title="Some ingredients' allergens haven't been confirmed"
+              />
+            )}
+          </button>
+        ))}
+      </div>
       {!readOnly && tab === "history" && (
         <RecipeHistory recipeId={recipe.id} recipeName={recipe.name} accessToken={accessToken} currency={currency} />
       )}
@@ -375,7 +385,7 @@ export default function RecipeDetail({
 
       {/* Outside the read-only fieldset on purpose: staff can't edit, but
           they can read the allergens and print the card. */}
-      <div className="allergen-block" hidden={tab === "history"}>
+      <div className="allergen-block" hidden={tab !== "allergens"}>
         <div className="allergen-badge-row">
           {recipeAllergens.length > 0 ? (
             <>
@@ -454,8 +464,8 @@ export default function RecipeDetail({
 
       {error && <p className="error">{error}</p>}
 
-      <div className="det-grid">
-        <div className="card">
+      <div className={`det-grid single${tab === "cost" ? " cost" : ""}`}>
+        <div className="card" hidden={tab !== "ingredients"}>
           <h2>Batch recipe — makes {recipe.yield_qty} {recipe.yield_unit}{yieldNum > 1 ? "s" : ""}</h2>
           <p className="hint">Enter quantities for one full batch. Cost per {recipe.yield_unit} = batch ÷ yield.</p>
 
@@ -618,7 +628,7 @@ export default function RecipeDetail({
           </div>
         </div>
 
-        <div className="card">
+        <div className="card" hidden={tab !== "cost"}>
           <div className="yield-row">
             <label>Batch yields</label>
             <input
@@ -765,7 +775,7 @@ export default function RecipeDetail({
         </div>
       </div>
 
-      <div className="card dz-card">
+      <div className="card dz-card" hidden={tab !== "ingredients"}>
         <h2 className="dz-h2">Danger zone</h2>
 
         <div className="dz-row">
