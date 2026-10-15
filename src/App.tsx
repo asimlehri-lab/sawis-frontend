@@ -61,6 +61,7 @@ import type {
 } from "./api";
 import RecipeDetail from "./RecipeDetail";
 import ItemDetail from "./ItemDetail";
+import type { ItemTab } from "./itemTabs";
 import AllergenIcon from "./AllergenIcon";
 import AllergenPrintSheet from "./AllergenPrintSheet";
 import AllergenReview from "./AllergenReview";
@@ -545,6 +546,8 @@ export default function App() {
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null);
 
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  // Tab the Item page opens on (undefined = Details); cleared whenever we leave the page.
+  const [itemTab, setItemTab] = useState<ItemTab | undefined>(undefined);
   // Jumped from Inventory to an item page (e.g. to add a stock unit): keep Inventory mounted but hidden
   // so a half-filled count sheet or section form is still there on the way back.
   const [inventoryParked, setInventoryParked] = useState(false);
@@ -1114,6 +1117,7 @@ export default function App() {
     setMobileNavOpen(false);
     setSelectedRecipeId(null);
     setSelectedItemId(null);
+    setItemTab(undefined);
     setShowImport(false);
     setShowAllergenReview(false);
     setSelectedPOId(null);
@@ -2007,6 +2011,8 @@ export default function App() {
               onOpenItem={(id) => {
                 goToNav("Items");
                 setSelectedItemId(id);
+                // "+ stock unit" is the only link here, and stock units are set up on the Stock tab.
+                setItemTab("stock");
                 setInventoryParked(true);
               }}
               onSectionsChanged={() => loadSections(accessToken)}
@@ -2067,12 +2073,14 @@ export default function App() {
             supplierItems={supplierItems}
             recipes={liveRecipes}
             backLabel={inventoryParked ? "Back to Inventory" : undefined}
+            initialTab={itemTab}
             onBack={() => {
               if (inventoryParked) {
                 setInventoryParked(false);
                 setActivePage("Inventory");
               }
               setSelectedItemId(null);
+              setItemTab(undefined);
             }}
             onChanged={() => loadItems(accessToken)}
             onCategoriesChanged={() => fetchCategories(accessToken).then(setCategories).catch(() => {})}

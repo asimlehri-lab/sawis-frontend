@@ -61,6 +61,10 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
     questions: [
       {
+        q: "Where is everything on the item page?",
+        a: "The item page is split into tabs. Details has the name, category, VAT, allergens, the recipes that use the item, and the danger zone. Stock has the stock units, par levels, on-hand and the waste target. Suppliers has the linked suppliers and last prices; an orange dot on that tab means no supplier is linked yet. History (managers and admins only) shows who changed what. Tapping + stock unit in Inventory takes you straight to the Stock tab.",
+      },
+      {
         q: "Who changed an item's price, par level or details, and when?",
         a: "Open the item and tap History (managers and admins only; staff don't see it). It lists every change with who made it and when: price changes with the old and new price and the percentage move, edits to the name, category, VAT, par level, supplier links and allergens, and the stock that came in or went out (deliveries, waste, count adjustments). A price chart at the top shows how the cost has moved, and the filter chips narrow the list to Cost, Stock or Details. Entries can't be edited or deleted. History starts from when it was switched on, so older changes aren't listed.",
       },

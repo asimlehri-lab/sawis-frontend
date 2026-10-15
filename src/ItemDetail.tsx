@@ -38,6 +38,8 @@ import type {
 } from "./api";
 import AllergenIcon from "./AllergenIcon";
 import ItemHistory from "./ItemHistory";
+import { ITEM_TAB_LABELS } from "./itemTabs";
+import type { ItemTab } from "./itemTabs";
 
 interface Props {
   itemId: string;
@@ -59,6 +61,8 @@ interface Props {
   onCategoriesChanged: () => void;
   onOpenSupplier?: (supplierId: string) => void;
   onOpenRecipe?: (recipeId: string) => void;
+  // Which tab to land on (Inventory sends "+ stock unit" to Stock).
+  initialTab?: ItemTab;
 }
 
 const DEPARTMENTS = [
@@ -155,10 +159,11 @@ export default function ItemDetail({
   onCategoriesChanged,
   onOpenSupplier,
   onOpenRecipe,
+  initialTab,
 }: Props) {
   const [item, setItem] = useState<CatalogItem | null>(null);
   // History is for managers and admins only; everyone else just sees the details.
-  const [tab, setTab] = useState<"details" | "history">("details");
+  const [tab, setTab] = useState<ItemTab>(initialTab === "history" && readOnly ? "details" : initialTab ?? "details");
   const [error, setError] = useState<string | null>(null);
   // Unsaved edits to the Contains / May contain chips. Nothing is saved
   // until a person presses Confirm -- tagging is a review decision, not an
@@ -759,26 +764,27 @@ export default function ItemDetail({
       </button>
 
       {readOnly && <p className="ro-banner">View only — changes to items need a manager or admin.</p>}
-      {!readOnly && (
-        <div className="rp-tabs" role="tablist" aria-label="Item sections">
-          {(["details", "history"] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              role="tab"
-              aria-selected={tab === t}
-              className={`rp-tab ${tab === t ? "on" : ""}`}
-              onClick={() => setTab(t)}
-            >
-              {t === "details" ? "Details" : "History"}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="rp-tabs" role="tablist" aria-label="Item sections">
+        {(readOnly ? (["details", "stock", "suppliers"] as const) : (["details", "stock", "suppliers", "history"] as const)).map((t) => (
+          <button
+            key={t}
+            type="button"
+            role="tab"
+            aria-selected={tab === t}
+            className={`rp-tab ${tab === t ? "on" : ""}`}
+            onClick={() => setTab(t)}
+          >
+            {ITEM_TAB_LABELS[t]}
+            {t === "suppliers" && item.supplier_links.length === 0 && (
+              <span className="it-tab-dot" role="img" aria-label="No supplier linked yet" title="No supplier linked yet" />
+            )}
+          </button>
+        ))}
+      </div>
       {!readOnly && tab === "history" && (
         <ItemHistory itemId={item.id} itemName={item.name} accessToken={accessToken} currency={currency} />
       )}
-      <fieldset className="ro-fieldset" disabled={readOnly} hidden={!readOnly && tab === "history"}>
+      <fieldset className="ro-fieldset" disabled={readOnly} hidden={tab === "history"}>
       <div className="detail-head">
         <input
           className="name-edit"
@@ -793,7 +799,7 @@ export default function ItemDetail({
 
       {error && <p className="error">{error}</p>}
 
-      <div className="card">
+      <div className="card" hidden={tab !== "details"}>
         <h2>Catalog details</h2>
         <p className="hint">Shared everywhere — change once and it updates for all departments.</p>
         <div className="fgrid fgrid-2">
@@ -855,7 +861,7 @@ export default function ItemDetail({
         </div>
       </div>
 
-      <div className="card">
+      <div className="card" hidden={tab !== "details"}>
         <div className="allergen-card-head">
           <h2 style={{ margin: 0 }}>Allergens</h2>
           {item.allergen_review_status === "confirmed" ? (
@@ -974,7 +980,7 @@ export default function ItemDetail({
         </div>
       </div>
 
-      <div className="card">
+      <div className="card" hidden={tab !== "stock"}>
         <h2>Stock by department</h2>
         <p className="hint">
           The same product can be held in more than one place, each with its own par level.
@@ -1201,7 +1207,7 @@ export default function ItemDetail({
         )}
       </div>
 
-      <div className="card">
+      <div className="card" hidden={tab !== "details"}>
         <h2>Used in recipes</h2>
         {usedInRecipes.length === 0 ? (
           <p className="muted">Not used in any recipe yet.</p>
@@ -1247,7 +1253,7 @@ export default function ItemDetail({
         )}
       </div>
 
-      <div className="card">
+      <div className="card" hidden={tab !== "stock"}>
         <h2 style={{ marginTop: 0 }}>Waste</h2>
         <p className="hint">
           Target is your own predicted spoilage % for this item. Actual is calculated from logged waste against
@@ -1368,7 +1374,7 @@ export default function ItemDetail({
         )}
       </div>
 
-      <div className="card">
+      <div className="card" hidden={tab !== "suppliers"}>
         <h2>Suppliers &amp; last prices</h2>
         <p className="hint">
           From your recorded purchase links — shared across all departments.
@@ -1561,7 +1567,7 @@ export default function ItemDetail({
         )}
       </div>
 
-      <div className="card dz-card">
+      <div className="card dz-card" hidden={tab !== "details"}>
         <h2 className="dz-h2">Danger zone</h2>
 
         <div className="dz-row">

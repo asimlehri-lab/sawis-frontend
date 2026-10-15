@@ -3170,6 +3170,9 @@ input[type="file"] {
 .rp-card .table-scroll { width: 0; min-width: 100%; }
 .rp-hint { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin: 0; }
 
+.it-tab-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--caution); margin-left: 6px; vertical-align: middle; }
+.card[hidden], .ro-fieldset[hidden] { display: none; }
+
 /* Item History tab */
 .ih { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .ih .ih-card { margin: 0; }
