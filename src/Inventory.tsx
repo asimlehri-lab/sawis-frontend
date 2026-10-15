@@ -1277,10 +1277,10 @@ function SectionsTab({
                 value={modalUnit[h.id] ?? here?.stockUnitId ?? ""}
                 onChange={(e) => setModalUnit((m) => ({ ...m, [h.id]: e.target.value }))}
               >
-                <option value="">{h.baseUnit} only</option>
+                <option value="">{h.baseUnit} (base unit)</option>
                 {h.itemStockUnits.map((u) => (
                   <option key={u.id} value={u.id}>
-                    also in {u.name} ({parseFloat(Number(u.qty).toFixed(4))} {h.baseUnit})
+                    {u.name} ({parseFloat(Number(u.qty).toFixed(4))} {h.baseUnit})
                   </option>
                 ))}
               </select>
@@ -1859,6 +1859,8 @@ function CountSheet({
   // Extra lines added with the + button, e.g. "+ 250 g" after "5 bag". The row's
   // total in the base unit is always what `qty` holds.
   const [extras, setExtras] = useState<Record<string, { unit: string; text: string }[]>>({});
+  // Rows whose "why this number" explanation is open (kept out of sight otherwise so the row stays short).
+  const [infoOpen, setInfoOpen] = useState<Record<string, boolean>>({});
   const [reason, setReason] = useState<Record<string, string>>({});
   const [note, setNote] = useState<Record<string, string>>({});
   const [openNoteId, setOpenNoteId] = useState<string | null>(null);
@@ -2235,6 +2237,19 @@ function CountSheet({
               .filter((e) => e.text !== "" && Number.isFinite(Number(e.text)))
               .map((e) => `${fmtCount(Number(e.text))} ${others.find((o) => o.key === e.unit)?.name ?? ""}`),
           ];
+          const canAdd = others.length > 0 && lines.length < others.length;
+          const plusEl = (
+            <button
+              type="button"
+              className="cr-plus"
+              aria-label="Add another unit"
+              title="Add another unit"
+              disabled={!checked[h.id]}
+              onClick={() => addExtraLine(h)}
+            >
+              +
+            </button>
+          );
           const showSum = !!checked[h.id] && Number.isFinite(totalNum) && sumPieces.length > 0 && (lines.length > 0 || pu.key !== "base");
           return (
             <div key={h.id} className={`count-row ${checked[h.id] ? "done" : ""}`}>
@@ -2270,15 +2285,23 @@ function CountSheet({
                             <>
                               System expects about {sectionQty(h, Math.max(0, expected))} here
                             </>
-                          )}
+                          )}{" "}
+                          <button
+                            type="button"
+                            className="link-btn cr-why"
+                            aria-expanded={!!infoOpen[h.id]}
+                            onClick={() => setInfoOpen((m) => ({ ...m, [h.id]: !m[h.id] }))}
+                          >
+                            {infoOpen[h.id] ? "Hide" : "Why?"}
+                          </button>
                         </div>
-                        <div className="cr-sys cr-sys-sub">
+                        {infoOpen[h.id] && <div className="cr-sys cr-sys-sub">
                           {expected === null
                             ? `${o.unknown.join(" and ")} ${o.unknown.length === 1 ? "hasn't" : "haven't"} been counted yet, so the total can't be checked. Your count is saved, and the total updates once ${o.unknown.length === 1 ? "it has" : "they have"} been counted.`
                             : `${parseFloat(total.toFixed(2))} ${h.baseUnit} in total; ${o.known
                                 .map((k) => `${k.name} counted ${parseFloat(k.qty.toFixed(2))} on ${shortDate(k.at)}`)
                                 .join(", ")}${expected < 0 ? ". Those counts add up to more than the system total." : ""}`}
-                        </div>
+                        </div>}
                       </>
                     );
                   })()}
@@ -2306,18 +2329,7 @@ function CountSheet({
                         {pu.name}
                       </span>
                     </div>
-                    {others.length > 0 && lines.length < others.length && (
-                      <button
-                        type="button"
-                        className="cr-plus"
-                        aria-label="Add another unit"
-                        title="Add another unit"
-                        disabled={!checked[h.id]}
-                        onClick={() => addExtraLine(h)}
-                      >
-                        +
-                      </button>
-                    )}
+                    {canAdd && lines.length === 0 && plusEl}
                   </div>
                   {lines.map((ex, i) => (
                     <div className="cr-counts-row cr-extra" key={i}>
@@ -2356,6 +2368,7 @@ function CountSheet({
                       >
                         ×
                       </button>
+                      {canAdd && i === lines.length - 1 && plusEl}
                     </div>
                   ))}
                   {showSum && (

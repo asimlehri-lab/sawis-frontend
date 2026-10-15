@@ -1363,9 +1363,9 @@ export default function ItemDetail({
                         <div
                           className={`trend-bar ${
                             wasteTargetNum !== null && t.actual_waste_pct > wasteTargetNum ? "over" : "under"
-                          }`}
-                          style={{ height: `${Math.max((t.actual_waste_pct / wasteScaleMax) * 100, 2)}%` }}
-                          title={`${t.label}: ${t.actual_waste_pct.toFixed(1)}%`}
+                          }${t.actual_waste_pct > wasteScaleMax ? " clipped" : ""}`}
+                          style={{ height: `${Math.min(Math.max((t.actual_waste_pct / wasteScaleMax) * 100, 2), 100)}%` }}
+                          title={`${t.label}: ${t.actual_waste_pct.toFixed(1)}%${t.actual_waste_pct > wasteScaleMax ? " (off the chart)" : ""}`}
                         />
                       ) : (
                         <div className="trend-bar empty" title={`${t.label}: no data`} />
