@@ -2,6 +2,7 @@ import type { HistoryEvent } from "./api";
 import {
   autoCause,
   autoHeadline,
+  priceReach,
   changeText,
   costEffect,
   dayLabel,
@@ -75,6 +76,7 @@ function Row({ e, currency, last }: { e: HistoryEvent; currency?: string | null;
           <span className="ih-time">{timeLabel(e.at)}</span>
         </div>
         {effect?.line && <div className="ih-sub">{effect.line}</div>}
+        {e.kind === "cost" && priceReach(e, currency) && <div className="ih-sub">{priceReach(e, currency)}</div>}
         {auto && autoCause(e, currency) && <div className="ih-sub">{autoCause(e, currency)}</div>}
       </div>
     </div>

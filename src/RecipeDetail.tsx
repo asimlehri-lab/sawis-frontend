@@ -56,6 +56,8 @@ interface Props {
   preselectSubId?: string | null;
   // Which tab to land on ("View history" in End of day opens History).
   initialTab?: RecipeTab;
+  // Where "Back" goes when the recipe was opened from somewhere other than the Recipes list.
+  backLabel?: string;
 }
 
 export default function RecipeDetail({
@@ -77,6 +79,7 @@ export default function RecipeDetail({
   onReturn,
   preselectSubId,
   initialTab,
+  backLabel,
 }: Props) {
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   // History is for managers and admins only; everyone else just sees the details.
@@ -319,7 +322,7 @@ export default function RecipeDetail({
         </button>
       ) : (
         <button className="back-link" onClick={onBack}>
-          ← All recipes
+          ← {backLabel ?? "All recipes"}
         </button>
       )}
 

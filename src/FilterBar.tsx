@@ -37,6 +37,9 @@ export interface FilterFacet {
   // a short fixed list (e.g. Food/Drink), essential for a long one (e.g.
   // every item name, for Recipes' "Item used" facet).
   searchThreshold?: number;
+  // A link under the value list, e.g. "Manage categories" (opens a pop-up
+  // elsewhere; the panel closes first so the pop-up isn't hidden behind it).
+  footerAction?: { label: string; onClick: () => void };
 }
 
 export type FilterValues = Record<string, string[] | null | undefined>;
@@ -182,6 +185,14 @@ export default function FilterBar({ facets, values, onChange }: Props) {
                 onToggle={(value) => toggleValue(activeFacet, value)}
                 onSelectAll={() => onChange(activeFacet.key, null)}
                 onClearAll={() => onChange(activeFacet.key, [])}
+                onFooter={
+                  activeFacet.footerAction
+                    ? () => {
+                        setOpen(false);
+                        activeFacet.footerAction!.onClick();
+                      }
+                    : undefined
+                }
               />
             )}
           </div>
@@ -222,6 +233,7 @@ function FacetValuePicker({
   onToggle,
   onSelectAll,
   onClearAll,
+  onFooter,
 }: {
   facet: FilterFacet;
   selected: string[] | null;
@@ -231,6 +243,7 @@ function FacetValuePicker({
   onToggle: (value: string) => void;
   onSelectAll: () => void;
   onClearAll: () => void;
+  onFooter?: () => void;
 }) {
   const isAll = selected === null;
   const searchThreshold = facet.searchThreshold ?? 8;
@@ -278,6 +291,13 @@ function FacetValuePicker({
           </label>
         ))}
       </div>
+      {onFooter && facet.footerAction && (
+        <div className="filter-bar-footer">
+          <button type="button" className="filter-bar-link" onClick={onFooter}>
+            {facet.footerAction.label}
+          </button>
+        </div>
+      )}
     </>
   );
 }

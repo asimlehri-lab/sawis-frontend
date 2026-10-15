@@ -15,6 +15,9 @@ interface Props {
   accessToken: string;
   locations: Location[];
   isAdmin: boolean;
+  // Menu engineering's "Open recipe" jumps to the dish; coming back lands on that tab.
+  initialTab?: "overview" | "menu" | "waste" | "category";
+  onOpenRecipe?: (id: string) => void;
 }
 
 type Tab = "overview" | "menu" | "waste" | "category";
@@ -37,7 +40,7 @@ const PERIOD_TITLE: Record<ReportsSummary["period"], string> = {
   lastmonth: "Monthly report",
 };
 
-export default function Reports({ accessToken, locations, isAdmin }: Props) {
+export default function Reports({ accessToken, locations, isAdmin, initialTab, onOpenRecipe }: Props) {
   const [location, setLocation] = useState(locations[0]?.id ?? "");
   // CSV export and PDF download are restricted to admins and gated behind a
   // password re-confirmation (see PasswordConfirmModal / ReportPdfModal) --
@@ -105,7 +108,7 @@ export default function Reports({ accessToken, locations, isAdmin }: Props) {
       el.click();
     }
   }
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>(initialTab ?? "overview");
   const [report, setReport] = useState<ReportsSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -309,7 +312,7 @@ export default function Reports({ accessToken, locations, isAdmin }: Props) {
             <div className="rp-stack">
               <section className="card rp-card">
                 <h2 style={sectionHeadStyle}>Which dishes earn their place</h2>
-                <MenuEngineering key={reqKey} rows={report.menu} currency={currency} />
+                <MenuEngineering key={reqKey} rows={report.menu} currency={currency} onOpenRecipe={onOpenRecipe} />
               </section>
               <MenuTable rows={report.menu} currency={currency} foodTarget={foodTarget} drinkTarget={drinkTarget} />
             </div>

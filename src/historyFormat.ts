@@ -173,6 +173,18 @@ export function costEffect(
   };
 }
 
+/** Under an item's price line: how many recipes the move reaches and the biggest swing per portion. */
+export function priceReach(e: HistoryEvent, currency?: string | null): string | null {
+  const meta = e.meta ?? {};
+  const n = num(meta.recipes);
+  const delta = num(meta.recipe_delta);
+  if (!n || delta === null || !meta.recipe_name) return null;
+  const amount = `${fmtMoney2(Math.abs(delta), currency)} ${delta > 0 ? "more" : "less"} per portion`;
+  return n === 1
+    ? `Used in 1 recipe: ${meta.recipe_name} costs ${amount}`
+    : `Used in ${n} recipes: ${meta.recipe_name} moves most, ${amount}`;
+}
+
 /** The headline for an Automatic entry, e.g. "Oat Milk price went up, so it costs more". */
 export function autoHeadline(e: HistoryEvent): string {
   const meta = e.meta ?? {};

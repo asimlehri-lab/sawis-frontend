@@ -74,7 +74,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "Who changed an item's price, par level or details, and when?",
-        a: "Open the item and tap History (managers and admins only; staff don't see it). It lists every change with who made it and when: price changes with the old and new price and the percentage move, edits to the name, category, VAT, par level, supplier links and allergens, and the stock that came in or went out (deliveries, waste, count adjustments). A price chart at the top shows how the cost has moved, and the filter chips narrow the list to Cost, Stock or Details. Entries can't be edited or deleted. History starts from when it was switched on, so older changes aren't listed.",
+        a: "Open the item and tap History (managers and admins only; staff don't see it). It lists every change with who made it and when: price changes with the old and new price and the percentage move, edits to the name, category, VAT, par level, supplier links and allergens, and the stock that came in or went out (deliveries, waste, count adjustments). A price chart at the top shows how the cost has moved, and the filter chips narrow the list to Cost, Stock or Details. Under a supplier price change, a line says how many recipes the move reaches and which dish swings most per portion (from when this was switched on). Entries can't be edited or deleted. History starts from when it was switched on, so older changes aren't listed.",
       },
       {
         q: "How do I add a new item?",
@@ -464,7 +464,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "What do Headliners, Crowd pleasers, Hidden gems and Chop list mean?",
-        a: "On Reports → Menu engineering each dish is placed by how much of the menu it sells and how much each one earns, against this period's averages. Headliners sell well and earn well: protect them. Crowd pleasers sell well but earn little: reprice or trim the cost. Hidden gems earn well but sell little: promote them. The Chop list sells little and earns little: rework or drop them. Dishes with an ingredient that has no price on file are left out until the price is fixed.",
+        a: "On Reports → Menu engineering each dish is placed by how much of the menu it sells and how much each one earns, against this period's averages. Headliners sell well and earn well: protect them. Crowd pleasers sell well but earn little: reprice or trim the cost. Hidden gems earn well but sell little: promote them. The Chop list sells little and earns little: rework or drop them. Dishes with an ingredient that has no price on file are left out until the price is fixed. Tap a dot and use Open recipe to go straight to that dish; Back returns you to this chart.",
       },
       {
         q: "Does linking a new supplier price change past reports?",
@@ -571,7 +571,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I delete a category I don't use?",
-        a: "An Admin goes to Settings and finds the Item categories card. Each category shows how many items use it. One marked Unused has a Delete button (click it, then Confirm delete), and if several are unused, Delete all unused removes them in one go. A category that items still use can't be deleted: move those items to another category first, then it shows as Unused. Deleting a category never deletes items.",
+        a: "An Admin goes to Settings and finds the Item categories card. Each category shows how many items use it. One marked Unused has a Delete button (click it, then Confirm delete), and if several are unused, Delete all unused removes them in one go. A category that items still use can't be deleted: move those items to another category first, then it shows as Unused. Deleting a category never deletes items. Managers can also reach the same pop-up without Settings: click Manage categories under the Category field on an item page, or at the bottom of the Category filter on the Items list.",
       },
       {
         q: "How do I set my food and drink cost targets?",

@@ -38,6 +38,7 @@ import type {
 } from "./api";
 import AllergenIcon from "./AllergenIcon";
 import ItemHistory from "./ItemHistory";
+import CategoryManagerModal from "./CategoryManagerModal";
 import { ITEM_TAB_LABELS } from "./itemTabs";
 import type { ItemTab } from "./itemTabs";
 
@@ -205,6 +206,7 @@ export default function ItemDetail({
   const [newCategoryVat, setNewCategoryVat] = useState("");
   const [savingCategory, setSavingCategory] = useState(false);
   const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [managingCategories, setManagingCategories] = useState(false);
 
   const [showUnitModal, setShowUnitModal] = useState(false);
   // Stock units (several per item): add form, per-supplier "sold as" form.
@@ -843,6 +845,11 @@ export default function ItemDetail({
                 + New
               </button>
             </div>
+            {!readOnly && (
+              <button type="button" className="open-link" style={{ marginTop: 6 }} onClick={() => setManagingCategories(true)}>
+                Manage categories
+              </button>
+            )}
           </div>
           <div className="field">
             <label>
@@ -1814,6 +1821,14 @@ export default function ItemDetail({
             </div>
           </div>
         </div>
+      )}
+
+      {managingCategories && (
+        <CategoryManagerModal
+          accessToken={accessToken}
+          onClose={() => setManagingCategories(false)}
+          onChanged={onCategoriesChanged}
+        />
       )}
     </div>
   );

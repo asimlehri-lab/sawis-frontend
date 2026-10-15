@@ -74,6 +74,7 @@ import Inventory from "./Inventory";
 import Team from "./Team";
 import EndOfDay from "./EndOfDay";
 import Settings from "./Settings";
+import CategoryManagerModal from "./CategoryManagerModal";
 import Reports from "./Reports";
 import SearchSelect from "./SearchSelect";
 import NotificationBell from "./NotificationBell";
@@ -549,6 +550,10 @@ export default function App() {
   // Tab the Item page opens on (undefined = Details); cleared whenever we leave the page.
   const [itemTab, setItemTab] = useState<ItemTab | undefined>(undefined);
   const [recipeTab, setRecipeTab] = useState<RecipeTab | undefined>(undefined);
+  // A recipe opened from the Reports menu chart goes back to Reports (on that tab), not the Recipes list.
+  const [recipeFromReports, setRecipeFromReports] = useState(false);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [reportsTab, setReportsTab] = useState<"menu" | undefined>(undefined);
   // Jumped from Inventory to an item page (e.g. to add a stock unit): keep Inventory mounted but hidden
   // so a half-filled count sheet or section form is still there on the way back.
   const [inventoryParked, setInventoryParked] = useState(false);
@@ -626,7 +631,12 @@ export default function App() {
   liveRecipes.forEach((r) => r.lines.forEach((l) => l.item && itemIdsUsedInRecipes.add(l.item)));
 
   const itemFacets: FilterFacet[] = [
-    { key: "category", label: "Category", options: categories.map((c) => ({ value: c.id, label: c.name })) },
+    {
+      key: "category",
+      label: "Category",
+      options: categories.map((c) => ({ value: c.id, label: c.name })),
+      footerAction: me && canManage(me) ? { label: "Manage categories", onClick: () => setShowCategoryManager(true) } : undefined,
+    },
     { key: "supplier", label: "Supplier", options: suppliers.map((s) => ({ value: s.id, label: s.name })) },
     { key: "allergens", label: "Allergens", options: allergens.map((a) => ({ value: a.id, label: a.name })) },
     { key: "astatus", label: "Allergen status", options: ALLERGEN_STATUS_OPTIONS },
@@ -1120,6 +1130,8 @@ export default function App() {
     setSelectedItemId(null);
     setItemTab(undefined);
     setRecipeTab(undefined);
+    setRecipeFromReports(false);
+    setReportsTab(undefined);
     setShowImport(false);
     setShowAllergenReview(false);
     setSelectedPOId(null);
@@ -2036,7 +2048,13 @@ export default function App() {
             venue={me.org.name}
             locations={locations}
             initialTab={recipeTab}
+            backLabel={recipeFromReports ? "Reports" : undefined}
             onBack={() => {
+              if (recipeFromReports) {
+                goToNav("Reports");
+                setReportsTab("menu");
+                return;
+              }
               setSelectedRecipeId(null);
               setRecipeTab(undefined);
               setSubReturn(null);
@@ -2615,6 +2633,12 @@ export default function App() {
                 accessToken={accessToken}
                 locations={locations}
                 isAdmin={me.memberships.some((m) => m.role === "admin")}
+                initialTab={reportsTab}
+                onOpenRecipe={(id) => {
+                  goToNav("Recipes");
+                  setSelectedRecipeId(id);
+                  setRecipeFromReports(true);
+                }}
               />
             )}
 
@@ -2630,6 +2654,14 @@ export default function App() {
           </>
         )}
       </main>
+
+      {showCategoryManager && accessToken && (
+        <CategoryManagerModal
+          accessToken={accessToken}
+          onClose={() => setShowCategoryManager(false)}
+          onChanged={() => fetchCategories(accessToken).then(setCategories).catch(() => {})}
+        />
+      )}
 
       {showNewItem && (
         <div className="modal-backdrop" onClick={() => setShowNewItem(false)}>

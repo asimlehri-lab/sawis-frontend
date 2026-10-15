@@ -14,10 +14,13 @@ export default function MenuEngineering({
   rows,
   currency,
   readOnly,
+  onOpenRecipe,
 }: {
   rows: ReportsMenuRow[];
   currency?: string;
   readOnly?: boolean;
+  // Opens the dish's recipe page (not offered on the printed report).
+  onOpenRecipe?: (recipeId: string) => void;
 }) {
   const built = buildMenuGroups(rows);
   const [filter, setFilter] = useState<GroupKey | "all">("all");
@@ -143,6 +146,11 @@ export default function MenuEngineering({
             <div className="rp-detail-a">
               <b>{GROUPS[shown.group].verb}</b> {GROUPS[shown.group].action}
             </div>
+            {onOpenRecipe && !readOnly && (
+              <button type="button" className="open-link rp-detail-open" onClick={() => onOpenRecipe(shown.id)}>
+                Open recipe →
+              </button>
+            )}
           </div>
         )}
       </div>
