@@ -87,7 +87,15 @@ const FIELD_WORDS: Record<string, string> = {
 
 /** `verb` reads after a name ("Maria changed…"); `plain` stands alone when nobody is recorded. */
 export function describe(e: HistoryEvent): { verb: string; plain: string } {
-  if (e.kind === "stock") return STOCK_WORDS[e.action] ?? { verb: e.field.toLowerCase(), plain: e.field };
+  if (e.kind === "stock") {
+    const words = STOCK_WORDS[e.action] ?? { verb: e.field.toLowerCase(), plain: e.field };
+    // A delivery names who it came from, in the sentence itself so a long
+    // supplier name wraps like any other text instead of crowding the tags.
+    const from = e.meta?.supplier;
+    return from && (e.action === "purchase" || e.action === "po_reopen")
+      ? { verb: `${words.verb} from ${from}`, plain: `${words.plain} from ${from}` }
+      : words;
+  }
   if (e.field === "Item" && e.action === "created") return { verb: "created this item", plain: "Item created" };
   if (e.field === "Recipe" && e.action === "created") return { verb: "created this recipe", plain: "Recipe created" };
   if (e.field === "Ingredient") {
