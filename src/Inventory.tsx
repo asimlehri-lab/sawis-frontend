@@ -207,6 +207,45 @@ function holdingsInSection(holdings: FlatHolding[], sectionId: string): FlatHold
   });
 }
 
+// One unit a count can be typed in: the base unit, or one of the item's stock
+// units (bag = 1000 g). `factor` is how many base units make one of it.
+interface CountUnit {
+  key: string;
+  name: string;
+  factor: number;
+}
+
+// The unit this section counts the item in (the first box), else the base unit.
+function primaryUnit(h: FlatHolding): CountUnit {
+  return h.stockUnit && h.stockUnitQty
+    ? { key: h.stockUnitId || "section", name: h.stockUnit, factor: h.stockUnitQty }
+    : { key: "base", name: h.baseUnit, factor: 1 };
+}
+
+// Every other unit a counter can add with the + button (base unit first).
+function otherUnits(h: FlatHolding): CountUnit[] {
+  const p = primaryUnit(h);
+  const all: CountUnit[] = [
+    { key: "base", name: h.baseUnit, factor: 1 },
+    ...h.itemStockUnits.filter((u) => Number(u.qty) > 0).map((u) => ({ key: u.id, name: u.name, factor: Number(u.qty) })),
+  ];
+  return all.filter((u) => u.key !== p.key && !(u.name === p.name && u.factor === p.factor));
+}
+
+function unitFactor(h: FlatHolding, key: string): number {
+  if (key === "base") return 1;
+  const u = h.itemStockUnits.find((x) => x.id === key);
+  return u && Number(u.qty) > 0 ? Number(u.qty) : 1;
+}
+
+const fmtCount = (n: number) => n.toLocaleString("en-GB", { maximumFractionDigits: 3 });
+
+// "2.5 bag (2,500 g)" in the unit a section counts in, or plain "2,500 g" when there is none.
+function sectionQty(h: FlatHolding, baseQty: number): string {
+  const base = `${parseFloat(baseQty.toFixed(2))} ${h.baseUnit}`;
+  return h.stockUnit && h.stockUnitQty ? `${inStockUnit(h, baseQty)} (${base})` : base;
+}
+
 // "2.5 bag" for a base-unit quantity, or "" when the item has no stock unit.
 function inStockUnit(h: FlatHolding, baseQty: number): string {
   if (!h.stockUnit || !h.stockUnitQty) return "";
@@ -1817,6 +1856,9 @@ function CountSheet({
   // the text as typed. Keyed with the unit size so editing the stock unit
   // mid-count drops stale text.
   const [stockDraft, setStockDraft] = useState<Record<string, string>>({});
+  // Extra lines added with the + button, e.g. "+ 250 g" after "5 bag". The row's
+  // total in the base unit is always what `qty` holds.
+  const [extras, setExtras] = useState<Record<string, { unit: string; text: string }[]>>({});
   const [reason, setReason] = useState<Record<string, string>>({});
   const [note, setNote] = useState<Record<string, string>>({});
   const [openNoteId, setOpenNoteId] = useState<string | null>(null);
@@ -1857,6 +1899,8 @@ function CountSheet({
         // checked/qty state the manual table already uses, so every row
         // still passes through the counter's own review before Submit.
         newChecked[best.h.id] = true;
+        clearDraft(best.h);
+        setExtras((x) => ({ ...x, [best.h.id]: [] }));
         const expectedScan = expectedHere(best.h);
         newQty[best.h.id] = cleanNumeric(row.qty_text) || (expectedScan === null ? "" : Math.max(0, expectedScan).toFixed(2));
         newConfidence[best.h.id] = row.confidence;
@@ -1940,23 +1984,52 @@ function CountSheet({
       return rest;
     });
   }
-  function stockShown(h: FlatHolding): string {
+  // What the first box shows: what was typed there, else the saved total in this section's unit.
+  function primaryText(h: FlatHolding): string {
     if (draftKey(h) in stockDraft) return stockDraft[draftKey(h)];
     const base = qty[h.id];
-    if (!h.stockUnitQty || base === undefined || base === "" || !Number.isFinite(Number(base))) return "";
-    return parseFloat((Number(base) / h.stockUnitQty).toFixed(3)).toString();
+    if (base === undefined || base === "" || !Number.isFinite(Number(base))) return "";
+    const f = primaryUnit(h).factor;
+    return f === 1 ? base : parseFloat((Number(base) / f).toFixed(3)).toString();
   }
-  function handleStockChange(h: FlatHolding, value: string) {
-    if (!h.stockUnitQty) return;
+  // The row's total in the base unit, as the text `qty` keeps ("" while nothing is typed).
+  function totalOf(h: FlatHolding, first: string, list: { unit: string; text: string }[]): string {
+    const parts: [string, number][] = [[first, primaryUnit(h).factor], ...list.map((e): [string, number] => [e.text, unitFactor(h, e.unit)])];
+    if (parts.every(([t]) => t === "")) return "";
+    let sum = 0;
+    for (const [t, f] of parts) {
+      if (t === "") continue;
+      const n = Number(t);
+      if (!Number.isFinite(n)) return t;
+      sum += n * f;
+    }
+    return parseFloat(sum.toFixed(3)).toString();
+  }
+  function handlePrimaryChange(h: FlatHolding, value: string) {
     setStockDraft((d) => ({ ...d, [draftKey(h)]: value }));
-    const n = Number(value);
-    if (value === "") handleQtyChange(h, "");
-    else if (Number.isFinite(n)) handleQtyChange(h, parseFloat((n * h.stockUnitQty).toFixed(3)).toString());
+    handleQtyChange(h, totalOf(h, value, extras[h.id] ?? []));
+  }
+  // Any change to the + lines. The first box's text is frozen first, so adding a
+  // line never changes what it shows.
+  function setExtraLines(h: FlatHolding, next: { unit: string; text: string }[]) {
+    const first = primaryText(h);
+    setStockDraft((d) => ({ ...d, [draftKey(h)]: first }));
+    setExtras((x) => ({ ...x, [h.id]: next }));
+    handleQtyChange(h, totalOf(h, first, next));
+  }
+  function addExtraLine(h: FlatHolding) {
+    const list = extras[h.id] ?? [];
+    const opts = otherUnits(h);
+    const next = opts.find((o) => !list.some((e) => e.unit === o.key)) ?? opts[0];
+    if (next) setExtraLines(h, [...list, { unit: next.key, text: "" }]);
   }
 
   function handleTick(h: FlatHolding, isChecked: boolean) {
     setChecked((c) => ({ ...c, [h.id]: isChecked }));
-    if (!isChecked) clearDraft(h);
+    if (!isChecked) {
+      clearDraft(h);
+      setExtras((x) => ({ ...x, [h.id]: [] }));
+    }
     if (isChecked) {
       // Prefill with the expected quantity — most items will match, so the
       // counter only has to touch items that actually differ.
@@ -2151,6 +2224,18 @@ function CountSheet({
           const btnTxt = hasNote ? "💬 note" : off ? "+ why?" : "+ note";
           const scanConf = scanConfidence[h.id];
           const lowConfidence = scanConf !== undefined && scanConf !== null && scanConf < 80;
+          const pu = primaryUnit(h);
+          const others = otherUnits(h);
+          const lines = extras[h.id] ?? [];
+          const firstText = primaryText(h);
+          const totalNum = qty[h.id] === undefined || qty[h.id] === "" ? NaN : Number(qty[h.id]);
+          const sumPieces = [
+            ...(firstText !== "" && Number.isFinite(Number(firstText)) ? [`${fmtCount(Number(firstText))} ${pu.name}`] : []),
+            ...lines
+              .filter((e) => e.text !== "" && Number.isFinite(Number(e.text)))
+              .map((e) => `${fmtCount(Number(e.text))} ${others.find((o) => o.key === e.unit)?.name ?? ""}`),
+          ];
+          const showSum = !!checked[h.id] && Number.isFinite(totalNum) && sumPieces.length > 0 && (lines.length > 0 || pu.key !== "base");
           return (
             <div key={h.id} className={`count-row ${checked[h.id] ? "done" : ""}`}>
               <div className="cr-main">
@@ -2168,8 +2253,7 @@ function CountSheet({
                     if (h.placements.length <= 1) {
                       return (
                         <div className="cr-sys">
-                          System says {parseFloat((onHand[h.id] ?? 0).toFixed(2))} {h.baseUnit}
-                          {h.stockUnit ? ` · ${inStockUnit(h, onHand[h.id] ?? 0)}` : ""}
+                          System says {sectionQty(h, onHand[h.id] ?? 0)}
                         </div>
                       );
                     }
@@ -2180,12 +2264,11 @@ function CountSheet({
                         <div className="cr-sys">
                           {expected === null ? (
                             <>
-                              Total on hand {parseFloat(total.toFixed(2))} {h.baseUnit}
+                              Total on hand {sectionQty(h, total)}
                             </>
                           ) : (
                             <>
-                              System expects about {parseFloat(Math.max(0, expected).toFixed(2))} {h.baseUnit} here
-                              {h.stockUnit ? ` · ${inStockUnit(h, Math.max(0, expected))}` : ""}
+                              System expects about {sectionQty(h, Math.max(0, expected))} here
                             </>
                           )}
                         </div>
@@ -2211,42 +2294,75 @@ function CountSheet({
                       <input
                         type="number"
                         min="0"
-                        step="0.01"
+                        step="any"
                         placeholder="—"
-                        aria-label={`Counted in ${h.baseUnit}`}
+                        aria-label={`Counted in ${pu.name}`}
                         disabled={!checked[h.id]}
-                        value={qty[h.id] ?? ""}
+                        value={firstText}
                         className={invalid ? "bad" : undefined}
-                        onChange={(e) => {
-                          clearDraft(h);
-                          handleQtyChange(h, e.target.value);
-                        }}
+                        onChange={(e) => handlePrimaryChange(h, e.target.value)}
                       />
-                      <span className="cr-unit">{h.baseUnit}</span>
+                      <span className="cr-unit" title={pu.factor !== 1 ? `1 ${pu.name} = ${pu.factor} ${h.baseUnit}` : undefined}>
+                        {pu.name}
+                      </span>
                     </div>
-                    {h.stockUnit && h.stockUnitQty ? (
-                      <>
-                        <span className="cr-eq" title={`1 ${h.stockUnit} = ${h.stockUnitQty} ${h.baseUnit}`}>
-                          =
-                        </span>
-                        <div className="cr-field">
-                          <input
-                            type="number"
-                            min="0"
-                            step="any"
-                            placeholder="—"
-                            aria-label={`Counted in ${h.stockUnit}`}
-                            disabled={!checked[h.id]}
-                            value={stockShown(h)}
-                            onChange={(e) => handleStockChange(h, e.target.value)}
-                          />
-                          <span className="cr-unit" title={`1 ${h.stockUnit} = ${h.stockUnitQty} ${h.baseUnit}`}>
-                            {h.stockUnit}
-                          </span>
-                        </div>
-                      </>
-                    ) : null}
+                    {others.length > 0 && lines.length < others.length && (
+                      <button
+                        type="button"
+                        className="cr-plus"
+                        aria-label="Add another unit"
+                        title="Add another unit"
+                        disabled={!checked[h.id]}
+                        onClick={() => addExtraLine(h)}
+                      >
+                        +
+                      </button>
+                    )}
                   </div>
+                  {lines.map((ex, i) => (
+                    <div className="cr-counts-row cr-extra" key={i}>
+                      <span className="cr-plus-sign" aria-hidden="true">
+                        +
+                      </span>
+                      <div className="cr-field">
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          placeholder="—"
+                          aria-label={`Also counted in ${others.find((o) => o.key === ex.unit)?.name ?? "another unit"}`}
+                          value={ex.text}
+                          onChange={(e) => setExtraLines(h, lines.map((l, j) => (j === i ? { ...l, text: e.target.value } : l)))}
+                        />
+                        <select
+                          className="cr-unit-pick"
+                          aria-label="Unit"
+                          value={ex.unit}
+                          onChange={(e) => setExtraLines(h, lines.map((l, j) => (j === i ? { ...l, unit: e.target.value } : l)))}
+                        >
+                          {others.map((o) => (
+                            <option key={o.key} value={o.key}>
+                              {o.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        type="button"
+                        className="cr-x"
+                        aria-label="Remove this unit"
+                        title="Remove"
+                        onClick={() => setExtraLines(h, lines.filter((_, j) => j !== i))}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  {showSum && (
+                    <div className="cr-total" aria-live="polite">
+                      {sumPieces.join(" + ")} = {fmtCount(totalNum)} {h.baseUnit}
+                    </div>
+                  )}
                   {invalid && <div className="cr-warn">⚠ {invalid}</div>}
                   {!invalid && checked[h.id] && h.maxQty !== null && Number(qty[h.id]) > h.maxQty && (
                     <div className="cr-warn" title="Only a warning — the count is saved as entered.">
