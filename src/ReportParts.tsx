@@ -1,4 +1,4 @@
-import { formatMoney, currencySymbol, costBand } from "./api";
+import { formatMoney, currencySymbol, costBand, effectiveTargetPct } from "./api";
 import type { ReportsMenuRow, ReportsSummary } from "./api";
 import { HBars, KpiTile, Sparkline } from "./ReportCharts";
 import type { PillTone } from "./ReportCharts";
@@ -240,7 +240,7 @@ export function MenuTable({
             </thead>
             <tbody>
               {rows.map((r) => {
-                const rowTarget = r.menu_group === "drink" ? drinkTarget : foodTarget;
+                const rowTarget = effectiveTargetPct(r.target_cost_pct, r.menu_group === "drink" ? drinkTarget : foodTarget);
                 const rowBand = costBand(r.food_cost_pct, rowTarget);
                 const rowBadgeClass = rowBand === "good" ? "b-ok" : rowBand === "caution" ? "b-low" : "b-bad";
                 return (

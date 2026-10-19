@@ -12,6 +12,7 @@ import {
   formatMoney,
   defaultCurrency,
   defaultTargetCostPct,
+  effectiveTargetPct,
   costBand,
   costBandColor,
 } from "./api";
@@ -293,7 +294,9 @@ export default function RecipeDetail({
   // Recipes/items are org-wide, not per-location (see currency's own
   // note), so this falls back to the org's first location's target, same
   // convention defaultCurrency() already uses -- see defaultTargetCostPct.
-  const target = defaultTargetCostPct(locations, recipe.menu_group === "drink" ? "drink" : "food");
+  const generalTarget = defaultTargetCostPct(locations, recipe.menu_group === "drink" ? "drink" : "food");
+  // A dish can carry its own target; blank follows the general one above.
+  const target = effectiveTargetPct(recipe.target_cost_pct, generalTarget);
   const fcBand = costBand(recipe.plate_food_cost_pct, target);
   const yieldNum = Number(recipe.yield_qty) || 1;
   const menuPriceNum = recipe.menu_price ? Number(recipe.menu_price) : 0;
@@ -529,6 +532,25 @@ export default function RecipeDetail({
                   </tr>
                 ))}
               </tbody>
+              {recipe.lines.length > 0 && (
+                <tfoot>
+                  <tr className="ing-total">
+                    <td colSpan={3}>
+                      Total cost of ingredients ({recipe.yield_qty} {recipe.yield_unit}
+                      {yieldNum > 1 ? "s" : ""})
+                    </td>
+                    <td className="num">{formatMoney(recipe.batch_cost, currency)}</td>
+                    <td></td>
+                  </tr>
+                  {yieldNum > 1 && (
+                    <tr className="ing-total sub">
+                      <td colSpan={3}>Cost per {recipe.yield_unit}</td>
+                      <td className="num">{formatMoney(recipe.per_portion_cost, currency)}</td>
+                      <td></td>
+                    </tr>
+                  )}
+                </tfoot>
+              )}
             </table>
           </div>
 
@@ -740,6 +762,25 @@ export default function RecipeDetail({
               <p className="hint" style={{ marginTop: -8 }}>
                 POS ID is the number from your till system — lets a sale import match this dish automatically.
                 Menu category is just for grouping/browsing a long menu — doesn't affect costing.
+              </p>
+              <div className="price-row">
+                <label>Cost target %</label>
+                <input
+                  className="price-in"
+                  type="number"
+                  min="1"
+                  max="100"
+                  step="0.5"
+                  value={recipe.target_cost_pct ?? ""}
+                  placeholder={String(generalTarget)}
+                  onChange={(e) => setRecipe({ ...recipe, target_cost_pct: e.target.value === "" ? null : e.target.value })}
+                  onBlur={(e) => saveField({ target_cost_pct: e.target.value.trim() === "" ? null : e.target.value.trim() })}
+                />
+              </div>
+              <p className="hint" style={{ marginTop: -8 }}>
+                {recipe.target_cost_pct
+                  ? `This dish has its own target. Clear the box to follow the general ${recipe.menu_group} target of ${generalTarget}% from Settings.`
+                  : `Following the general ${recipe.menu_group} target of ${generalTarget}% from Settings. Type a number to set one for this dish only.`}
               </p>
               <div className="fc-hero">
                 <div className={`big ${fcBand === "good" ? "good" : fcBand === "caution" ? "over" : "danger"}`}>

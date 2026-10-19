@@ -59,6 +59,13 @@ export function defaultTargetCostPct(
   return Number.isFinite(n) ? n : 30;
 }
 
+// A dish's own cost target (percent) when it has one, otherwise the general
+// target passed in (the location's food or drink target from Settings).
+export function effectiveTargetPct(own: string | number | null | undefined, general: number): number {
+  const n = own === null || own === undefined || own === "" ? NaN : Number(own);
+  return Number.isFinite(n) && n > 0 ? n : general;
+}
+
 // Cost-vs-target color banding, shared by every food/drink-cost-% gauge in
 // the app (RecipeDetail's hero, Reports'/EodReport's KPI hero, the per-dish
 // menu table badges, and End of day > Tasks' cost-breach list). Three
@@ -528,6 +535,9 @@ export interface Recipe {
   // existed shows as Food until someone marks it a drink. Purely a
   // Champions-ranking split, no effect on costing.
   menu_group: "food" | "drink";
+  // This dish's own food-cost target in percent; null = follow the
+  // location's general target from Settings.
+  target_cost_pct: string | null;
   // The POS system's own ID for this dish -- shown and searchable so a
   // long menu can be found by the number on a till report, not just by
   // name. Also what a future POS sales import matches against first.
@@ -704,6 +714,7 @@ export interface RecipePatch {
   yield_unit?: string;
   menu_price?: string | null;
   menu_group?: "food" | "drink";
+  target_cost_pct?: string | null;
   pos_id?: string;
   menu_category?: string;
   archived?: boolean;
@@ -2485,6 +2496,8 @@ export interface ReportsMenuRow {
   recipe_id: string;
   name: string;
   menu_group: "food" | "drink";
+  // The dish's own cost target (percent), or null to use the general one.
+  target_cost_pct?: string | null;
   qty: number;
   revenue: number;
   cost: number;

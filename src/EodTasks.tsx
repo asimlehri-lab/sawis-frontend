@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   costBand,
   costBandColor,
+  effectiveTargetPct,
   fetchActivityFeed,
   fetchNotifications,
   fetchSections,
@@ -268,7 +269,7 @@ function ManagerTasks({
   const costBreaches = recipes
     .filter((r) => r.kind === "dish" && r.plate_food_cost_pct !== null && r.plate_food_cost_pct > 0)
     .map((r) => {
-      const target = r.menu_group === "drink" ? drinkTarget : foodTarget;
+      const target = effectiveTargetPct(r.target_cost_pct, r.menu_group === "drink" ? drinkTarget : foodTarget);
       const pct = r.plate_food_cost_pct as number;
       return { id: r.id, name: r.name, pct, target, over: pct - target, band: costBand(pct, target) };
     })

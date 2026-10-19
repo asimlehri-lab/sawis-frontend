@@ -39,6 +39,7 @@ import {
   autoFactor,
   convertToBaseUnit,
   defaultTargetCostPct,
+  effectiveTargetPct,
   costBand,
 } from "./api";
 import type {
@@ -774,7 +775,10 @@ export default function App() {
       (r) =>
         (recipeFilters.cost ?? null) === null ||
         recipeFilters.cost!.includes(
-          costBand(r.plate_food_cost_pct, defaultTargetCostPct(locations, r.menu_group === "drink" ? "drink" : "food"))
+          costBand(
+            r.plate_food_cost_pct,
+            effectiveTargetPct(r.target_cost_pct, defaultTargetCostPct(locations, r.menu_group === "drink" ? "drink" : "food"))
+          )
         )
     )
     .filter(
