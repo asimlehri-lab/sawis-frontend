@@ -13,6 +13,7 @@ import {
   formatMoney,
   autoFactor,
   convertToBaseUnit,
+  unitFactor,
   scanReceipt,
   uploadPOAttachment,
   fetchPOAttachmentDownloadUrl,
@@ -20,6 +21,8 @@ import {
 } from "./api";
 import type { PurchaseOrder, CatalogItem, Supplier, ItemSupplierRow, Location } from "./api";
 import SearchSelect from "./SearchSelect";
+import SupplierUnitPicker from "./SupplierUnitPicker";
+import type { UnitChoice } from "./SupplierUnitPicker";
 import Loader from "./Loader";
 
 interface Props {
@@ -36,6 +39,8 @@ interface Props {
   locations: Location[];
   onBack: () => void;
   onChanged: () => void;
+  // Reload the item list after a new pack size was saved on an item.
+  onItemsChanged?: () => void;
   onOpenPO: (id: string) => void;
   backLabel?: string;
 }
@@ -136,6 +141,7 @@ export default function ProcurementDetail({
   locations,
   onBack,
   onChanged,
+  onItemsChanged,
   onOpenPO,
   backLabel,
 }: Props) {
@@ -166,7 +172,9 @@ export default function ProcurementDetail({
   // legitimately carry a different rate than this org's own default for
   // the same item. "" means "use the item's own rate" (vat_rate: null).
   const [addVatPct, setAddVatPct] = useState("");
-  const [addPackExpanded, setAddPackExpanded] = useState(false);
+  // True once the manager has typed their own price, so picking another unit
+  // does not overwrite it.
+  const [addPriceTouched, setAddPriceTouched] = useState(false);
   const [savingLine, setSavingLine] = useState(false);
   const [lineError, setLineError] = useState<string | null>(null);
 
@@ -714,7 +722,6 @@ export default function ProcurementDetail({
       // their invoice actually uses.
       setAddSupplierUnit(known.supplierUnit);
       setAddPackQty(known.packQty);
-      setAddPackExpanded(true);
       setAddPrice(link?.supplier_unit_price ?? "0.00");
     } else {
       // No known pack/unit -- fall back to the plain base-unit price from
@@ -724,9 +731,25 @@ export default function ProcurementDetail({
       // silently carries over a previous item's price.
       setAddSupplierUnit("");
       setAddPackQty("1");
-      setAddPackExpanded(false);
       setAddPrice(link ? link.unit_price : "0.00");
     }
+    setAddPriceTouched(false);
+  }
+
+  // The unit picker changed. The quantity stays as typed; the price follows
+  // the unit (this supplier's price per base unit times what one of the new
+  // unit holds) unless the manager already typed their own.
+  function handleAddUnitChange(choice: UnitChoice) {
+    setAddSupplierUnit(choice.unit);
+    setAddPackQty(choice.packQty);
+    if (addPriceTouched) return;
+    const item = items.find((it) => it.id === addItemId);
+    const link = po && itemSupplierLinks.find((l) => l.item === addItemId && l.supplier === po.supplier);
+    if (!item || !link) return;
+    const factor = unitFactor(item, choice.unit, choice.packQty);
+    if (!factor) return;
+    const price = Number(link.unit_price) * factor;
+    if (Number.isFinite(price)) setAddPrice(price.toFixed(price < 0.1 ? 4 : 2));
   }
 
   // Resolves the Add-line form's current qty/price into the selected item's
@@ -773,9 +796,14 @@ export default function ProcurementDetail({
         // invoice's terms later too, not just converted ones.
         ...(converting ? { supplier_unit: addSupplierUnit, supplier_qty: addQty } : {}),
       });
+      // Ready for the next line: nothing carries over from this one.
+      setAddItemId("");
+      setAddQty("1");
+      setAddPrice("0.00");
+      setAddVatPct("");
+      setAddPriceTouched(false);
       setAddSupplierUnit("");
       setAddPackQty("1");
-      setAddPackExpanded(false);
       reload();
       onChanged();
     } catch (err) {
@@ -1269,10 +1297,32 @@ export default function ProcurementDetail({
                   ))}
                 </select>
               </div>
+              <SupplierUnitPicker
+                key={addItemId || "none"}
+                item={items.find((it) => it.id === addItemId)}
+                unit={addSupplierUnit}
+                packQty={addPackQty}
+                accessToken={accessToken}
+                label="Order in"
+                onChange={handleAddUnitChange}
+                onUnitAdded={onItemsChanged}
+              />
+              <div className="field">
+                <label>VAT %</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  placeholder="—"
+                  value={addVatPct}
+                  onChange={(e) => setAddVatPct(e.target.value)}
+                />
+              </div>
               <div className="field">
                 <label>
                   {addSupplierUnit && addSupplierUnit !== items.find((it) => it.id === addItemId)?.base_unit
-                    ? `Qty received (in ${addSupplierUnit})`
+                    ? `Qty (in ${addSupplierUnit})`
                     : "Qty"}
                 </label>
                 <input
@@ -1294,73 +1344,13 @@ export default function ProcurementDetail({
                   min="0"
                   step="0.01"
                   value={addPrice}
-                  onChange={(e) => setAddPrice(e.target.value)}
-                />
-              </div>
-              <div className="field">
-                <label>VAT %</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  step="0.01"
-                  placeholder="—"
-                  value={addVatPct}
-                  onChange={(e) => setAddVatPct(e.target.value)}
+                  onChange={(e) => {
+                    setAddPrice(e.target.value);
+                    setAddPriceTouched(true);
+                  }}
                 />
               </div>
             </div>
-            {addItemId &&
-              (() => {
-                const addItem = items.find((it) => it.id === addItemId);
-                if (!addItem) return null;
-                return (
-                  <div style={{ marginTop: 4 }}>
-                    {!addPackExpanded ? (
-                      <button type="button" className="btn-ghost small" onClick={() => setAddPackExpanded(true)}>
-                        Different pack or unit?
-                      </button>
-                    ) : (
-                      <div style={{ marginTop: 4, fontSize: 13 }}>
-                        Supplier's unit:{" "}
-                        <input
-                          value={addSupplierUnit}
-                          placeholder={addItem.base_unit}
-                          onChange={(e) => setAddSupplierUnit(e.target.value)}
-                          style={{ width: 56 }}
-                        />
-                        {addSupplierUnit &&
-                          addSupplierUnit !== addItem.base_unit &&
-                          autoFactor(addSupplierUnit, addItem.base_unit) === null && (
-                            <>
-                              {" "}
-                              = <input
-                                type="number"
-                                min="0"
-                                step="any"
-                                value={addPackQty}
-                                onChange={(e) => setAddPackQty(e.target.value)}
-                                style={{ width: 72 }}
-                              />{" "}
-                              {addItem.base_unit}
-                            </>
-                          )}
-                        <button
-                          type="button"
-                          className="btn-ghost small"
-                          onClick={() => {
-                            setAddPackExpanded(false);
-                            setAddSupplierUnit("");
-                            setAddPackQty("1");
-                          }}
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
             {addItemId &&
               (() => {
                 const addItem = items.find((it) => it.id === addItemId);
@@ -1369,11 +1359,12 @@ export default function ProcurementDetail({
                 return (
                   <div className={`scan-row-total ${resolved ? "ok" : "warn"}`}>
                     {resolved
-                      ? `= ${resolved.qty.toFixed(2)} ${addItem.base_unit} total @ ${formatMoney(
-                          resolved.unitPrice,
-                          currency
-                        )}/${addItem.base_unit}`
-                      : "Enter a conversion above to see the real total"}
+                      ? `= ${Number(resolved.qty.toFixed(3)).toLocaleString("en-GB")} ${addItem.base_unit} in total at ${formatMoney(
+                          Number(addPrice || "0"),
+                          currency,
+                          Number(addPrice || "0") < 0.1 ? 4 : 2
+                        )} per ${addSupplierUnit}`
+                      : "Pick or add the pack size above to see the real total"}
                   </div>
                 );
               })()}

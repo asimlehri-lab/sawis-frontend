@@ -2145,6 +2145,19 @@ input[type="file"] {
    comment above its usage), not tucked inside the collapsed pack-settings
    panel above where it's easy to miss. ".warn" covers the "enter a
    conversion" prompt when the factor isn't resolvable yet. */
+/* Unit picker on PO Add line and Scan receipt rows (SupplierUnitPicker.tsx). */
+.sup-unit select { width: 100%; }
+.sup-unit.adding { grid-column: 1 / -1; }
+.sup-unit-new { margin-top: 8px; padding: 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
+.sup-unit-new-head { margin: 0 0 8px; font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.sup-unit-new-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sup-unit-new-row input { background: var(--surface); }
+.sup-unit-new-row .sup-unit-name { flex: 1 1 120px; width: auto; min-width: 0; }
+.sup-unit-new-row .sup-unit-qty { flex: 0 1 90px; width: 90px; min-width: 0; }
+.sup-unit-eq { font-size: 13px; color: var(--muted); }
+.sup-unit-new-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.sup-unit-new-actions .btn-ghost, .sup-unit-new-actions .mini { margin-top: 0; }
+.scan-row-card .sup-unit { margin-top: 8px; }
 .scan-row-total { margin-top: 6px; padding: 6px 10px; border-radius: 8px; font-weight: 600; font-size: 13px; }
 .scan-row-total.ok { background: var(--brand-soft); color: var(--ink); }
 .scan-row-total.warn { background: var(--caution-soft); color: var(--ink); font-weight: 500; }

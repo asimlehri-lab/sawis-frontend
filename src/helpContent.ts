@@ -296,7 +296,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I scan a receipt to create a PO?",
-        a: "From Procurement, click 📷 Scan receipt (next to 🏬 Suppliers, top of the page — managers and above), take or choose a photo of the invoice, and review the matched items and quantities before confirming — nothing is saved until you confirm.",
+        a: "From Procurement, click 📷 Scan receipt (next to 🏬 Suppliers, top of the page — managers and above), take or choose a photo of the invoice, and review the matched items and quantities before confirming — nothing is saved until you confirm. Each row has an Invoiced in menu: the unit the supplier already uses for that item is chosen for you, and you can switch it (or add a new pack size) if the invoice says carton, case or kg.",
         fact: "💡 If the invoice matches a purchase order you've already got open with that supplier, SAWIS spots it and offers to receive against that existing PO instead of creating a duplicate one.",
       },
       {
@@ -305,7 +305,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "Can I order in a different unit than the item's base unit?",
-        a: "Yes — on the line you're adding, click \"Different pack or unit?\" (for example, ordering by the litre when the item's base unit is ml) and enter the conversion; it applies automatically from then on.",
+        a: "Yes — on the line you're adding, use the Order in menu under the item. It lists the units this item already has: its base unit, any packs saved on it (such as carton or bag) and, for things weighed or poured, kg or L. If this supplier usually sells it in one of them, that one is already chosen and the price is filled in for it. If the pack you need isn't listed, choose + Add a pack size, give it a name and say how many of the base unit it holds (for example carton holds 24 can). It is saved on the item, so it is also there when you count stock and on the next order.",
       },
       {
         q: "How do I check a delivery against the order using a photo?",
@@ -318,7 +318,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "What does “Qty received (in Pkg)” and the bold total mean?",
-        a: "When a supplier sells in a different pack from your item's base unit (say 1 Pkg = 40 ea), the Qty and price labels switch to “in Pkg” and a bold total underneath shows the converted amount (for example 2 Pkg → 80 ea), so you can see the real quantity while you type. If the pack size isn't known yet, that total turns amber until you enter it under “Different pack or unit?”.",
+        a: "When a supplier sells in a different pack from your item's base unit (say 1 Pkg = 40 ea), the Qty and price labels switch to “in Pkg” and a bold total underneath shows the converted amount (for example 2 Pkg → 80 ea), so you can see the real quantity while you type. If the pack size isn't known yet, that total turns amber until you pick the pack in the Order in menu or add it with + Add a pack size.",
       },
       {
         q: "Who can place orders, and who can receive them?",

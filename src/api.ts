@@ -129,6 +129,15 @@ export function convertToBaseUnit(supplierPrice: number, qtyPerUnit: number | nu
   return supplierPrice / qtyPerUnit;
 }
 
+// How many of an item's base unit one `unit` holds -- 1 for the base unit
+// itself, the automatic factor for kg/g and L/ml, otherwise the pack size
+// typed or saved (packQty). Null when it cannot be worked out.
+export function unitFactor(item: { base_unit: string }, unit: string, packQty: string): number | null {
+  if (!unit || unit === item.base_unit) return 1;
+  const factor = autoFactor(unit, item.base_unit) ?? Number(packQty || "1");
+  return Number.isFinite(factor) && factor > 0 ? factor : null;
+}
+
 export interface Membership {
   id: string;
   user: string;

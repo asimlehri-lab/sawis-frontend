@@ -67,6 +67,7 @@ import AllergenPrintSheet from "./AllergenPrintSheet";
 import AllergenReview from "./AllergenReview";
 import Loader from "./Loader";
 import ProcurementDetail from "./ProcurementDetail";
+import SupplierUnitPicker from "./SupplierUnitPicker";
 import SupplierDeliveries from "./SupplierDeliveries";
 import SupplierList from "./SupplierList";
 import WasteLog from "./WasteLog";
@@ -838,13 +839,6 @@ export default function App() {
   const [scanNewItemUnit, setScanNewItemUnit] = useState(BASE_UNITS[1]);
   const [scanCreatingItem, setScanCreatingItem] = useState(false);
   const [scanNewItemError, setScanNewItemError] = useState<string | null>(null);
-  // Which scan rows have their "different pack or unit?" control expanded
-  // -- collapsed by default so the review table doesn't overwhelm the user
-  // with fields most receipts never need. A row auto-expands (see the
-  // isExpanded calc in the table below) once it actually carries a
-  // supplierUnit, whether the user set it or it was auto-filled from a
-  // remembered link, so the conversion being applied is never hidden.
-  const [scanExpandedPackRows, setScanExpandedPackRows] = useState<Set<number>>(new Set());
   // Best-guess existing sent/awaiting order this scan might belong to --
   // scored from whichever of {PO number, supplier, item overlap, receipt
   // date vs expected date} actually matched (see scorePOMatch below).
@@ -1422,7 +1416,6 @@ export default function App() {
     setScanUseMatchedPO(false);
     setScanPendingOverrides([]);
     setScanPendingInvoiceNumber(null);
-    setScanExpandedPackRows(new Set());
   }
 
   async function handleCreateScanSupplier() {
@@ -2139,6 +2132,7 @@ export default function App() {
             locations={locations}
             onBack={() => setSelectedPOId(null)}
             onChanged={() => loadPOs(accessToken)}
+            onItemsChanged={() => loadItems(accessToken)}
             onOpenPO={(id) => setSelectedPOId(id)}
             backLabel={
               selectedSupplierId ? `← ${suppliers.find((s) => s.id === selectedSupplierId)?.name ?? "supplier"}` : undefined
@@ -3306,9 +3300,6 @@ export default function App() {
                     <div className="scan-rows">
                       {scanRows.map((row, i) => {
                         const matchedItem = (items ?? []).find((it) => it.id === row.matchedItemId);
-                        const packExpanded =
-                          scanExpandedPackRows.has(i) ||
-                          (!!row.supplierUnit && !!matchedItem && row.supplierUnit !== matchedItem.base_unit);
                         const converted = matchedItem ? scanRowBaseUnits(row, matchedItem) : null;
                         return (
                           <div
@@ -3409,59 +3400,16 @@ export default function App() {
                                 </div>
                               )}
                               {matchedItem && !row.skip && (
-                                <div style={{ marginTop: 4 }}>
-                                  {!packExpanded ? (
-                                    <button
-                                      type="button"
-                                      className="btn-ghost small"
-                                      onClick={() =>
-                                        setScanExpandedPackRows((s) => new Set(s).add(i))
-                                      }
-                                    >
-                                      Different pack or unit?
-                                    </button>
-                                  ) : (
-                                    <div className="sd">
-                                      Supplier's unit:{" "}
-                                      <input
-                                        value={row.supplierUnit}
-                                        placeholder={matchedItem.base_unit}
-                                        onChange={(e) => updateScanRow(i, { supplierUnit: e.target.value })}
-                                        style={{ width: 56 }}
-                                      />
-                                      {row.supplierUnit &&
-                                        row.supplierUnit !== matchedItem.base_unit &&
-                                        autoFactor(row.supplierUnit, matchedItem.base_unit) === null && (
-                                          <>
-                                            {" "}
-                                            = <input
-                                              type="number"
-                                              min="0"
-                                              step="any"
-                                              value={row.packQty}
-                                              onChange={(e) => updateScanRow(i, { packQty: e.target.value })}
-                                              style={{ width: 72 }}
-                                            />{" "}
-                                            {matchedItem.base_unit}
-                                          </>
-                                        )}
-                                      <button
-                                        type="button"
-                                        className="btn-ghost small"
-                                        onClick={() => {
-                                          setScanExpandedPackRows((s) => {
-                                            const next = new Set(s);
-                                            next.delete(i);
-                                            return next;
-                                          });
-                                          updateScanRow(i, { supplierUnit: "", packQty: "1" });
-                                        }}
-                                      >
-                                        ✕
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
+                                <SupplierUnitPicker
+                                  key={`${i}-${matchedItem.id}`}
+                                  item={matchedItem}
+                                  unit={row.supplierUnit}
+                                  packQty={row.packQty}
+                                  accessToken={accessToken ?? ""}
+                                  label="Invoiced in"
+                                  onChange={(c) => updateScanRow(i, { supplierUnit: c.unit, packQty: c.packQty })}
+                                  onUnitAdded={() => accessToken && loadItems(accessToken)}
+                                />
                               )}
                             </div>
 
@@ -3522,11 +3470,12 @@ export default function App() {
                             {matchedItem && row.supplierUnit && row.supplierUnit !== matchedItem.base_unit && (
                               <div className={`scan-row-total ${converted ? "ok" : "warn"}`}>
                                 {converted
-                                  ? `= ${converted.qty.toFixed(2)} ${matchedItem.base_unit} total @ ${formatMoney(
-                                      converted.unitPrice,
-                                      orgCurrency
-                                    )}/${matchedItem.base_unit}`
-                                  : "Enter a conversion above to see the real total"}
+                                  ? `= ${Number(converted.qty.toFixed(3)).toLocaleString("en-GB")} ${matchedItem.base_unit} in total at ${formatMoney(
+                                      Number(row.unitPrice || "0"),
+                                      orgCurrency,
+                                      Number(row.unitPrice || "0") < 0.1 ? 4 : 2
+                                    )} per ${row.supplierUnit}`
+                                  : "Pick or add the pack size above to see the real total"}
                               </div>
                             )}
                           </div>
