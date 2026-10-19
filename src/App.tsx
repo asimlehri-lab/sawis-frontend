@@ -279,10 +279,21 @@ function scanRowBaseUnits(
 // or a catalogue import), back out the pack factor from the two prices
 // already on file (supplier_unit_price ÷ unit_price = how many base_units
 // one supplier_unit is) rather than asking the user to re-teach it.
+//
+// Two guards keep the remembered pack from misreading an invoice:
+//  - the pack's size comes from the item's saved stock unit of the same name
+//    when there is one (so editing "Pkg" from 25 to 30 is honoured, instead of
+//    a size backed out of two rounded prices, which can land on 30.04);
+//  - when the scanned price is clearly the price of ONE base unit (it matches
+//    the stored per-unit price, not the pack price), the invoice is priced
+//    per piece, so no pack is preselected and quantity and price stay in the
+//    item's own unit.
 function findKnownSupplierUnit(
   itemSupplierLinks: ItemSupplierRow[],
   itemId: string,
-  supplierId: string
+  supplierId: string,
+  item?: CatalogItem,
+  scannedPrice?: number
 ): { supplierUnit: string; packQty: string } | null {
   if (!itemId || !supplierId) return null;
   const link = itemSupplierLinks.find((l) => l.item === itemId && l.supplier === supplierId);
@@ -298,6 +309,14 @@ function findKnownSupplierUnit(
   // plain float division -- capped to 2dp for the same reason every other
   // quantity in this app is (see formatQty), since this is a pack size a
   // human reads and edits, not a raw stored cost figure.
+  if (scannedPrice && scannedPrice > 0 && factor >= 1.5) {
+    const near = (a: number, b: number) => Math.abs(a - b) / b <= 0.15;
+    if (near(scannedPrice, unitPriceNum) && !near(scannedPrice, supplierUnitPriceNum)) return null;
+  }
+  const saved = item?.stock_units?.find((u) => u.name.toLowerCase() === link.supplier_unit.toLowerCase());
+  if (saved && Number(saved.qty) > 0) {
+    return { supplierUnit: saved.name, packQty: String(parseFloat(Number(saved.qty).toFixed(4))) };
+  }
   return { supplierUnit: link.supplier_unit, packQty: String(parseFloat(factor.toFixed(2))) };
 }
 
@@ -1455,7 +1474,7 @@ export default function App() {
   // A receipt line's "create item" step found the name already in use: point
   // the line at the existing item instead of making a second one.
   function matchScanRowToExisting(rowIndex: number, existing: CatalogItem) {
-    const known = findKnownSupplierUnit(itemSupplierLinks, existing.id, scanSupplierId);
+    const known = findKnownSupplierUnit(itemSupplierLinks, existing.id, scanSupplierId, existing);
     updateScanRow(rowIndex, {
       matchedItemId: existing.id,
       supplierUnit: known?.supplierUnit ?? "",
@@ -1612,8 +1631,14 @@ export default function App() {
             .sort((a, b) => b.score - a.score);
           best = ranked[0] && ranked[0].score >= 0.5 ? ranked[0].it.id : "";
         }
-        const known = findKnownSupplierUnit(itemSupplierLinks, best, resolvedSupplierId);
         const bestItem = (items ?? []).find((it) => it.id === best);
+        const known = findKnownSupplierUnit(
+          itemSupplierLinks,
+          best,
+          resolvedSupplierId,
+          bestItem,
+          Number(cleanNumeric(li.unit_price)) || undefined
+        );
         // The unit this supplier is already known to sell the item in wins;
         // otherwise the unit printed beside the quantity, if the item has it.
         const printed = known ? null : unitFromPrinted(bestItem, li.unit);
@@ -1684,7 +1709,13 @@ export default function App() {
       rows.map((r) => {
         let patch: Partial<ScanRow> = {};
         if (!r.supplierUnit && r.matchedItemId) {
-          const known = findKnownSupplierUnit(itemSupplierLinks, r.matchedItemId, newSupplierId);
+          const known = findKnownSupplierUnit(
+            itemSupplierLinks,
+            r.matchedItemId,
+            newSupplierId,
+            (items ?? []).find((it) => it.id === r.matchedItemId),
+            Number(r.unitPrice) || undefined
+          );
           if (known) patch = { ...patch, supplierUnit: known.supplierUnit, packQty: known.packQty };
         }
         if (!r.vatPct && r.matchedItemId) {
@@ -3463,8 +3494,14 @@ export default function App() {
                                     setScanNewItemUnit(BASE_UNITS[1]);
                                     setScanNewItemError(null);
                                   } else {
-                                    const known = findKnownSupplierUnit(itemSupplierLinks, val, scanSupplierId);
                                     const newItem = (items ?? []).find((it) => it.id === val);
+                                    const known = findKnownSupplierUnit(
+                                      itemSupplierLinks,
+                                      val,
+                                      scanSupplierId,
+                                      newItem,
+                                      Number(row.unitPrice) || undefined
+                                    );
                                     const printed = known ? null : unitFromPrinted(newItem, row.printedUnit);
                                     updateScanRow(i, {
                                       matchedItemId: val,

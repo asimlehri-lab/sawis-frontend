@@ -693,6 +693,13 @@ export default function ProcurementDetail({
     if (!Number.isFinite(factor) || factor <= 0) return null;
     // Same float-division rounding as App.tsx's own copy -- capped to 2dp,
     // a pack size a human reads and edits, not a raw stored cost figure.
+    // The item's saved stock unit of the same name is the truth for the size.
+    const saved = items.find((it) => it.id === itemId)?.stock_units?.find(
+      (u) => u.name.toLowerCase() === link.supplier_unit.toLowerCase()
+    );
+    if (saved && Number(saved.qty) > 0) {
+      return { supplierUnit: saved.name, packQty: String(parseFloat(Number(saved.qty).toFixed(4))) };
+    }
     return { supplierUnit: link.supplier_unit, packQty: String(parseFloat(factor.toFixed(2))) };
   }
 
