@@ -22,6 +22,8 @@ export interface UnitChoice {
 interface Option {
   name: string;
   qty: number;
+  // "auto" = kg/g or L/ml (the size is known), "pack" = saved on the item.
+  kind: "auto" | "pack";
 }
 
 const AUTO_CANDIDATES = ["g", "kg", "ml", "L"];
@@ -31,18 +33,35 @@ function tidy(n: number): string {
   return Number(n.toFixed(4)).toLocaleString("en-GB", { maximumFractionDigits: 4 });
 }
 
+// What a pack holds, in the unit people say it in: 1,500 ml reads "1.5 L".
+function pretty(item: CatalogItem, qty: number): string {
+  if (item.base_unit === "ml" && qty >= 1000) return `${tidy(qty / 1000)} L`;
+  if (item.base_unit === "g" && qty >= 1000) return `${tidy(qty / 1000)} kg`;
+  return `${tidy(qty)} ${item.base_unit}`;
+}
+
+// A hint for the size box that fits the unit being typed in.
+function sizeHint(item: CatalogItem, unit: string, isPack: boolean): string {
+  if (isPack) return "12";
+  const u = unit || item.base_unit;
+  if (u === "L") return "1.5";
+  if (u === "kg") return "2.5";
+  if (u === "ml" || u === "g") return "500";
+  return "24";
+}
+
 function buildOptions(item: CatalogItem, unit: string, packQty: string): Option[] {
-  const out: Option[] = (item.stock_units ?? []).map((u) => ({ name: u.name, qty: Number(u.qty) }));
+  const out: Option[] = (item.stock_units ?? []).map((u) => ({ name: u.name, qty: Number(u.qty), kind: "pack" as const }));
   const has = (n: string) => out.some((o) => o.name.toLowerCase() === n.toLowerCase());
   for (const c of AUTO_CANDIDATES) {
     const f = autoFactor(c, item.base_unit);
-    if (f !== null && c !== item.base_unit && !has(c)) out.push({ name: c, qty: f });
+    if (f !== null && c !== item.base_unit && !has(c)) out.push({ name: c, qty: f, kind: "auto" });
   }
   // A unit already on the line (taught by this supplier's catalogue, or a
   // pack just added) that the item's own list does not hold yet.
   if (unit && unit !== item.base_unit && !has(unit)) {
     const f = unitFactor(item, unit, packQty);
-    if (f) out.push({ name: unit, qty: f });
+    if (f) out.push({ name: unit, qty: f, kind: "pack" });
   }
   return out;
 }
@@ -73,6 +92,8 @@ export default function SupplierUnitPicker({
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [qty, setQty] = useState("");
+  // The unit the size is typed in: "" = the item's base unit.
+  const [qtyUnit, setQtyUnit] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -95,13 +116,16 @@ export default function SupplierUnitPicker({
     setAdding(false);
     setName("");
     setQty("");
+    setQtyUnit("");
     setErr(null);
   }
 
   async function save() {
     if (!item || saving) return;
     const n = name.trim();
-    const q = Number(qty);
+    const typed = Number(qty);
+    const unitFactorNow = qtyUnit === "" ? 1 : options.find((o) => o.name === qtyUnit)?.qty ?? 0;
+    const q = Number((typed * unitFactorNow).toFixed(4));
     if (!n) {
       setErr("Give the pack a name, like carton or bag.");
       return;
@@ -117,7 +141,7 @@ export default function SupplierUnitPicker({
       return;
     }
     if (!(q > 0)) {
-      setErr(`Say how many ${item.base_unit} are in one ${n}.`);
+      setErr(`Say how much one ${n} holds.`);
       return;
     }
     setSaving(true);
@@ -159,7 +183,7 @@ export default function SupplierUnitPicker({
         <option value="">{item.base_unit}</option>
         {options.map((o) => (
           <option key={o.name} value={o.name}>
-            {o.name} ({tidy(o.qty)} {item.base_unit})
+            {o.name} ({o.kind === "pack" ? pretty(item, o.qty) : `${tidy(o.qty)} ${item.base_unit}`})
           </option>
         ))}
         <option value="__new">+ Add a pack size…</option>
@@ -195,8 +219,8 @@ export default function SupplierUnitPicker({
               min="0"
               step="any"
               value={qty}
-              placeholder="24"
-              aria-label={`How many ${item.base_unit} in one pack`}
+              placeholder={sizeHint(item, qtyUnit, options.find((o) => o.name === qtyUnit)?.kind === "pack")}
+              aria-label="How much one pack holds"
               onChange={(e) => setQty(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -205,8 +229,42 @@ export default function SupplierUnitPicker({
                 }
               }}
             />
-            <span className="sup-unit-eq">{item.base_unit}</span>
+            <select
+              className="sup-unit-qtyunit"
+              value={qtyUnit}
+              aria-label="Unit for the size"
+              onChange={(e) => setQtyUnit(e.target.value)}
+            >
+              <option value="">{item.base_unit}</option>
+              {options
+                .filter((o) => o.kind === "auto")
+                .map((o) => (
+                  <option key={o.name} value={o.name}>
+                    {o.name}
+                  </option>
+                ))}
+              {options
+                .filter((o) => o.kind === "pack")
+                .map((o) => (
+                  <option key={o.name} value={o.name}>
+                    {o.name} ({pretty(item, o.qty)})
+                  </option>
+                ))}
+            </select>
           </div>
+          {(() => {
+            const typed = Number(qty);
+            const f = qtyUnit === "" ? 1 : options.find((o) => o.name === qtyUnit)?.qty ?? 0;
+            if (!(typed > 0) || !f) return null;
+            const total = typed * f;
+            const label = name.trim() || "pack";
+            return (
+              <p className="sup-unit-sum">
+                1 {label} = {tidy(typed)} {qtyUnit || item.base_unit}
+                {qtyUnit ? ` = ${tidy(total)} ${item.base_unit}` : ""}
+              </p>
+            );
+          })()}
           {err && (
             <p className="error" style={{ margin: "6px 0 0" }}>
               {err}

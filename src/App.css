@@ -2155,6 +2155,8 @@ input[type="file"] {
 .sup-unit-new-row .sup-unit-name { flex: 1 1 120px; width: auto; min-width: 0; }
 .sup-unit-new-row .sup-unit-qty { flex: 0 1 90px; width: 90px; min-width: 0; }
 .sup-unit-eq { font-size: 13px; color: var(--muted); }
+.sup-unit-new-row select.sup-unit-qtyunit { width: auto; flex: 1 1 120px; min-width: 0; background: var(--surface); }
+.sup-unit-sum { margin: 8px 0 0; font-size: 13px; font-weight: 600; color: var(--ink); }
 .sup-unit-new-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 .sup-unit-new-actions .btn-ghost, .sup-unit-new-actions .mini { margin-top: 0; }
 .scan-row-card .sup-unit { margin-top: 8px; }

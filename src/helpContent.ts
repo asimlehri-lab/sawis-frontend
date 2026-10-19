@@ -305,7 +305,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "Can I order in a different unit than the item's base unit?",
-        a: "Yes — on the line you're adding, use the Order in menu under the item. It lists the units this item already has: its base unit, any packs saved on it (such as carton or bag) and, for things weighed or poured, kg or L. If this supplier usually sells it in one of them, that one is already chosen and the price is filled in for it. If the pack you need isn't listed, choose + Add a pack size, give it a name and say how many of the base unit it holds (for example carton holds 24 can). It is saved on the item, so it is also there when you count stock and on the next order.",
+        a: "Yes — on the line you're adding, use the Order in menu under the item. It lists the units this item already has: its base unit, any packs saved on it (such as carton or bag) and, for things weighed or poured, kg or L. If this supplier usually sells it in one of them, that one is already chosen and the price is filled in for it. If the pack you need isn't listed, choose + Add a pack size, give it a name and say what it holds in whichever unit suits you: 1.5 L, 2 kg, or even 12 of a bottle you already saved. SAWIS does the sum (for example 1 carton = 12 bottle = 18,000 ml) and shows it before you save. It is saved on the item, so it is also there when you count stock and on the next order.",
       },
       {
         q: "How do I check a delivery against the order using a photo?",
