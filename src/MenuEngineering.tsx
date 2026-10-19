@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatMoney } from "./api";
 import type { ReportsMenuRow } from "./api";
 import { GROUPS, MIN_DISHES, ORDER, buildMenuGroups, niceStep } from "./menuGroups";
@@ -26,6 +26,16 @@ export default function MenuEngineering({
   const [filter, setFilter] = useState<GroupKey | "all">("all");
   const [picked, setPicked] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
+  // Size of the plot, so dish names can be laid out without running into each
+  // other or out of the chart.
+  const [quadEl, setQuadEl] = useState<HTMLDivElement | null>(null);
+  const [quadSize, setQuadSize] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    if (!quadEl || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => setQuadSize({ w: quadEl.clientWidth, h: quadEl.clientHeight }));
+    ro.observe(quadEl);
+    return () => ro.disconnect();
+  }, [quadEl]);
 
   if (!built.ok) {
     return (
@@ -53,7 +63,52 @@ export default function MenuEngineering({
   const yTicks: number[] = [];
   for (let v = yMin; v <= yMax + 1e-9; v += yStep) yTicks.push(v);
 
-  const labelled = new Set([...dishes].sort((a, b) => b.qty - a.qty).slice(0, 6).map((d) => d.id));
+  // The six best sellers get their name beside the dot: on the right if it
+  // fits, else on the left, keeping clear of other dots when it can, and no
+  // name is drawn over one already placed (the dot can still be tapped for
+  // its details).
+  const labelSide = new Map<string, "r" | "l">();
+  {
+    const { w, h } = quadSize;
+    const placed: { x0: number; x1: number; y0: number; y1: number }[] = [];
+    const clash = (b: { x0: number; x1: number; y0: number; y1: number }) =>
+      placed.some((p) => b.x0 < p.x1 && b.x1 > p.x0 && b.y0 < p.y1 && b.y1 > p.y0);
+    for (const d of [...dishes].sort((a, b) => b.qty - a.qty).slice(0, 6)) {
+      if (w <= 0 || h <= 0) {
+        labelSide.set(d.id, xp(d.mix) > 55 ? "l" : "r");
+        continue;
+      }
+      const cx = (xp(d.mix) / 100) * w;
+      const cy = (yp(d.gp) / 100) * h;
+      const tw = Math.min(300, d.name.length * 6.6 + 4);
+      const boxes = {
+        r: { x0: cx + 12, x1: cx + 12 + tw, y0: cy - 12, y1: cy + 12 },
+        l: { x0: cx - 12 - tw, x1: cx - 12, y0: cy - 12, y1: cy + 12 },
+      };
+      const overDot = (b: { x0: number; x1: number; y0: number; y1: number }) =>
+        dishes.some((o) => {
+          if (o.id === d.id) return false;
+          const ox = (xp(o.mix) / 100) * w;
+          const oy = (yp(o.gp) / 100) * h;
+          return ox > b.x0 - 6 && ox < b.x1 + 6 && oy > b.y0 - 4 && oy < b.y1 + 4;
+        });
+      // First choice keeps clear of other dots; failing that, the name may
+      // pass over a dot rather than be left out.
+      const choices = [
+        ["r", true],
+        ["l", true],
+        ["r", false],
+        ["l", false],
+      ] as const;
+      for (const [side, strict] of choices) {
+        const b = boxes[side];
+        if (b.x0 < 0 || b.x1 > w || clash(b) || (strict && overDot(b))) continue;
+        placed.push(b);
+        labelSide.set(d.id, side);
+        break;
+      }
+    }
+  }
   const byGroup = (k: GroupKey) => dishes.filter((d) => d.group === k).sort((a, b) => b.qty - a.qty);
   const shownId = hover ?? picked;
   const shown = dishes.find((d) => d.id === shownId) ?? null;
@@ -76,7 +131,7 @@ export default function MenuEngineering({
               </span>
             ))}
           </div>
-          <div className="rp-quad" role="group" aria-label="Dishes by how much they sell and how much each earns">
+          <div className="rp-quad" ref={setQuadEl} role="group" aria-label="Dishes by how much they sell and how much each earns">
             <div className="rp-qt gems" style={{ left: 0, top: 0, width: `${xc}%`, height: `${yc}%` }} />
             <div className="rp-qt headliners" style={{ left: `${xc}%`, top: 0, right: 0, height: `${yc}%` }} />
             <div className="rp-qt chop" style={{ left: 0, top: `${yc}%`, width: `${xc}%`, bottom: 0 }} />
@@ -112,8 +167,8 @@ export default function MenuEngineering({
                       onBlur={() => setHover(null)}
                     />
                   )}
-                  {labelled.has(d.id) && !dim && (
-                    <span className={`rp-dot-label${xp(d.mix) > 55 ? " left" : ""}`} style={{ left: `${xp(d.mix)}%`, top: `${yp(d.gp)}%` }}>
+                  {labelSide.has(d.id) && !dim && (
+                    <span className={`rp-dot-label${labelSide.get(d.id) === "l" ? " left" : ""}`} style={{ left: `${xp(d.mix)}%`, top: `${yp(d.gp)}%` }}>
                       {d.name}
                     </span>
                   )}
