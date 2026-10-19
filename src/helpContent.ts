@@ -464,7 +464,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "Where do I see menu-item performance?",
-        a: "Go to Reports in the sidebar (managers and above). Overview shows the key figures with a small trend line and a comparison with the period before, food cost by day, and where waste and ingredient cost went. Menu engineering sorts every dish into Headliners, Crowd pleasers, Hidden gems and the Chop list, with a suggested next step for each. The Export CSV button is for Admins only, and it asks for your password every time.",
+        a: "Go to Reports in the sidebar (managers and above). Overview shows the key figures with a small trend line and a comparison with the period before, food cost by day, and where waste and ingredient cost went. Menu map sorts every dish into Headliners, Crowd pleasers, Hidden gems and the Chop list, with a suggested next step for each. The Export CSV button is for Admins only, and it asks for your password every time.",
       },
       {
         q: "How do I see a different week or month on Reports?",
@@ -476,7 +476,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "What do Headliners, Crowd pleasers, Hidden gems and Chop list mean?",
-        a: "On Reports → Menu engineering each dish is placed by how much of the menu it sells and how much each one earns, against this period's averages. Headliners sell well and earn well: protect them. Crowd pleasers sell well but earn little: reprice or trim the cost. Hidden gems earn well but sell little: promote them. The Chop list sells little and earns little: rework or drop them. Dishes with an ingredient that has no price on file are left out until the price is fixed. Tap a dot and use Open recipe to go straight to that dish; Back returns you to this chart.",
+        a: "On Reports → Menu map each dish is placed by how much of the menu it sells and how much each one earns, against this period's averages. Headliners sell well and earn well: protect them. Crowd pleasers sell well but earn little: reprice or trim the cost. Hidden gems earn well but sell little: promote them. The Chop list sells little and earns little: rework or drop them. Dishes with an ingredient that has no price on file are left out until the price is fixed. Tap a dot and use Open recipe to go straight to that dish; Back returns you to this chart.",
       },
       {
         q: "Does linking a new supplier price change past reports?",

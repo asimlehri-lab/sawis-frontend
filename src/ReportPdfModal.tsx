@@ -11,7 +11,7 @@ export interface PdfSections {
 
 const CHOICES: { key: keyof PdfSections; label: string }[] = [
   { key: "overview", label: "Overview and key figures" },
-  { key: "menu", label: "Menu engineering chart" },
+  { key: "menu", label: "Menu map chart" },
   { key: "waste", label: "Waste by reason" },
   { key: "category", label: "Ingredient cost by category" },
   { key: "dishes", label: "Dish-by-dish table" },

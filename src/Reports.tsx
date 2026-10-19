@@ -23,7 +23,7 @@ interface Props {
 type Tab = "overview" | "menu" | "waste" | "category";
 const TABS: { key: Tab; label: string }[] = [
   { key: "overview", label: "Overview" },
-  { key: "menu", label: "Menu engineering" },
+  { key: "menu", label: "Menu map" },
   { key: "waste", label: "Waste" },
   { key: "category", label: "Cost by category" },
 ];
