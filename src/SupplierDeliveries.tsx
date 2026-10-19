@@ -159,6 +159,14 @@ export default function SupplierDeliveries({
             />
           </div>
           <div className="field">
+            <label>VAT number</label>
+            <input
+              defaultValue={supplier.vat_number ?? ""}
+              onBlur={(e) => handleSaveField({ vat_number: e.target.value.trim() })}
+              placeholder="optional, as printed on their invoices"
+            />
+          </div>
+          <div className="field">
             <label>Delivery day</label>
             <select
               defaultValue={supplier.delivery_day ?? ""}

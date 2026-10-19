@@ -26,6 +26,8 @@ import {
   uploadPOAttachment,
   fetchItemSuppliers,
   fetchItemReceiptAliases,
+  fetchOwnBusinessNames,
+  createOwnBusinessName,
   fetchWasteEvents,
   fetchStockMovements,
   fetchSections,
@@ -51,6 +53,7 @@ import type {
   PurchaseOrder,
   ItemSupplierRow,
   ItemReceiptAliasRow,
+  OwnBusinessName,
   WasteEventRow,
   StockMovementRow,
   Section,
@@ -68,6 +71,7 @@ import AllergenReview from "./AllergenReview";
 import Loader from "./Loader";
 import ProcurementDetail from "./ProcurementDetail";
 import SupplierUnitPicker from "./SupplierUnitPicker";
+import { findSupplierFromScan, isOwnName, unitFromPrinted } from "./scanSupplier";
 import SupplierDeliveries from "./SupplierDeliveries";
 import SupplierList from "./SupplierList";
 import WasteLog from "./WasteLog";
@@ -241,6 +245,10 @@ interface ScanRow {
   // same item than this org's own default (see POLine.vat_rate). ""
   // means "use the matched item's own rate" -- sent as vat_rate: null.
   vatPct: string;
+  // The unit printed beside the quantity on the invoice ("pkg"), if one was found.
+  printedUnit: string;
+  // Set when the quantity was corrected from the printed line total; says what changed.
+  qtyNote: string;
 }
 
 // Resolves a ScanRow's qty/unitPrice into the matched item's own
@@ -793,6 +801,10 @@ export default function App() {
   ];
   const [itemSupplierLinks, setItemSupplierLinks] = useState<ItemSupplierRow[]>([]);
   const [itemReceiptAliases, setItemReceiptAliases] = useState<ItemReceiptAliasRow[]>([]);
+  // Names this business appears under on its own invoices (never the supplier).
+  const [ownBusinessNames, setOwnBusinessNames] = useState<OwnBusinessName[]>([]);
+  // A short line under the scan banner saying how the supplier was found, or why the detected name was ignored.
+  const [scanSupplierNote, setScanSupplierNote] = useState<string | null>(null);
 
   // Scan receipt (OCR) -- upload a photo, review/correct what Textract read
   // back, then create a real PurchaseOrder + POLines from it. See the
@@ -940,6 +952,7 @@ export default function App() {
       fetchSuppliers(accessToken).then(setSuppliers).catch(() => {});
       fetchItemSuppliers(accessToken).then(setItemSupplierLinks).catch(() => {});
       fetchItemReceiptAliases(accessToken).then(setItemReceiptAliases).catch(() => {});
+      fetchOwnBusinessNames(accessToken).then(setOwnBusinessNames).catch(() => {});
     }
     if (activePage === "Waste log") {
       loadWasteEvents(accessToken);
@@ -1416,6 +1429,7 @@ export default function App() {
     setScanUseMatchedPO(false);
     setScanPendingOverrides([]);
     setScanPendingInvoiceNumber(null);
+    setScanSupplierNote(null);
   }
 
   async function handleCreateScanSupplier() {
@@ -1493,6 +1507,33 @@ export default function App() {
     resetScan();
   }
 
+  // Every name this business goes by on paper: the saved list, its locations and the organisation.
+  const ownNamesAll = [
+    ...ownBusinessNames.map((n) => n.name),
+    ...locations.map((l) => l.name),
+    ...(me?.org?.name ? [me.org.name] : []),
+  ];
+
+  // The detected "vendor" is really us: remember it so no later scan offers it as the supplier.
+  async function handleMarkVendorOwn() {
+    const name = scanResult?.vendor_name;
+    if (!accessToken || !name || !scanResult) return;
+    try {
+      const created = await createOwnBusinessName(accessToken, name);
+      setOwnBusinessNames((prev) => [...prev, created]);
+      if (scanNewSupplierName === name) setScanNewSupplierName("");
+      const found = scanSupplierId ? null : findSupplierFromScan(scanResult, suppliers, [...ownNamesAll, name], true);
+      if (found) {
+        setScanSupplierId(found.supplier.id);
+        setScanSupplierNote(`\u201c${name}\u201d is now listed as your own business. Recognised ${found.supplier.name} from the ${found.why} on the invoice.`);
+      } else {
+        setScanSupplierNote(`\u201c${name}\u201d is now listed as your own business and will not be offered as the supplier again. Pick the supplier below.`);
+      }
+    } catch (err) {
+      setScanSupplierNote(err instanceof Error ? err.message : "Could not save that name.");
+    }
+  }
+
   async function handleScanFileSelected(file: File) {
     if (!accessToken) return;
     setScanFileName(file.name);
@@ -1513,8 +1554,20 @@ export default function App() {
       // local var (not just the state setter) so the PO-matching pass
       // below can use it in the same synchronous pass, without waiting on
       // a state update that hasn't landed yet.
+      // Names the invoice can carry for us (the customer block) are never
+      // the supplier. When the detected vendor is one of ours it is set
+      // aside and the supplier is looked for in the other details printed
+      // on the page. A detected name that is not ours is handled exactly
+      // as before.
+      const vendorIsOwn = !!result.vendor_name && isOwnName(result.vendor_name, ownNamesAll);
       let resolvedSupplierId = "";
-      if (result.vendor_name) {
+      setScanSupplierNote(null);
+      const useFound = (found: { supplier: Supplier; why: string }) => {
+        resolvedSupplierId = found.supplier.id;
+        setScanSupplierId(found.supplier.id);
+        setScanSupplierNote(`Recognised ${found.supplier.name} from the ${found.why} on the invoice.`);
+      };
+      if (result.vendor_name && !vendorIsOwn) {
         const ranked = suppliers
           .map((s) => ({ s, score: matchScore(s.name, result.vendor_name as string) }))
           .sort((a, b) => b.score - a.score);
@@ -1522,11 +1575,25 @@ export default function App() {
           resolvedSupplierId = ranked[0].s.id;
           setScanSupplierId(resolvedSupplierId);
         } else {
-          // No confident match -- prefill the "+ New supplier" quick-add
-          // name from the OCR'd vendor name rather than leaving it blank,
-          // so the user isn't retyping something Textract already read.
-          // They still have to open that panel and confirm/edit it.
-          setScanNewSupplierName(result.vendor_name);
+          // The name matched nobody; a VAT number, email or phone printed on
+          // the invoice may still identify a supplier already on file.
+          const found = findSupplierFromScan(result, suppliers, ownNamesAll, false);
+          if (found) {
+            useFound(found);
+          } else {
+            // No confident match -- prefill the "+ New supplier" quick-add
+            // name from the OCR'd vendor name rather than leaving it blank,
+            // so the user isn't retyping something Textract already read.
+            // They still have to open that panel and confirm/edit it.
+            setScanNewSupplierName(result.vendor_name);
+          }
+        }
+      } else {
+        const found = findSupplierFromScan(result, suppliers, ownNamesAll, true);
+        if (found) {
+          useFound(found);
+        } else if (vendorIsOwn) {
+          setScanSupplierNote(`\u201c${result.vendor_name}\u201d is your own business, so it was not used as the supplier. Pick the supplier below.`);
         }
       }
 
@@ -1547,16 +1614,24 @@ export default function App() {
         }
         const known = findKnownSupplierUnit(itemSupplierLinks, best, resolvedSupplierId);
         const bestItem = (items ?? []).find((it) => it.id === best);
+        // The unit this supplier is already known to sell the item in wins;
+        // otherwise the unit printed beside the quantity, if the item has it.
+        const printed = known ? null : unitFromPrinted(bestItem, li.unit);
+        const qtyText = cleanNumeric(li.quantity) || "1";
         return {
           description: li.description,
           matchedItemId: best,
-          qty: cleanNumeric(li.quantity) || "1",
+          qty: qtyText,
           unitPrice: cleanNumeric(li.unit_price) || "0.00",
           confidence: li.confidence,
           skip: false,
-          supplierUnit: known?.supplierUnit ?? "",
-          packQty: known?.packQty ?? "1",
+          supplierUnit: known?.supplierUnit ?? printed?.unit ?? "",
+          packQty: known?.packQty ?? printed?.packQty ?? "1",
           vatPct: vatPctFromSupplierLink(itemSupplierLinks, best, resolvedSupplierId) || vatPctFromItem(bestItem),
+          printedUnit: li.unit ?? "",
+          qtyNote: li.quantity_read
+            ? `Quantity set to ${qtyText} so the line adds up to ${li.line_total ?? "the printed total"} (the scan first read ${li.quantity_read}). Check it against the invoice.`
+            : "",
         };
       });
       setScanRows(rows);
@@ -3175,6 +3250,26 @@ export default function App() {
                     `Receipt total: ${currencySymbol(locations.find((l) => l.id === scanLocationId)?.currency)}${scanResult.total}.`}
                 </div>
 
+                {scanSupplierNote && (
+                  <div className="im-note" style={{ marginBottom: 12 }}>
+                    {scanSupplierNote}
+                  </div>
+                )}
+                {scanResult.vendor_name &&
+                  me &&
+                  canManage(me) &&
+                  !isOwnName(scanResult.vendor_name, ownNamesAll) &&
+                  (() => {
+                    const picked = suppliers.find((x) => x.id === scanSupplierId);
+                    return !picked || matchScore(picked.name, scanResult.vendor_name as string) < 0.5;
+                  })() && (
+                    <p style={{ margin: "0 0 12px" }}>
+                      <button type="button" className="open-link" onClick={handleMarkVendorOwn}>
+                        {`\u201c${scanResult.vendor_name}\u201d is our own business, not the supplier`}
+                      </button>
+                    </p>
+                  )}
+
                 {scanMatchedPO && (
                   <div className="im-note" style={{ marginBottom: 12 }}>
                     <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer" }}>
@@ -3195,6 +3290,23 @@ export default function App() {
                     </label>
                   </div>
                 )}
+
+                <details className="scan-read">
+                  <summary>What the scan read</summary>
+                  <div className="scan-read-body">
+                    {(scanResult.summary_fields ?? []).map((f, i) => (
+                      <div key={`s${i}`}>
+                        {f.label ? `${f.label}: ` : ""}
+                        {f.value} <span className="muted">({f.type.toLowerCase().replace(/_/g, " ")})</span>
+                      </div>
+                    ))}
+                    {scanResult.line_items.map((li, i) => (
+                      <div key={`l${i}`} style={{ marginTop: 6 }}>
+                        <b>Line {i + 1}:</b> {(li.fields ?? []).map((f) => `${f.type.toLowerCase().replace(/_/g, " ")} ${f.value}`).join(" \u00b7 ")}
+                      </div>
+                    ))}
+                  </div>
+                </details>
 
                 <div className="field" style={{ marginBottom: 12, display: scanUseMatchedPO ? "none" : undefined }}>
                   <label>Supplier</label>
@@ -3353,10 +3465,11 @@ export default function App() {
                                   } else {
                                     const known = findKnownSupplierUnit(itemSupplierLinks, val, scanSupplierId);
                                     const newItem = (items ?? []).find((it) => it.id === val);
+                                    const printed = known ? null : unitFromPrinted(newItem, row.printedUnit);
                                     updateScanRow(i, {
                                       matchedItemId: val,
-                                      supplierUnit: known?.supplierUnit ?? "",
-                                      packQty: known?.packQty ?? "1",
+                                      supplierUnit: known?.supplierUnit ?? printed?.unit ?? "",
+                                      packQty: known?.packQty ?? printed?.packQty ?? "1",
                                       vatPct: vatPctFromSupplierLink(itemSupplierLinks, val, scanSupplierId) || vatPctFromItem(newItem),
                                     });
                                   }
@@ -3407,6 +3520,7 @@ export default function App() {
                                   packQty={row.packQty}
                                   accessToken={accessToken ?? ""}
                                   label="Invoiced in"
+                                  suggestName={row.printedUnit && row.printedUnit.toLowerCase() !== matchedItem.base_unit.toLowerCase() ? row.printedUnit : undefined}
                                   onChange={(c) => updateScanRow(i, { supplierUnit: c.unit, packQty: c.packQty })}
                                   onUnitAdded={() => accessToken && loadItems(accessToken)}
                                 />
@@ -3425,7 +3539,7 @@ export default function App() {
                                   min="0"
                                   step="0.001"
                                   value={row.qty}
-                                  onChange={(e) => updateScanRow(i, { qty: e.target.value })}
+                                  onChange={(e) => updateScanRow(i, { qty: e.target.value, qtyNote: "" })}
                                   disabled={row.skip}
                                 />
                               </div>
@@ -3462,6 +3576,7 @@ export default function App() {
                                 />
                               </div>
                             </div>
+                            {row.qtyNote && <p className="scan-qty-note">{row.qtyNote}</p>}
                             {/* The whole point of this row: once a supplier pack/unit
                                 conversion is active, show the real total right next to
                                 the Qty/Price the user just typed -- not buried inside a

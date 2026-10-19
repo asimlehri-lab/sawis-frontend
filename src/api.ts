@@ -1436,6 +1436,9 @@ export interface Supplier {
   name: string;
   contact_email: string | null;
   contact_phone: string;
+  // The supplier's VAT number as printed on its invoices -- lets a scan
+  // recognise the supplier even when the name was misread.
+  vat_number: string;
   delivery_day: number | null;
   min_order_value: string | null;
   notes: string;
@@ -1484,6 +1487,7 @@ export async function updateSupplier(
     name?: string;
     contact_email?: string | null;
     contact_phone?: string;
+    vat_number?: string;
     delivery_day?: number | null;
     min_order_value?: string | null;
     notes?: string;
@@ -1961,6 +1965,24 @@ export interface ScannedReceiptLineItem {
   quantity: string | null;
   unit_price: string | null;
   confidence: number | null;
+  // The line total as printed on the invoice.
+  line_total?: string | null;
+  // Set only when the quantity was corrected from the line total: what the
+  // scan first read. `quantity` above is then the corrected figure.
+  quantity_read?: string | null;
+  // The unit printed beside the quantity ("pkg"), when one could be found.
+  unit?: string | null;
+  // Everything the scan read on this line, for the "What the scan read" panel.
+  fields?: { type: string; value: string }[];
+}
+
+// One labelled field from the page (supplier address, phone, website, tax
+// numbers, the customer block...).
+export interface ScanSummaryField {
+  type: string;
+  label: string;
+  value: string;
+  confidence: number | null;
 }
 
 export interface ScannedReceipt {
@@ -1979,7 +2001,42 @@ export interface ScannedReceipt {
   // above (that's ours, this is theirs).
   invoice_number: string | null;
   invoice_number_confidence: number | null;
+  summary_fields?: ScanSummaryField[];
   line_items: ScannedReceiptLineItem[];
+}
+
+// Names this business appears under on its own invoices; never offered as
+// the supplier by a scan.
+export interface OwnBusinessName {
+  id: string;
+  name: string;
+}
+
+export async function fetchOwnBusinessNames(accessToken: string): Promise<OwnBusinessName[]> {
+  return authedFetchAllPages<OwnBusinessName>("/api/procurement/own-business-names/", accessToken);
+}
+
+export async function createOwnBusinessName(accessToken: string, name: string): Promise<OwnBusinessName> {
+  const res = await fetch(`${API_URL}/api/procurement/own-business-names/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const first = body && typeof body === "object" ? Object.values(body)[0] : null;
+    const msg = Array.isArray(first) ? first[0] : first;
+    throw new Error(typeof msg === "string" && msg ? msg : "Could not save the name.");
+  }
+  return res.json();
+}
+
+export async function deleteOwnBusinessName(accessToken: string, id: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/procurement/own-business-names/${id}/`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("Could not remove the name.");
 }
 
 // Uploads a receipt/invoice photo to the backend, which runs it through

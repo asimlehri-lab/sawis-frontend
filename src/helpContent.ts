@@ -300,6 +300,14 @@ export const HELP_TOPICS: HelpTopic[] = [
         fact: "💡 If the invoice matches a purchase order you've already got open with that supplier, SAWIS spots it and offers to receive against that existing PO instead of creating a duplicate one.",
       },
       {
+        q: "The scan changed a quantity — why?",
+        a: "Some invoices have a cartons column next to the quantity column and the scan can read the wrong one. The invoice also prints each line's total, so when quantity × price is nowhere near that total and the total divided by the price is a whole number, SAWIS uses that number and marks the row with what it changed and what it first read. A line that already adds up is never touched. You can overtype the quantity at any time.",
+      },
+      {
+        q: "The scan picked my own business as the supplier — how do I fix it?",
+        a: "Suppliers print your business name on their invoices too. In the Scan receipt screen click \"… is our own business, not the supplier\" under the notes; that name is then ignored on every later scan, and the supplier is looked for in the other details printed on the invoice (VAT number, email, website, phone). Add the supplier's VAT number on its page to make this more reliable. Settings → Names on your invoices lists the saved names and lets you remove one. Open \"What the scan read\" in the Scan receipt screen to see everything the scan picked up from the photo.",
+      },
+      {
         q: "Why is the unit price showing as 0.00 when I add a line?",
         a: "That means there's no price on file yet for that item with this supplier — link one from the item's page, or type the price in manually on this line.",
       },

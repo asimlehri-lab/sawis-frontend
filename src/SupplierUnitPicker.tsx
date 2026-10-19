@@ -73,6 +73,9 @@ interface Props {
   accessToken: string;
   label?: string;
   disabled?: boolean;
+  // A unit name read off an invoice line ("pkg") that the item does not have
+  // yet; offers to add it as a pack size.
+  suggestName?: string;
   onChange: (choice: UnitChoice) => void;
   // Called after a new pack size was saved on the item, so the parent can
   // reload its item list.
@@ -86,6 +89,7 @@ export default function SupplierUnitPicker({
   accessToken,
   label = "Order in",
   disabled,
+  suggestName,
   onChange,
   onUnitAdded,
 }: Props) {
@@ -188,6 +192,23 @@ export default function SupplierUnitPicker({
         ))}
         <option value="__new">+ Add a pack size…</option>
       </select>
+      {!adding && suggestName && !unit && (
+        <p className="hint" style={{ margin: "4px 0 0" }}>
+          The invoice says {"\u201c"}
+          {suggestName}
+          {"\u201d"}.{" "}
+          <button
+            type="button"
+            className="open-link"
+            onClick={() => {
+              setName(suggestName);
+              setAdding(true);
+            }}
+          >
+            Add it as a pack size
+          </button>
+        </p>
+      )}
       {adding && (
         <div className="sup-unit-new">
           <p className="sup-unit-new-head">New pack size for {item.name}</p>

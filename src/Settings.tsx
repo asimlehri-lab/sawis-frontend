@@ -4,8 +4,11 @@ import {
   bulkImportRecipes,
   changePassword,
   createInventoryCheckSchedule,
+  createOwnBusinessName,
+  deleteOwnBusinessName,
   fetchCategories,
   fetchInventoryCheckSchedules,
+  fetchOwnBusinessNames,
   fetchVapidPublicKey,
   subscribePush,
   unsubscribePush,
@@ -15,7 +18,7 @@ import {
   CURRENCY_OPTIONS,
   currencySymbol,
 } from "./api";
-import type { Allergen, BulkItemInput, CatalogItem, Category, CurrencyCode, InventoryCheckSchedule, Location, Recipe } from "./api";
+import type { Allergen, BulkItemInput, CatalogItem, Category, CurrencyCode, InventoryCheckSchedule, Location, OwnBusinessName, Recipe } from "./api";
 import CategoryManagerModal from "./CategoryManagerModal";
 import MenuListImportModal from "./MenuListImportModal";
 import type { ParsedMenuRow } from "./MenuListImportModal";
@@ -166,6 +169,8 @@ export default function Settings({ accessToken, items, recipes, allergens, locat
       <LocationSettingsPanel accessToken={accessToken} locations={locations} />
       <div style={{ height: 20 }} />
       <CategorySettingsPanel accessToken={accessToken} onCategoriesChanged={onCategoriesChanged} />
+      <div style={{ height: 20 }} />
+      <OwnNamesPanel accessToken={accessToken} />
       <div style={{ height: 20 }} />
       <NotificationSettingsPanel accessToken={accessToken} locations={locations} />
       <div style={{ height: 20 }} />
@@ -346,6 +351,95 @@ function CategorySettingsPanel({
           }}
         />
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Names on your invoices: the ways this business is written on its own
+// invoices and delivery notes. A scanned invoice is never matched to a
+// supplier by one of these names. Added from the Scan receipt screen with
+// "is our own business, not the supplier"; removed here.
+// ---------------------------------------------------------------------------
+
+function OwnNamesPanel({ accessToken }: { accessToken: string }) {
+  const [names, setNames] = useState<OwnBusinessName[] | null>(null);
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchOwnBusinessNames(accessToken)
+      .then((rows) => {
+        if (!cancelled) setNames(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setNames([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken]);
+
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
+    if (!draft.trim()) return;
+    setError(null);
+    try {
+      const created = await createOwnBusinessName(accessToken, draft.trim());
+      setNames((prev) => [...(prev ?? []), created].sort((a, b) => a.name.localeCompare(b.name)));
+      setDraft("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save the name.");
+    }
+  }
+
+  async function remove(n: OwnBusinessName) {
+    setError(null);
+    try {
+      await deleteOwnBusinessName(accessToken, n.id);
+      setNames((prev) => (prev ?? []).filter((x) => x.id !== n.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove the name.");
+    }
+  }
+
+  return (
+    <div className="card">
+      <h2 style={{ marginTop: 0 }}>Names on your invoices</h2>
+      <p className="hint">
+        Suppliers print your business name on their invoices too. Names listed here are never taken for the supplier
+        when you scan an invoice, for example &ldquo;Peggy&rsquo;s Coffee &amp; Tea&rdquo;.
+      </p>
+      {names === null ? (
+        <p className="muted">Loading…</p>
+      ) : names.length === 0 ? (
+        <p className="muted">None yet. Your location and business names are always ignored.</p>
+      ) : (
+        <ul style={{ listStyle: "none", padding: 0, margin: "0 0 12px", display: "flex", flexDirection: "column", gap: 6 }}>
+          {names.map((n) => (
+            <li key={n.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span>{n.name}</span>
+              <button type="button" className="btn-ghost small" onClick={() => remove(n)}>
+                Remove
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <form onSubmit={add} style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Name as printed on your invoices"
+          aria-label="Name as printed on your invoices"
+          style={{ maxWidth: 320 }}
+        />
+        <button type="submit" className="btn-ghost" disabled={!draft.trim()}>
+          Add name
+        </button>
+      </form>
+      {error && <p className="error">{error}</p>}
     </div>
   );
 }

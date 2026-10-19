@@ -2160,6 +2160,10 @@ input[type="file"] {
 .sup-unit-new-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 .sup-unit-new-actions .btn-ghost, .sup-unit-new-actions .mini { margin-top: 0; }
 .scan-row-card .sup-unit { margin-top: 8px; }
+.scan-qty-note { margin: 6px 0 0; padding: 6px 10px; border-radius: 8px; background: var(--caution-soft); color: var(--ink); font-size: 13px; }
+.scan-read { margin: 0 0 12px; }
+.scan-read summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
+.scan-read-body { text-align: left; margin-top: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font-size: 12px; line-height: 1.5; max-height: 220px; overflow: auto; word-break: break-word; }
 .scan-row-total { margin-top: 6px; padding: 6px 10px; border-radius: 8px; font-weight: 600; font-size: 13px; }
 .scan-row-total.ok { background: var(--brand-soft); color: var(--ink); }
 .scan-row-total.warn { background: var(--caution-soft); color: var(--ink); font-weight: 500; }
