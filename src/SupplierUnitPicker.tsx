@@ -193,7 +193,7 @@ export default function SupplierUnitPicker({
         <option value="__new">+ Add a pack size…</option>
       </select>
       {!adding && suggestName && !unit && (
-        <p className="hint" style={{ margin: "4px 0 0" }}>
+        <p className="hint sup-unit-suggest" style={{ margin: "4px 0 0" }}>
           The invoice says {"\u201c"}
           {suggestName}
           {"\u201d"}.{" "}

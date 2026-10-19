@@ -3625,6 +3625,15 @@ export default function App() {
                               if (!hasPack && !(lineTotal > 0)) return null;
                               return (
                                 <div className={`scan-row-total ${hasPack && !converted ? "warn" : "ok"}`}>
+                                  {!hasPack && Number(row.qty || "0") > 0 && (
+                                    <span className="scan-row-total-line">
+                                      {`= ${Number(Number(row.qty).toFixed(3)).toLocaleString("en-GB")} ${matchedItem.base_unit} in total at ${formatMoney(
+                                        Number(row.unitPrice || "0"),
+                                        orgCurrency,
+                                        Number(row.unitPrice || "0") < 0.1 ? 4 : 2
+                                      )} per ${matchedItem.base_unit}`}
+                                    </span>
+                                  )}
                                   {hasPack &&
                                     (converted ? (
                                       <span className="scan-row-total-line">

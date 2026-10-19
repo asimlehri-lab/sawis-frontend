@@ -2167,6 +2167,7 @@ input[type="file"] {
 .scan-row-total { margin-top: 6px; padding: 6px 10px; border-radius: 8px; font-weight: 600; font-size: 13px; }
 .scan-row-total.ok { background: var(--brand-soft); color: var(--ink); }
 .scan-row-total-line { display: block; }
+.sup-unit-suggest { font-size: 13px; line-height: 1.4; }
 .scan-row-total.warn { background: var(--caution-soft); color: var(--ink); font-weight: 500; }
 
 /* Collapsed category-total group (Scan end-of-day sales only) -- a

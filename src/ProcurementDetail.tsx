@@ -1368,6 +1368,15 @@ export default function ProcurementDetail({
                 const resolved = hasPack ? resolveAddLineBaseUnits(addItem) : null;
                 return (
                   <div className={`scan-row-total ${hasPack && !resolved ? "warn" : "ok"}`}>
+                    {!hasPack && Number(addQty || "0") > 0 && (
+                      <span className="scan-row-total-line">
+                        {`= ${Number(Number(addQty).toFixed(3)).toLocaleString("en-GB")} ${addItem.base_unit} in total at ${formatMoney(
+                          Number(addPrice || "0"),
+                          currency,
+                          Number(addPrice || "0") < 0.1 ? 4 : 2
+                        )} per ${addItem.base_unit}`}
+                      </span>
+                    )}
                     {hasPack &&
                       (resolved ? (
                         <span className="scan-row-total-line">
