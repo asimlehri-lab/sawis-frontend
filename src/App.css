@@ -2159,6 +2159,14 @@ input[type="file"] {
 .sup-unit-sum { margin: 8px 0 0; font-size: 13px; font-weight: 600; color: var(--ink); }
 .sup-unit-new-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 .sup-unit-new-actions .btn-ghost, .sup-unit-new-actions .mini { margin-top: 0; }
+.sup-unit-chips { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.sup-unit-chip { font-family: inherit; font-size: 12.5px; padding: 3px 10px; border: 1px solid var(--border); border-radius: 100px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.sup-unit-chip:hover { border-color: var(--brand); }
+/* One-line version (item page Stock units, Sold as): 1 [name] = [number] [unit] [Cancel] [Add]. */
+.sup-unit-new.inline { margin-top: 0; padding: 8px 10px; }
+.sup-unit-new.inline .sup-unit-new-row .sup-unit-name { flex: 0 1 130px; }
+.sup-unit-new.inline .sup-unit-new-row select.sup-unit-qtyunit { flex: 0 1 150px; }
+.sup-unit-new.inline .sup-unit-new-actions { margin: 0 0 0 auto; }
 .scan-row-card .sup-unit { margin-top: 8px; }
 .scan-qty-note { margin: 6px 0 0; padding: 6px 10px; border-radius: 8px; background: var(--caution-soft); color: var(--ink); font-size: 13px; }
 .scan-read { margin: 0 0 12px; }

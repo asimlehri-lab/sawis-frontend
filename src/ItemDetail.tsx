@@ -39,6 +39,7 @@ import type {
 import AllergenIcon from "./AllergenIcon";
 import ItemHistory from "./ItemHistory";
 import CategoryManagerModal from "./CategoryManagerModal";
+import NewPackBox from "./NewPackBox";
 import { ITEM_TAB_LABELS } from "./itemTabs";
 import type { ItemTab } from "./itemTabs";
 
@@ -210,15 +211,11 @@ export default function ItemDetail({
 
   const [showUnitModal, setShowUnitModal] = useState(false);
   // Stock units (several per item): add form, per-supplier "sold as" form.
-  const [newUnitName, setNewUnitName] = useState("");
-  const [newUnitQty, setNewUnitQty] = useState("");
   const [showAddUnit, setShowAddUnit] = useState(false);
   const [unitBusy, setUnitBusy] = useState(false);
   const [unitErr, setUnitErr] = useState<string | null>(null);
   // Supplier row currently creating a brand-new stock unit from its "Sold as" menu.
   const [soldAsNewRow, setSoldAsNewRow] = useState<string | null>(null);
-  const [soldAsName, setSoldAsName] = useState("");
-  const [soldAsQty, setSoldAsQty] = useState("");
   const [unitNew, setUnitNew] = useState("kg");
   const [unitMode, setUnitMode] = useState<"relabel" | "convert">("relabel");
   const [unitFactor, setUnitFactor] = useState("1");
@@ -579,14 +576,9 @@ export default function ItemDetail({
     }
   }
 
-  async function handleAddUnitSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const created = await addStockUnit(newUnitName, newUnitQty);
-    if (created) {
-      setNewUnitName("");
-      setNewUnitQty("");
-      setShowAddUnit(false);
-    }
+  async function handleAddUnit(name: string, qty: number) {
+    const created = await addStockUnit(name, String(qty));
+    if (created) setShowAddUnit(false);
   }
 
   async function handleEditStockUnit(u: ItemStockUnit, patch: { name?: string; qty?: string }) {
@@ -632,14 +624,11 @@ export default function ItemDetail({
     }
   }
 
-  async function handleSoldAsNewSubmit(e: React.FormEvent, row: ItemSupplierRow) {
-    e.preventDefault();
-    const created = await addStockUnit(soldAsName, soldAsQty);
+  async function handleSoldAsNew(row: ItemSupplierRow, name: string, qty: number) {
+    const created = await addStockUnit(name, String(qty));
     if (created) {
       await handleSoldAs(row, { name: created.name, qty: Number(created.qty) });
       setSoldAsNewRow(null);
-      setSoldAsName("");
-      setSoldAsQty("");
     }
   }
 
@@ -1045,45 +1034,21 @@ export default function ItemDetail({
               + Add a stock unit
             </button>
           ) : (
-            <form className="su-row su-add" onSubmit={handleAddUnitSubmit}>
-              <span>1</span>
-              <input
-                className="su-name"
-                value={newUnitName}
-                onChange={(e) => setNewUnitName(e.target.value)}
-                placeholder="e.g. bag"
-                maxLength={20}
-                autoFocus
-                required
-              />
-              <span>=</span>
-              <input
-                className="su-qty"
-                type="number"
-                min="0"
-                step="any"
-                value={newUnitQty}
-                onChange={(e) => setNewUnitQty(e.target.value)}
-                placeholder="1000"
-                required
-              />
-              <span>{item.base_unit}</span>
-              <button className="btn-primary small" type="submit" disabled={unitBusy}>
-                {unitBusy ? "Adding…" : "Add"}
-              </button>
-              <button
-                className="btn-ghost small"
-                type="button"
-                onClick={() => {
-                  setShowAddUnit(false);
-                  setUnitErr(null);
-                }}
-              >
-                Cancel
-              </button>
-            </form>
+            <NewPackBox
+              inline
+              presets
+              item={item}
+              busy={unitBusy}
+              error={unitErr}
+              submitLabel="Add"
+              onSubmit={handleAddUnit}
+              onCancel={() => {
+                setShowAddUnit(false);
+                setUnitErr(null);
+              }}
+            />
           )}
-          {unitErr && <p className="error">{unitErr}</p>}
+          {unitErr && !showAddUnit && <p className="error">{unitErr}</p>}
         </div>
         <div className="table-scroll">
           <table className="htbl">
@@ -1456,8 +1421,6 @@ export default function ItemDetail({
                     const v = e.target.value;
                     if (v === "__new") {
                       setSoldAsNewRow(row.id);
-                      setSoldAsName("");
-                      setSoldAsQty("");
                       setUnitErr(null);
                     } else if (v === "") handleSoldAs(row, null);
                     else {
@@ -1499,22 +1462,22 @@ export default function ItemDetail({
           const row = itemSuppliers.find((r) => r.id === soldAsNewRow);
           if (!row) return null;
           return (
-            <form className="su-row su-add" onSubmit={(e) => handleSoldAsNewSubmit(e, row)}>
-              <span>New stock unit for {row.supplier_name}: 1</span>
-              <input className="su-name" value={soldAsName} onChange={(e) => setSoldAsName(e.target.value)} placeholder="e.g. case" maxLength={20} autoFocus required />
-              <span>=</span>
-              <input className="su-qty" type="number" min="0" step="any" value={soldAsQty} onChange={(e) => setSoldAsQty(e.target.value)} placeholder="24" required />
-              <span>{item.base_unit}</span>
-              <button className="btn-primary small" type="submit" disabled={unitBusy}>
-                {unitBusy ? "Adding…" : "Add & use"}
-              </button>
-              <button className="btn-ghost small" type="button" onClick={() => setSoldAsNewRow(null)}>
-                Cancel
-              </button>
-            </form>
+            <NewPackBox
+              inline
+              presets
+              item={item}
+              busy={unitBusy}
+              error={unitErr}
+              heading={`New stock unit for ${row.supplier_name}`}
+              submitLabel="Add & use"
+              onSubmit={(n, q) => handleSoldAsNew(row, n, q)}
+              onCancel={() => {
+                setSoldAsNewRow(null);
+                setUnitErr(null);
+              }}
+            />
           );
         })()}
-        {soldAsNewRow && unitErr && <p className="error">{unitErr}</p>}
 
         {supplierError && <p className="error">{supplierError}</p>}
 

@@ -1,6 +1,9 @@
 import { useState } from "react";
-import { autoFactor, createItemStockUnit, unitFactor } from "./api";
+import { createItemStockUnit, unitFactor } from "./api";
 import type { CatalogItem } from "./api";
+import NewPackBox from "./NewPackBox";
+import { packOptions, pretty, tidy } from "./packUnits";
+import type { UnitOption } from "./packUnits";
 
 // "Order in" / "Invoiced in" picker, used on the purchase-order Add line form
 // and on every row of the Scan receipt review. It offers only units the item
@@ -19,44 +22,9 @@ export interface UnitChoice {
   packQty: string;
 }
 
-interface Option {
-  name: string;
-  qty: number;
-  // "auto" = kg/g or L/ml (the size is known), "pack" = saved on the item.
-  kind: "auto" | "pack";
-}
-
-const AUTO_CANDIDATES = ["g", "kg", "ml", "L"];
-const SUGGESTED_NAMES = ["carton", "case", "box", "bag", "bottle", "tray", "pack", "tub", "jar", "tin"];
-
-function tidy(n: number): string {
-  return Number(n.toFixed(4)).toLocaleString("en-GB", { maximumFractionDigits: 4 });
-}
-
-// What a pack holds, in the unit people say it in: 1,500 ml reads "1.5 L".
-function pretty(item: CatalogItem, qty: number): string {
-  if (item.base_unit === "ml" && qty >= 1000) return `${tidy(qty / 1000)} L`;
-  if (item.base_unit === "g" && qty >= 1000) return `${tidy(qty / 1000)} kg`;
-  return `${tidy(qty)} ${item.base_unit}`;
-}
-
-// A hint for the size box that fits the unit being typed in.
-function sizeHint(item: CatalogItem, unit: string, isPack: boolean): string {
-  if (isPack) return "12";
-  const u = unit || item.base_unit;
-  if (u === "L") return "1.5";
-  if (u === "kg") return "2.5";
-  if (u === "ml" || u === "g") return "500";
-  return "24";
-}
-
-function buildOptions(item: CatalogItem, unit: string, packQty: string): Option[] {
-  const out: Option[] = (item.stock_units ?? []).map((u) => ({ name: u.name, qty: Number(u.qty), kind: "pack" as const }));
+function buildOptions(item: CatalogItem, unit: string, packQty: string): UnitOption[] {
+  const out = packOptions(item);
   const has = (n: string) => out.some((o) => o.name.toLowerCase() === n.toLowerCase());
-  for (const c of AUTO_CANDIDATES) {
-    const f = autoFactor(c, item.base_unit);
-    if (f !== null && c !== item.base_unit && !has(c)) out.push({ name: c, qty: f, kind: "auto" });
-  }
   // A unit already on the line (taught by this supplier's catalogue, or a
   // pack just added) that the item's own list does not hold yet.
   if (unit && unit !== item.base_unit && !has(unit)) {
@@ -94,10 +62,8 @@ export default function SupplierUnitPicker({
   onUnitAdded,
 }: Props) {
   const [adding, setAdding] = useState(false);
-  const [name, setName] = useState("");
-  const [qty, setQty] = useState("");
-  // The unit the size is typed in: "" = the item's base unit.
-  const [qtyUnit, setQtyUnit] = useState("");
+  // A name read off the invoice, to start the box with.
+  const [startName, setStartName] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -118,36 +84,21 @@ export default function SupplierUnitPicker({
 
   function close() {
     setAdding(false);
-    setName("");
-    setQty("");
-    setQtyUnit("");
+    setStartName("");
     setErr(null);
   }
 
-  async function save() {
-    if (!item || saving) return;
-    const n = name.trim();
-    const typed = Number(qty);
-    const unitFactorNow = qtyUnit === "" ? 1 : options.find((o) => o.name === qtyUnit)?.qty ?? 0;
-    const q = Number((typed * unitFactorNow).toFixed(4));
-    if (!n) {
-      setErr("Give the pack a name, like carton or bag.");
-      return;
-    }
-    if (n.toLowerCase() === item.base_unit.toLowerCase()) {
-      setErr(`${item.base_unit} is already this item's unit. Pick it from the list.`);
-      return;
-    }
+  // A name that is already one of the item's units just picks that unit.
+  function pickExisting(n: string): boolean {
     const existing = options.find((o) => o.name.toLowerCase() === n.toLowerCase());
-    if (existing) {
-      onChange({ unit: existing.name, packQty: String(existing.qty) });
-      close();
-      return;
-    }
-    if (!(q > 0)) {
-      setErr(`Say how much one ${n} holds.`);
-      return;
-    }
+    if (!existing) return false;
+    onChange({ unit: existing.name, packQty: String(existing.qty) });
+    close();
+    return true;
+  }
+
+  async function save(n: string, q: number) {
+    if (!item || saving) return;
     setSaving(true);
     setErr(null);
     try {
@@ -201,7 +152,7 @@ export default function SupplierUnitPicker({
             type="button"
             className="open-link"
             onClick={() => {
-              setName(suggestName);
+              setStartName(suggestName);
               setAdding(true);
             }}
           >
@@ -210,99 +161,18 @@ export default function SupplierUnitPicker({
         </p>
       )}
       {adding && (
-        <div className="sup-unit-new">
-          <p className="sup-unit-new-head">New pack size for {item.name}</p>
-          <div className="sup-unit-new-row">
-            <input
-              className="sup-unit-name"
-              list="sup-unit-names"
-              value={name}
-              placeholder="carton, bag, case…"
-              aria-label="Pack name"
-              autoFocus
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  save();
-                }
-              }}
-            />
-            <datalist id="sup-unit-names">
-              {SUGGESTED_NAMES.map((s) => (
-                <option key={s} value={s} />
-              ))}
-            </datalist>
-            <span className="sup-unit-eq">holds</span>
-            <input
-              className="sup-unit-qty"
-              type="number"
-              min="0"
-              step="any"
-              value={qty}
-              placeholder={sizeHint(item, qtyUnit, options.find((o) => o.name === qtyUnit)?.kind === "pack")}
-              aria-label="How much one pack holds"
-              onChange={(e) => setQty(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  save();
-                }
-              }}
-            />
-            <select
-              className="sup-unit-qtyunit"
-              value={qtyUnit}
-              aria-label="Unit for the size"
-              onChange={(e) => setQtyUnit(e.target.value)}
-            >
-              <option value="">{item.base_unit}</option>
-              {options
-                .filter((o) => o.kind === "auto")
-                .map((o) => (
-                  <option key={o.name} value={o.name}>
-                    {o.name}
-                  </option>
-                ))}
-              {options
-                .filter((o) => o.kind === "pack")
-                .map((o) => (
-                  <option key={o.name} value={o.name}>
-                    {o.name} ({pretty(item, o.qty)})
-                  </option>
-                ))}
-            </select>
-          </div>
-          {(() => {
-            const typed = Number(qty);
-            const f = qtyUnit === "" ? 1 : options.find((o) => o.name === qtyUnit)?.qty ?? 0;
-            if (!(typed > 0) || !f) return null;
-            const total = typed * f;
-            const label = name.trim() || "pack";
-            return (
-              <p className="sup-unit-sum">
-                1 {label} = {tidy(typed)} {qtyUnit || item.base_unit}
-                {qtyUnit ? ` = ${tidy(total)} ${item.base_unit}` : ""}
-              </p>
-            );
-          })()}
-          {err && (
-            <p className="error" style={{ margin: "6px 0 0" }}>
-              {err}
-            </p>
-          )}
-          <div className="sup-unit-new-actions">
-            <button type="button" className="btn-ghost small" onClick={close}>
-              Cancel
-            </button>
-            <button type="button" className="mini" onClick={save} disabled={saving}>
-              {saving ? "Saving…" : "Save pack size"}
-            </button>
-          </div>
-          <p className="hint" style={{ margin: "6px 0 0" }}>
-            Saved on the item, so you can count and order with it.
-          </p>
-        </div>
+        <NewPackBox
+          key={startName}
+          item={item}
+          initialName={startName}
+          busy={saving}
+          error={err}
+          heading={`New pack size for ${item.name}`}
+          hint="Saved on the item, so you can count and order with it."
+          onPickExisting={pickExisting}
+          onSubmit={save}
+          onCancel={close}
+        />
       )}
     </div>
   );
