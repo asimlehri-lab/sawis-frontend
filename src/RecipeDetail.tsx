@@ -506,7 +506,14 @@ export default function RecipeDetail({
                           <span className="sub-tag">sub-recipe</span>
                         </>
                       ) : (
-                        line.item_name
+                        <>
+                          {line.item_name}
+                          {line.cost_source === "target" && (
+                            <span className="sub-tag" title="No supplier price is recorded yet, so this uses the item's target cost.">
+                              target cost
+                            </span>
+                          )}
+                        </>
                       )}
                     </td>
                     <td className="num">

@@ -1899,6 +1899,12 @@ select:focus {
   font-size: 13px;
 }
 .sup-row:last-child { border-bottom: none; }
+.tc-block { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
+.tc-label { display: block; margin: 0 0 6px; font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.tc-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tc-row .price-in { width: 110px; }
+.tc-status { margin: 8px 0 0; font-size: 13px; line-height: 1.45; }
+.sup-listhint { margin: -4px 0 10px; padding: 8px 12px; border-radius: 8px; background: var(--caution-soft); color: var(--ink); font-size: 13px; line-height: 1.45; }
 .sup-row .sn { font-weight: 600; }
 .sup-row .sn-link { cursor: pointer; }
 .sup-row .sn-link:hover { text-decoration: underline; }

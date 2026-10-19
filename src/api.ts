@@ -221,6 +221,10 @@ export interface CatalogItem {
   // Predicted spoilage/waste % the user sets per item -- null until set.
   // Compared against fetchItemWasteStats' actual figure on ItemDetail.
   target_waste_pct: string | null;
+  // What one base unit is expected to cost, typed when the item was made.
+  // Recipes and sales are costed with it only while no supplier price is
+  // on file; a supplier price always wins (see Item.current_cost).
+  target_cost: string | null;
   // Allergen ids this item itself contains -- tagged directly by the
   // user (see AllergenPicker in ItemDetail.tsx). A recipe's own
   // allergens are the union of its ingredients' tags, computed server-
@@ -367,6 +371,7 @@ export interface NewItemInput {
   sku: string;
   base_unit: string;
   vat_rate: string | null;
+  target_cost?: string | null;
 }
 
 export async function createItem(accessToken: string, input: NewItemInput): Promise<CatalogItem> {
@@ -506,6 +511,8 @@ export interface RecipeLine {
   unit: string;
   unit_cost: number;
   line_cost: number;
+  // Item lines: which price the cost above came from.
+  cost_source?: "supplier" | "target" | "none" | "";
 }
 
 export interface Recipe {
@@ -1154,6 +1161,7 @@ export interface ItemPatch {
   base_unit?: string;
   default_supplier?: string | null;
   target_waste_pct?: string | null;
+  target_cost?: string | null;
   allergens?: string[];
   archived?: boolean;
 }
@@ -1689,6 +1697,7 @@ export async function updateItemSupplier(
     supplier_unit?: string;
     supplier_unit_price?: string | null;
     min_order_qty?: string | null;
+    matched_from?: string | null;
   }
 ): Promise<ItemSupplierRow> {
   const res = await fetch(`${API_URL}/api/catalog/item-suppliers/${id}/`, {

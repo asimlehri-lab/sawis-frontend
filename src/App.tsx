@@ -552,6 +552,7 @@ export default function App() {
   const [newSku, setNewSku] = useState("");
   const [newUnit, setNewUnit] = useState(BASE_UNITS[1]);
   const [newVatPct, setNewVatPct] = useState("");
+  const [newTargetCost, setNewTargetCost] = useState("");
   const [savingItem, setSavingItem] = useState(false);
   const [newItemError, setNewItemError] = useState<string | null>(null);
   // Set when the name typed in "+ New item" is already used by a live item, so
@@ -1181,6 +1182,7 @@ export default function App() {
     setNewSku("");
     setNewUnit(BASE_UNITS[1]);
     setNewVatPct("");
+    setNewTargetCost("");
     setNewItemError(null);
     setNewItemExistingId(null);
   }
@@ -1207,7 +1209,13 @@ export default function App() {
     setSavingItem(true);
     try {
       const vatFraction = newVatPct.trim() === "" ? null : (Number(newVatPct) / 100).toFixed(4);
-      const created = await createItem(accessToken, { name: newName, sku: newSku, base_unit: newUnit, vat_rate: vatFraction });
+      const created = await createItem(accessToken, {
+        name: newName,
+        sku: newSku,
+        base_unit: newUnit,
+        vat_rate: vatFraction,
+        target_cost: newTargetCost.trim() === "" ? null : newTargetCost.trim(),
+      });
       setShowNewItem(false);
       resetNewItemForm();
       loadItems(accessToken);
@@ -2797,6 +2805,20 @@ export default function App() {
                   onChange={(e) => setNewVatPct(e.target.value)}
                   placeholder="e.g. 20"
                 />
+              </label>
+              <label>
+                Target cost per {newUnit} ({currencySymbol(orgCurrency)}) <span className="optional">optional</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={newTargetCost}
+                  onChange={(e) => setNewTargetCost(e.target.value)}
+                  placeholder="e.g. 3.00"
+                />
+                <span className="hint" style={{ display: "block", marginTop: 4 }}>
+                  What you expect to pay for one {newUnit}. Recipes use it until a supplier price is recorded, then the supplier price takes over.
+                </span>
               </label>
               {newItemError && <p className="error">{newItemError}</p>}
               {newItemExistingId && (

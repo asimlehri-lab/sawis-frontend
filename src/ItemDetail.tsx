@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   fetchItem,
   updateItem,
@@ -18,6 +18,7 @@ import {
   login,
   formatMoney,
   defaultCurrency,
+  currencySymbol,
   convertToBaseUnit,
   fetchItemWasteStats,
   reviewItemAllergens,
@@ -73,6 +74,17 @@ const DEPARTMENTS = [
   { value: "foh", label: "Front of house" },
 ];
 
+// True when two words differ by at most one letter (a typo like "suger").
+function nearWord(a: string, b: string): boolean {
+  if (a.length < 5 || b.length < 5 || Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  const restA = a.slice(i);
+  const restB = b.slice(i);
+  if (restA.length === restB.length) return restA.slice(1) === restB.slice(1);
+  return restA.length > restB.length ? restA.slice(1) === restB : restB.slice(1) === restA;
+}
+
 // Lightweight fuzzy match: token overlap between our item name and a
 // supplier's raw CSV line. Never used to auto-link — only to rank
 // suggestions the user reviews and confirms with the Link button.
@@ -89,7 +101,7 @@ function matchScore(itemName: string, raw: string): number {
   if (!a.size) return 0;
   let hit = 0;
   a.forEach((w) => {
-    if (b.has(w) || [...b].some((x) => x.startsWith(w) || w.startsWith(x))) hit++;
+    if (b.has(w) || [...b].some((x) => x.startsWith(w) || w.startsWith(x) || nearWord(w, x))) hit++;
   });
   return hit / a.size;
 }
@@ -238,6 +250,10 @@ export default function ItemDetail({
   const [wasteStats, setWasteStats] = useState<ItemWasteStats | null>(null);
   const [wasteStatsError, setWasteStatsError] = useState<string | null>(null);
   const [targetWasteInput, setTargetWasteInput] = useState("");
+  const [targetCostInput, setTargetCostInput] = useState("");
+  const [savingTargetCost, setSavingTargetCost] = useState(false);
+  const [targetCostSaved, setTargetCostSaved] = useState(false);
+  const [useListBusy, setUseListBusy] = useState<string | null>(null);
   const [savingTargetWaste, setSavingTargetWaste] = useState(false);
   const [targetWasteSaved, setTargetWasteSaved] = useState(false);
 
@@ -254,6 +270,7 @@ export default function ItemDetail({
         setItem(it);
         setVatPct(it.vat_rate ? (Number(it.vat_rate) * 100).toString() : "");
         setTargetWasteInput(it.target_waste_pct ?? "");
+        setTargetCostInput(it.target_cost ? String(parseFloat(Number(it.target_cost).toFixed(4))) : "");
         Promise.all(
           it.holdings.map((h) =>
             fetchOnHand(accessToken, it.id, h.location, h.department).then((qty) => [h.id, qty] as const)
@@ -308,6 +325,66 @@ export default function ItemDetail({
       setError(err instanceof Error ? err.message : "Could not save target waste %.");
     } finally {
       setSavingTargetWaste(false);
+    }
+  }
+
+  async function handleSaveTargetCost() {
+    if (!item) return;
+    const raw = targetCostInput.trim();
+    setSavingTargetCost(true);
+    setTargetCostSaved(false);
+    try {
+      const updated = await updateItem(accessToken, item.id, { target_cost: raw === "" ? null : raw });
+      setItem(updated);
+      setTargetCostSaved(true);
+      onChanged();
+    } catch (err) {
+      setSupplierError(err instanceof Error ? err.message.replace(/^target_cost:\s*/, "") : "Could not save the target cost.");
+    } finally {
+      setSavingTargetCost(false);
+    }
+  }
+
+  // The supplier's price list can hold a newer line for this item than the
+  // one a link was made from (a re-spelled name, a new upload). Offer it,
+  // never apply it silently.
+  function listPriceHint(row: ItemSupplierRow) {
+    if (!item) return null;
+    const matched = supplierItems.find((si) => si.id === row.matched_from);
+    let best: { si: SupplierItemRow; score: number } | null = null;
+    for (const si of supplierItems) {
+      if (si.supplier !== row.supplier || si.id === row.matched_from) continue;
+      const score = matchScore(item.name, si.raw_name);
+      if (score >= 0.8 && (!best || score > best.score)) best = { si, score };
+    }
+    if (!best) return null;
+    if (matched && new Date(best.si.imported_at) <= new Date(matched.imported_at)) return null;
+    const { qty, needsInput } = effectivePackQty({ supplierItem: best.si, supplierName: row.supplier_name, score: best.score });
+    if (needsInput && Number(best.si.base_qty_per_unit) === 1) return null;
+    const converted = convertToBaseUnit(Number(best.si.price), qty);
+    const current = Number(row.unit_price);
+    if (converted === null || !(converted > 0) || Math.abs(converted - current) / Math.max(converted, current) < 0.02) return null;
+    return { si: best.si, converted };
+  }
+
+  async function handleUseListPrice(row: ItemSupplierRow, si: SupplierItemRow, converted: number) {
+    if (!item) return;
+    setUseListBusy(row.id);
+    setSupplierError(null);
+    try {
+      const unitDiffers = si.unit !== item.base_unit;
+      const updated = await updateItemSupplier(accessToken, row.id, {
+        unit_price: converted.toFixed(4),
+        matched_from: si.id,
+        supplier_unit: unitDiffers ? si.unit : "",
+        supplier_unit_price: unitDiffers ? si.price : null,
+      });
+      setItemSuppliers((rows) => rows.map((r) => (r.id === updated.id ? updated : r)));
+      onChanged();
+    } catch (err) {
+      setSupplierError(err instanceof Error ? err.message : "Could not update the price.");
+    } finally {
+      setUseListBusy(null);
     }
   }
 
@@ -1356,6 +1433,58 @@ export default function ItemDetail({
           {itemSuppliers.length > 1 &&
             " Pick a default to mark which one you'd normally reorder from — it doesn't change costing, which always uses the cheapest linked price."}
         </p>
+        {(() => {
+          const priced = itemSuppliers.filter((r) => Number(r.unit_price) > 0);
+          const best = priced.length ? priced.reduce((m, r) => (Number(r.unit_price) < Number(m.unit_price) ? r : m)) : null;
+          const target = item.target_cost ? Number(item.target_cost) : null;
+          const dirty = (item.target_cost ? Number(item.target_cost) : null) !== (targetCostInput.trim() === "" ? null : Number(targetCostInput));
+          let status: string;
+          if (best) {
+            status = `Recipes and sales are costed at ${formatMoney(Number(best.unit_price), currency)}/${item.base_unit}, the cheapest supplier price (${best.supplier_name}).`;
+            if (target) {
+              const diff = ((Number(best.unit_price) - target) / target) * 100;
+              if (Math.abs(diff) >= 0.5) status += ` That is ${Math.abs(diff).toFixed(0)}% ${diff > 0 ? "above" : "below"} your target.`;
+              else status += " That matches your target.";
+            }
+          } else if (target) {
+            status = `No supplier price yet, so recipes and sales are costed at your target, ${formatMoney(target, currency)}/${item.base_unit}.`;
+          } else {
+            status = "No price yet, so recipes count this item as costing nothing. Enter a target cost, or link a supplier.";
+          }
+          return (
+            <div className="tc-block">
+              <label className="tc-label" htmlFor="target-cost-in">Target cost</label>
+              <div className="tc-row">
+                <span className="muted">{currencySymbol(currency)}</span>
+                <input
+                  id="target-cost-in"
+                  className="price-in"
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={targetCostInput}
+                  placeholder="0.00"
+                  onChange={(e) => {
+                    setTargetCostInput(e.target.value);
+                    setTargetCostSaved(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (dirty) handleSaveTargetCost();
+                    }
+                  }}
+                />
+                <span className="muted">per {item.base_unit}</span>
+                <button type="button" className="btn-ghost small" disabled={savingTargetCost || !dirty} onClick={handleSaveTargetCost}>
+                  {savingTargetCost ? "Saving…" : "Save"}
+                </button>
+                {targetCostSaved && !dirty && <span className="muted" style={{ fontSize: 12 }}>Saved</span>}
+              </div>
+              <p className="hint tc-status">{status} A supplier price, from a price list, order, invoice or delivery, always takes over from the target.</p>
+            </div>
+          );
+        })()}
         {itemSuppliers.length === 0 && <p className="muted">No suppliers linked yet.</p>}
         {itemSuppliers.map((row) => {
           const cheapest = itemSuppliers.reduce((min, r) =>
@@ -1363,8 +1492,10 @@ export default function ItemDetail({
           );
           const isDefault = itemSuppliers.length > 1 && item.default_supplier === row.supplier;
           const linkedSupplier = suppliers.find((s) => s.id === row.supplier);
+          const listHint = listPriceHint(row);
           return (
-            <div className="sup-row" key={row.id}>
+            <Fragment key={row.id}>
+            <div className="sup-row">
               <span>
                 {onOpenSupplier ? (
                   <span
@@ -1455,6 +1586,18 @@ export default function ItemDetail({
                 </button>
               )}
             </div>
+            {listHint && (
+              <div className="sup-listhint">
+                {row.supplier_name}&rsquo;s price list has &ldquo;{listHint.si.raw_name}&rdquo; at{" "}
+                {formatMoney(Number(listHint.si.price), currency)}/{listHint.si.unit}
+                {listHint.si.unit !== item.base_unit && ` (${formatMoney(listHint.converted, currency, 4)}/${item.base_unit})`}, not{" "}
+                {formatMoney(Number(row.unit_price), currency)}/{item.base_unit}.{" "}
+                <button type="button" className="link-btn" disabled={useListBusy === row.id} onClick={() => handleUseListPrice(row, listHint.si, listHint.converted)}>
+                  {useListBusy === row.id ? "Updating…" : "Use this price"}
+                </button>
+              </div>
+            )}
+            </Fragment>
           );
         })}
 
