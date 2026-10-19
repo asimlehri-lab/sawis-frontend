@@ -113,7 +113,7 @@ export default function MenuEngineering({
                     />
                   )}
                   {labelled.has(d.id) && !dim && (
-                    <span className="rp-dot-label" style={{ left: `${xp(d.mix)}%`, top: `${yp(d.gp)}%` }}>
+                    <span className={`rp-dot-label${xp(d.mix) > 55 ? " left" : ""}`} style={{ left: `${xp(d.mix)}%`, top: `${yp(d.gp)}%` }}>
                       {d.name}
                     </span>
                   )}

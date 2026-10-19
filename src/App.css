@@ -3406,7 +3406,9 @@ span.rp-dot { cursor: default; width: 14px; height: 14px; }
 .rp-dot.on::after { transform: translate(-50%, -50%) scale(1.45); box-shadow: 0 0 0 2px color-mix(in srgb, var(--ink) 30%, transparent); }
 .rp-dot:focus-visible { outline: none; }
 .rp-dot:focus-visible::after { box-shadow: 0 0 0 3px var(--ink); }
-.rp-dot-label { position: absolute; transform: translate(12px, -50%); font-size: 11.5px; font-weight: 600; white-space: nowrap; pointer-events: none; z-index: 4; }
+.rp-dot-label { position: absolute; transform: translate(12px, -50%); font-size: 11.5px; font-weight: 600; white-space: nowrap; pointer-events: none; z-index: 4; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+/* Dots in the right half put their name on the left so it never runs out of the chart. */
+.rp-dot-label.left { transform: translate(calc(-100% - 12px), -50%); }
 @media (max-width: 700px) { .rp-dot-label { display: none; } }
 .rp-gsw { width: 11px; height: 11px; border-radius: 50%; flex: none; display: inline-block; background: var(--rp-chop); }
 .rp-gsw.g-headliners { background: var(--rp-headliners); }
