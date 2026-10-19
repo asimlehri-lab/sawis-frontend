@@ -117,8 +117,16 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "A dish's food or drink cost % is compared with your target: green means at or under target, orange means up to 10 points over, and red (“Well over target”) means more than 10 points over. You'll see the colours on recipe pages, in Reports and in the Actions tab's Cost breaching target list.",
       },
       {
+        q: "Can one dish have its own cost target?",
+        a: "Yes. Open the recipe, go to the Cost & margin tab and type a number in Cost target % (for example 22 for a drink that must stay cheap to make). That dish is then judged against its own target on its page, in the Recipes list filter, in Reports' dish table and in the Cost breaching target list. Leave the box empty and the dish follows the general Food or Drink target from Settings. Sub-recipes have no target because they have no menu price.",
+      },
+      {
+        q: "Where do I see the total cost of a recipe's ingredients?",
+        a: "On the recipe's Ingredients tab: under the list of ingredients, the Total cost of ingredients row adds up every line for one full batch, and when the batch makes more than one plate or portion a Cost per plate row beneath it divides that by the yield. A line tagged target cost has no supplier price yet, so it is counted at the item's target cost.",
+      },
+      {
         q: "Where do I set my food and drink cost targets?",
-        a: "An Admin goes to Settings and scrolls to the Locations card — each location has a Food target and a Drink target (%) next to its currency and overhead. Change them, save, and the colours and Cost breaching target list follow. They start at 30%.",
+        a: "An Admin goes to Settings and scrolls to the Locations card — each location has a Food target and a Drink target (%) next to its currency and overhead. Change them, save, and the colours and Cost breaching target list follow. They start at 30%. One dish can have its own target instead: open the recipe, go to Cost & margin and type it in Cost target %.",
       },
     ],
   },
@@ -595,7 +603,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I set my food and drink cost targets?",
-        a: "Settings → Locations card: each location has a Food target and a Drink target (%) beside its currency and overhead. Change them and save. They drive the green, orange and red cost colours and the Actions tab's Cost breaching target list, and start at 30%.",
+        a: "Settings → Locations card: each location has a Food target and a Drink target (%) beside its currency and overhead. Change them and save. They drive the green, orange and red cost colours and the Actions tab's Cost breaching target list, and start at 30%. A single dish can override them in its own Cost & margin tab (Cost target %); clear that box to follow these again.",
       },
       {
         q: "How do I change my password?",
