@@ -1562,7 +1562,7 @@ export default function App() {
       const vendorIsOwn = !!result.vendor_name && isOwnName(result.vendor_name, ownNamesAll);
       let resolvedSupplierId = "";
       setScanSupplierNote(null);
-      const useFound = (found: { supplier: Supplier; why: string }) => {
+      const applyFound = (found: { supplier: Supplier; why: string }) => {
         resolvedSupplierId = found.supplier.id;
         setScanSupplierId(found.supplier.id);
         setScanSupplierNote(`Recognised ${found.supplier.name} from the ${found.why} on the invoice.`);
@@ -1579,7 +1579,7 @@ export default function App() {
           // the invoice may still identify a supplier already on file.
           const found = findSupplierFromScan(result, suppliers, ownNamesAll, false);
           if (found) {
-            useFound(found);
+            applyFound(found);
           } else {
             // No confident match -- prefill the "+ New supplier" quick-add
             // name from the OCR'd vendor name rather than leaving it blank,
@@ -1591,7 +1591,7 @@ export default function App() {
       } else {
         const found = findSupplierFromScan(result, suppliers, ownNamesAll, true);
         if (found) {
-          useFound(found);
+          applyFound(found);
         } else if (vendorIsOwn) {
           setScanSupplierNote(`\u201c${result.vendor_name}\u201d is your own business, so it was not used as the supplier. Pick the supplier below.`);
         }
@@ -3582,17 +3582,32 @@ export default function App() {
                                 the Qty/Price the user just typed -- not buried inside a
                                 collapsed settings panel above, which is what made "2"
                                 read as "2 ea" instead of "2 pkg = 200 ea" in practice. */}
-                            {matchedItem && row.supplierUnit && row.supplierUnit !== matchedItem.base_unit && (
-                              <div className={`scan-row-total ${converted ? "ok" : "warn"}`}>
-                                {converted
-                                  ? `= ${Number(converted.qty.toFixed(3)).toLocaleString("en-GB")} ${matchedItem.base_unit} in total at ${formatMoney(
-                                      Number(row.unitPrice || "0"),
-                                      orgCurrency,
-                                      Number(row.unitPrice || "0") < 0.1 ? 4 : 2
-                                    )} per ${row.supplierUnit}`
-                                  : "Pick or add the pack size above to see the real total"}
-                              </div>
-                            )}
+                            {matchedItem && !row.skip && (() => {
+                              const hasPack = !!row.supplierUnit && row.supplierUnit !== matchedItem.base_unit;
+                              const lineTotal = Number(row.qty || "0") * Number(row.unitPrice || "0");
+                              if (!hasPack && !(lineTotal > 0)) return null;
+                              return (
+                                <div className={`scan-row-total ${hasPack && !converted ? "warn" : "ok"}`}>
+                                  {hasPack &&
+                                    (converted ? (
+                                      <span className="scan-row-total-line">
+                                        {`= ${Number(converted.qty.toFixed(3)).toLocaleString("en-GB")} ${matchedItem.base_unit} in total at ${formatMoney(
+                                          Number(row.unitPrice || "0"),
+                                          orgCurrency,
+                                          Number(row.unitPrice || "0") < 0.1 ? 4 : 2
+                                        )} per ${row.supplierUnit}`}
+                                      </span>
+                                    ) : (
+                                      <span className="scan-row-total-line">Pick or add the pack size above to see the real total</span>
+                                    ))}
+                                  {lineTotal > 0 && (
+                                    <span className="scan-row-total-line">
+                                      Line total {formatMoney(lineTotal, orgCurrency)} ex VAT
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       })}

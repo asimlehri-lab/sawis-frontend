@@ -2166,6 +2166,7 @@ input[type="file"] {
 .scan-read-body { text-align: left; margin-top: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font-size: 12px; line-height: 1.5; max-height: 220px; overflow: auto; word-break: break-word; }
 .scan-row-total { margin-top: 6px; padding: 6px 10px; border-radius: 8px; font-weight: 600; font-size: 13px; }
 .scan-row-total.ok { background: var(--brand-soft); color: var(--ink); }
+.scan-row-total-line { display: block; }
 .scan-row-total.warn { background: var(--caution-soft); color: var(--ink); font-weight: 500; }
 
 /* Collapsed category-total group (Scan end-of-day sales only) -- a

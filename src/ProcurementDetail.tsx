@@ -1354,17 +1354,30 @@ export default function ProcurementDetail({
             {addItemId &&
               (() => {
                 const addItem = items.find((it) => it.id === addItemId);
-                if (!addItem || !addSupplierUnit || addSupplierUnit === addItem.base_unit) return null;
-                const resolved = resolveAddLineBaseUnits(addItem);
+                if (!addItem) return null;
+                const hasPack = !!addSupplierUnit && addSupplierUnit !== addItem.base_unit;
+                const lineTotal = Number(addQty || "0") * Number(addPrice || "0");
+                if (!hasPack && !(lineTotal > 0)) return null;
+                const resolved = hasPack ? resolveAddLineBaseUnits(addItem) : null;
                 return (
-                  <div className={`scan-row-total ${resolved ? "ok" : "warn"}`}>
-                    {resolved
-                      ? `= ${Number(resolved.qty.toFixed(3)).toLocaleString("en-GB")} ${addItem.base_unit} in total at ${formatMoney(
-                          Number(addPrice || "0"),
-                          currency,
-                          Number(addPrice || "0") < 0.1 ? 4 : 2
-                        )} per ${addSupplierUnit}`
-                      : "Pick or add the pack size above to see the real total"}
+                  <div className={`scan-row-total ${hasPack && !resolved ? "warn" : "ok"}`}>
+                    {hasPack &&
+                      (resolved ? (
+                        <span className="scan-row-total-line">
+                          {`= ${Number(resolved.qty.toFixed(3)).toLocaleString("en-GB")} ${addItem.base_unit} in total at ${formatMoney(
+                            Number(addPrice || "0"),
+                            currency,
+                            Number(addPrice || "0") < 0.1 ? 4 : 2
+                          )} per ${addSupplierUnit}`}
+                        </span>
+                      ) : (
+                        <span className="scan-row-total-line">Pick or add the pack size above to see the real total</span>
+                      ))}
+                    {lineTotal > 0 && (
+                      <span className="scan-row-total-line">
+                        Line total {formatMoney(lineTotal, currency)} ex VAT
+                      </span>
+                    )}
                   </div>
                 );
               })()}
