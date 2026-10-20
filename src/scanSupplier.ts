@@ -121,3 +121,74 @@ export function unitFromPrinted(
   }
   return null;
 }
+
+// Some suppliers (Pan Asia) print the number of cartons in one column and the
+// number of pieces in another, and price each PIECE: "Menge 40 pkg | Ktn 1 |
+// price 1.25 | total 50.00". The scan reads the pieces as the quantity and the
+// carton count as `quantity_read`. A person buying this thinks in cartons, so
+// the row is offered as cartons: 1 ctn at 50.00, one ctn holding 40 pieces.
+// Pure arithmetic: it never changes what was read, only how the row is first
+// shown, and `alt` keeps the piece view so the person can switch back.
+export interface CartonView {
+  qty: string;
+  unitPrice: string;
+  supplierUnit: string;
+  packQty: string;
+  cartons: number;
+  perCarton: number;
+  pieceLabel: string;
+  alt: { qty: string; unitPrice: string; supplierUnit: string; packQty: string };
+}
+
+const COUNT_WORDS = new Set(["ea", "pkg", "pk", "pack", "pc", "pcs", "piece", "pieces", "each", "unit", "units", "stk", "st", "btl", "bottle", "can", "bag", "box"]);
+
+function plainNumber(n: number): string {
+  let s = String(parseFloat(n.toFixed(4)));
+  if (!s.includes(".")) s += ".00";
+  else if (s.split(".")[1].length === 1) s += "0";
+  return s;
+}
+
+export function cartonView(
+  item: CatalogItem | undefined,
+  line: { qty: number; read: number; price: number; printedUnit: string | null | undefined; piece: { unit: string; packQty: string } | null }
+): CartonView | null {
+  if (!item) return null;
+  const { qty, read, price, piece } = line;
+  if (!(qty > 0) || !(read > 0) || !(price > 0) || !Number.isInteger(read)) return null;
+  const ratio = qty / read;
+  const perCarton = Math.round(ratio);
+  if (perCarton < 2 || Math.abs(ratio - perCarton) > 0.001) return null;
+  const printed = (line.printedUnit ?? "").trim().replace(/\.$/, "").toLowerCase();
+  // Without a printed piece unit the line only had one corrected figure, which
+  // is more likely a misread digit than a carton count.
+  if (!printed) return null;
+  // How many of the item's own unit one printed piece is. When the item has a
+  // matching unit (pkg = 10 ea) that is its size; when the printed unit is the
+  // item's own unit, or plain "pieces" for a counted item, it is 1. Anything
+  // else (a kg line on a counted item, say) is not guessed at.
+  let pieceSize = 1;
+  if (piece) pieceSize = Number(piece.packQty);
+  else if (printed !== item.base_unit.toLowerCase() && !COUNT_WORDS.has(printed)) return null;
+  if (!Number.isFinite(pieceSize) || pieceSize <= 0) return null;
+  // Weighed or poured items: a printed piece of unknown weight is not 1 g.
+  if (!piece && ["g", "kg", "ml", "l"].includes(item.base_unit.toLowerCase())) return null;
+  const packQty = perCarton * pieceSize;
+  const saved = (item.stock_units ?? []).find((u) => ["ctn", "carton"].includes(u.name.toLowerCase()));
+  if (saved && Math.abs(Number(saved.qty) - packQty) > 0.0001) return null;
+  return {
+    qty: String(read),
+    unitPrice: plainNumber(price * perCarton),
+    supplierUnit: saved ? saved.name : "ctn",
+    packQty: String(parseFloat(packQty.toFixed(4))),
+    cartons: read,
+    perCarton,
+    pieceLabel: printed,
+    alt: {
+      qty: String(qty),
+      unitPrice: plainNumber(price),
+      supplierUnit: piece?.unit ?? "",
+      packQty: piece?.packQty ?? "1",
+    },
+  };
+}

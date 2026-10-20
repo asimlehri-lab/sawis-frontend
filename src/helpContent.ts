@@ -328,6 +328,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         fact: "💡 If the invoice matches a purchase order you've already got open with that supplier, SAWIS spots it and offers to receive against that existing PO instead of creating a duplicate one.",
       },
       {
+        q: "The invoice lists pieces and cartons — how does the scan show them?",
+        a: "Some suppliers, such as Pan Asia, print the number of pieces in one column, the number of cartons in another, and price each piece. The scan row then opens as cartons: for example 3 ctn at 23.70 for a cheesecake carton of 30, rather than 90 pieces at 0.79. The row says what the invoice lists (90 pkg in 3 cartons, 30 in each) and has a link, Show as 90 pkg at 0.79, to switch to pieces; the line total is the same either way. When you confirm, a ctn unit with that exact size is added to the item, so counts and later orders can use it. If the item already has a ctn of a different size, or the line has no printed piece unit, the row stays in pieces. Changing the quantity, unit or price yourself removes the note.",
+      },
+      {
         q: "The scan changed a quantity — why?",
         a: "Some invoices have a cartons column next to the quantity column and the scan can read the wrong one. The invoice also prints each line's total, so when quantity × price is nowhere near that total and the total divided by the price is a whole number, SAWIS uses that number and marks the row with what it changed and what it first read. A line that already adds up is never touched. You can overtype the quantity at any time.",
       },

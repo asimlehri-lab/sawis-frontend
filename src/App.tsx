@@ -39,6 +39,7 @@ import {
   defaultCurrency,
   currencySymbol,
   autoFactor,
+  createItemStockUnit,
   convertToBaseUnit,
   defaultTargetCostPct,
   effectiveTargetPct,
@@ -74,7 +75,7 @@ import AllergenReview from "./AllergenReview";
 import Loader from "./Loader";
 import ProcurementDetail from "./ProcurementDetail";
 import SupplierUnitPicker from "./SupplierUnitPicker";
-import { findSupplierFromScan, isOwnName, unitFromPrinted } from "./scanSupplier";
+import { cartonView, findSupplierFromScan, isOwnName, unitFromPrinted } from "./scanSupplier";
 import SupplierDeliveries from "./SupplierDeliveries";
 import SupplierList from "./SupplierList";
 import WasteLog from "./WasteLog";
@@ -252,6 +253,13 @@ interface ScanRow {
   printedUnit: string;
   // Set when the quantity was corrected from the printed line total; says what changed.
   qtyNote: string;
+  // The invoice's own figures for this line, kept so the row can be rebuilt
+  // when another item is picked: pieces read, cartons read, price per piece.
+  src: { qty: string; read: string; price: string };
+  // Set when the line was first shown as cartons (Pan Asia style): how many
+  // cartons, how many pieces in each, what the piece is called, and the piece
+  // figures to switch back to. Cleared as soon as the person edits the row.
+  carton?: { cartons: number; perCarton: number; pieceLabel: string; alt: { qty: string; unitPrice: string; supplierUnit: string; packQty: string } };
 }
 
 // Resolves a ScanRow's qty/unitPrice into the matched item's own
@@ -1665,18 +1673,33 @@ export default function App() {
         // otherwise the unit printed beside the quantity, if the item has it.
         const printed = known ? null : unitFromPrinted(bestItem, li.unit);
         const qtyText = cleanNumeric(li.quantity) || "1";
+        const priceText = cleanNumeric(li.unit_price) || "0.00";
+        const readText = cleanNumeric(li.quantity_read ?? null);
+        const cv = known
+          ? null
+          : cartonView(bestItem, {
+              qty: Number(qtyText),
+              read: Number(readText),
+              price: Number(priceText),
+              printedUnit: li.unit,
+              piece: printed,
+            });
         return {
           description: li.description,
           matchedItemId: best,
-          qty: qtyText,
-          unitPrice: cleanNumeric(li.unit_price) || "0.00",
+          qty: cv ? cv.qty : qtyText,
+          unitPrice: cv ? cv.unitPrice : priceText,
           confidence: li.confidence,
           skip: false,
-          supplierUnit: known?.supplierUnit ?? printed?.unit ?? "",
-          packQty: known?.packQty ?? printed?.packQty ?? "1",
+          supplierUnit: cv ? cv.supplierUnit : known?.supplierUnit ?? printed?.unit ?? "",
+          packQty: cv ? cv.packQty : known?.packQty ?? printed?.packQty ?? "1",
           vatPct: vatPctFromSupplierLink(itemSupplierLinks, best, resolvedSupplierId) || vatPctFromItem(bestItem),
           printedUnit: li.unit ?? "",
-          qtyNote: li.quantity_read
+          src: { qty: qtyText, read: readText, price: priceText },
+          carton: cv ? { cartons: cv.cartons, perCarton: cv.perCarton, pieceLabel: cv.pieceLabel, alt: cv.alt } : undefined,
+          qtyNote: cv
+            ? ""
+            : li.quantity_read
             ? `Quantity set to ${qtyText} so the line adds up to ${li.line_total ?? "the printed total"} (the scan first read ${li.quantity_read}). Check it against the invoice.`
             : "",
         };
@@ -1818,6 +1841,30 @@ export default function App() {
       );
       return;
     }
+
+    // A carton read off the invoice ("ctn", 40 to a carton) becomes a stock
+    // unit on the item, with the exact pack size from the invoice, so counts
+    // and later orders can use it and the size is never backed out of two
+    // rounded prices. Best effort: if it cannot be saved, the receipt still
+    // goes through and the size is remembered from the prices as before.
+    let savedCartonUnit = false;
+    const triedCartons = new Set<string>();
+    for (const row of scanIncludedRows) {
+      const item = (items ?? []).find((it) => it.id === row.matchedItemId);
+      const unitName = row.supplierUnit.trim();
+      if (!item || !unitName || !["ctn", "carton"].includes(unitName.toLowerCase())) continue;
+      if ((item.stock_units ?? []).some((u) => u.name.toLowerCase() === unitName.toLowerCase())) continue;
+      const size = Number(row.packQty);
+      if (!(size > 0) || triedCartons.has(item.id)) continue;
+      triedCartons.add(item.id);
+      try {
+        await createItemStockUnit(accessToken, { item: item.id, name: unitName, qty: String(size) });
+        savedCartonUnit = true;
+      } catch {
+        /* keep going */
+      }
+    }
+    if (savedCartonUnit) loadItems(accessToken);
 
     // Scanning found a PO number on the invoice that traces back to an
     // order we already sent, and the user confirmed it's the right one --
@@ -3560,11 +3607,32 @@ export default function App() {
                                       Number(row.unitPrice) || undefined
                                     );
                                     const printed = known ? null : unitFromPrinted(newItem, row.printedUnit);
+                                    // Rebuild from the invoice's own figures, so a carton row
+                                    // follows the new item (or goes back to pieces).
+                                    const cv = known
+                                      ? null
+                                      : cartonView(newItem, {
+                                          qty: Number(row.src.qty),
+                                          read: Number(row.src.read),
+                                          price: Number(row.src.price),
+                                          printedUnit: row.printedUnit,
+                                          piece: printed,
+                                        });
                                     updateScanRow(i, {
                                       matchedItemId: val,
-                                      supplierUnit: known?.supplierUnit ?? printed?.unit ?? "",
-                                      packQty: known?.packQty ?? printed?.packQty ?? "1",
+                                      supplierUnit: cv ? cv.supplierUnit : known?.supplierUnit ?? printed?.unit ?? "",
+                                      packQty: cv ? cv.packQty : known?.packQty ?? printed?.packQty ?? "1",
                                       vatPct: vatPctFromSupplierLink(itemSupplierLinks, val, scanSupplierId) || vatPctFromItem(newItem),
+                                      ...(cv
+                                        ? {
+                                            qty: cv.qty,
+                                            unitPrice: cv.unitPrice,
+                                            qtyNote: "",
+                                            carton: { cartons: cv.cartons, perCarton: cv.perCarton, pieceLabel: cv.pieceLabel, alt: cv.alt },
+                                          }
+                                        : row.carton
+                                        ? { qty: row.src.qty, unitPrice: row.src.price, carton: undefined }
+                                        : {}),
                                     });
                                   }
                                 }}
@@ -3616,7 +3684,7 @@ export default function App() {
                                   min="0"
                                   step="0.001"
                                   value={row.qty}
-                                  onChange={(e) => updateScanRow(i, { qty: e.target.value, qtyNote: "" })}
+                                  onChange={(e) => updateScanRow(i, { qty: e.target.value, qtyNote: "", carton: undefined })}
                                   disabled={row.skip}
                                 />
                               </div>
@@ -3633,7 +3701,7 @@ export default function App() {
                                     ? row.printedUnit
                                     : undefined
                                 }
-                                onChange={(c) => updateScanRow(i, { supplierUnit: c.unit, packQty: c.packQty })}
+                                onChange={(c) => updateScanRow(i, { supplierUnit: c.unit, packQty: c.packQty, carton: undefined })}
                                 onUnitAdded={() => accessToken && loadItems(accessToken)}
                               />
                               <div className="field">
@@ -3647,7 +3715,7 @@ export default function App() {
                                   min="0"
                                   step="0.01"
                                   value={row.unitPrice}
-                                  onChange={(e) => updateScanRow(i, { unitPrice: e.target.value })}
+                                  onChange={(e) => updateScanRow(i, { unitPrice: e.target.value, carton: undefined })}
                                   disabled={row.skip}
                                 />
                               </div>
@@ -3670,6 +3738,41 @@ export default function App() {
                               </div>
                             </div>
                             {row.qtyNote && <p className="scan-qty-note">{row.qtyNote}</p>}
+                            {row.carton && (() => {
+                              const c = row.carton;
+                              const asPieces = row.supplierUnit === c.alt.supplierUnit && row.qty === c.alt.qty;
+                              const money = (v: string) =>
+                                formatMoney(Number(v || "0"), orgCurrency, Number(v || "0") < 0.1 ? 4 : 2);
+                              const piecesText = `${c.alt.qty} ${c.pieceLabel} at ${money(c.alt.unitPrice)}`;
+                              const cartonsText = `${c.cartons} ctn at ${money(String(parseFloat((Number(c.alt.unitPrice) * c.perCarton).toFixed(4))))}`;
+                              return (
+                                <p className="scan-qty-note">
+                                  {`The invoice lists ${c.alt.qty} ${c.pieceLabel} in ${c.cartons} ${c.cartons === 1 ? "carton" : "cartons"} (${c.perCarton} in each). ${
+                                    asPieces ? "Showing the pieces." : "Showing the cartons."
+                                  } `}
+                                  <button
+                                    type="button"
+                                    className="link-btn"
+                                    disabled={row.skip}
+                                    onClick={() =>
+                                      updateScanRow(
+                                        i,
+                                        asPieces
+                                          ? {
+                                              qty: String(c.cartons),
+                                              unitPrice: String(parseFloat((Number(c.alt.unitPrice) * c.perCarton).toFixed(4))),
+                                              supplierUnit: matchedItem?.stock_units?.find((u) => ["ctn", "carton"].includes(u.name.toLowerCase()))?.name ?? "ctn",
+                                              packQty: String(parseFloat((Number(c.alt.packQty) * c.perCarton).toFixed(4))),
+                                            }
+                                          : { qty: c.alt.qty, unitPrice: c.alt.unitPrice, supplierUnit: c.alt.supplierUnit, packQty: c.alt.packQty }
+                                      )
+                                    }
+                                  >
+                                    {`Show as ${asPieces ? cartonsText : piecesText}`}
+                                  </button>
+                                </p>
+                              );
+                            })()}
                             {/* The whole point of this row: once a supplier pack/unit
                                 conversion is active, show the real total right next to
                                 the Qty/Price the user just typed -- not buried inside a
