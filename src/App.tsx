@@ -1675,19 +1675,18 @@ export default function App() {
         const qtyText = cleanNumeric(li.quantity) || "1";
         const priceText = cleanNumeric(li.unit_price) || "0.00";
         const readText = cleanNumeric(li.quantity_read ?? null);
-        // A remembered piece unit (pkg = 10) is what a carton is made of; a
-        // remembered carton unit is already the answer, so it is left alone.
+        // A remembered piece unit (pkg = 10) is what a carton is made of. A
+        // remembered carton unit (ctn = 100) does not say what the invoice's
+        // pieces are, so the printed unit is used for that; the carton view
+        // only applies when the sizes agree.
         const knownPiece = known && !["ctn", "carton"].includes(known.supplierUnit.toLowerCase()) ? known : null;
-        const cv =
-          known && !knownPiece
-            ? null
-            : cartonView(bestItem, {
-                qty: Number(qtyText),
-                read: Number(readText),
-                price: Number(priceText),
-                printedUnit: li.unit,
-                piece: knownPiece ? { unit: knownPiece.supplierUnit, packQty: knownPiece.packQty } : printed,
-              });
+        const cv = cartonView(bestItem, {
+          qty: Number(qtyText),
+          read: Number(readText),
+          price: Number(priceText),
+          printedUnit: li.unit,
+          piece: knownPiece ? { unit: knownPiece.supplierUnit, packQty: knownPiece.packQty } : unitFromPrinted(bestItem, li.unit),
+        });
         return {
           description: li.description,
           matchedItemId: best,
@@ -3614,16 +3613,13 @@ export default function App() {
                                     // Rebuild from the invoice's own figures, so a carton row
                                     // follows the new item (or goes back to pieces).
                                     const knownPiece = known && !["ctn", "carton"].includes(known.supplierUnit.toLowerCase()) ? known : null;
-                                    const cv =
-                                      known && !knownPiece
-                                        ? null
-                                        : cartonView(newItem, {
-                                            qty: Number(row.src.qty),
-                                            read: Number(row.src.read),
-                                            price: Number(row.src.price),
-                                            printedUnit: row.printedUnit,
-                                            piece: knownPiece ? { unit: knownPiece.supplierUnit, packQty: knownPiece.packQty } : printed,
-                                          });
+                                    const cv = cartonView(newItem, {
+                                      qty: Number(row.src.qty),
+                                      read: Number(row.src.read),
+                                      price: Number(row.src.price),
+                                      printedUnit: row.printedUnit,
+                                      piece: knownPiece ? { unit: knownPiece.supplierUnit, packQty: knownPiece.packQty } : unitFromPrinted(newItem, row.printedUnit),
+                                    });
                                     updateScanRow(i, {
                                       matchedItemId: val,
                                       supplierUnit: cv ? cv.supplierUnit : known?.supplierUnit ?? printed?.unit ?? "",

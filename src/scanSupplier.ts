@@ -173,9 +173,22 @@ export function cartonView(
   if (!Number.isFinite(pieceSize) || pieceSize <= 0) return null;
   // Weighed or poured items: a printed piece of unknown weight is not 1 g.
   if (!piece && ["g", "kg", "ml", "l"].includes(item.base_unit.toLowerCase())) return null;
-  const packQty = perCarton * pieceSize;
+  // A carton size already saved on the item is the one to trust. When the
+  // item does not know what the invoice's piece is, the saved size stands in
+  // (ctn = 100 ea with 10 pieces printed per carton means a piece is 10 ea);
+  // when it does know the piece, the two must agree.
   const saved = (item.stock_units ?? []).find((u) => ["ctn", "carton"].includes(u.name.toLowerCase()));
-  if (saved && Math.abs(Number(saved.qty) - packQty) > 0.0001) return null;
+  let packQty = perCarton * pieceSize;
+  if (saved) {
+    const savedQty = Number(saved.qty);
+    if (!(savedQty > 0)) return null;
+    if (!piece) {
+      const each = savedQty / perCarton;
+      if (Math.abs(each - Math.round(each)) > 0.0001) return null;
+      packQty = savedQty;
+    }
+    else if (Math.abs(savedQty - packQty) > 0.0001) return null;
+  }
   return {
     qty: String(read),
     unitPrice: plainNumber(price * perCarton),
