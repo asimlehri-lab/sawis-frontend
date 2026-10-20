@@ -17,6 +17,7 @@ import {
   BASE_UNITS,
   CURRENCY_OPTIONS,
   currencySymbol,
+  formatMoney,
 } from "./api";
 import type { Allergen, BulkItemInput, CatalogItem, Category, CurrencyCode, InventoryCheckSchedule, Location, OwnBusinessName, Recipe } from "./api";
 import CategoryManagerModal from "./CategoryManagerModal";
@@ -444,8 +445,18 @@ function OwnNamesPanel({ accessToken }: { accessToken: string }) {
   );
 }
 
+// The monthly overhead lines a location can fill in. The server adds them up
+// into the one monthly overhead figure the reports use.
+const OVERHEAD_PARTS = [
+  { key: "overhead_rent", label: "Rent" },
+  { key: "overhead_labour", label: "Labour / staff" },
+  { key: "overhead_utilities", label: "Utilities" },
+  { key: "overhead_other", label: "Other fixed costs" },
+] as const;
+type OverheadKey = (typeof OVERHEAD_PARTS)[number]["key"];
+
 function LocationSettingsPanel({ accessToken, locations }: { accessToken: string; locations: Location[] }) {
-  const [overheadValues, setOverheadValues] = useState<Record<string, string>>({});
+  const [partValues, setPartValues] = useState<Record<string, Partial<Record<OverheadKey, string>>>>({});
   const [currencyValues, setCurrencyValues] = useState<Record<string, CurrencyCode>>({});
   const [foodTargetValues, setFoodTargetValues] = useState<Record<string, string>>({});
   const [drinkTargetValues, setDrinkTargetValues] = useState<Record<string, string>>({});
@@ -453,8 +464,20 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  function overheadFor(loc: Location) {
-    return overheadValues[loc.id] ?? loc.monthly_overhead ?? "";
+  function partFor(loc: Location, key: OverheadKey) {
+    return partValues[loc.id]?.[key] ?? loc[key] ?? "";
+  }
+  function overheadTotal(loc: Location) {
+    let sum = 0;
+    let any = false;
+    for (const part of OVERHEAD_PARTS) {
+      const raw = partFor(loc, part.key).trim();
+      if (raw !== "" && !Number.isNaN(Number(raw))) {
+        sum += Number(raw);
+        any = true;
+      }
+    }
+    return any ? sum : null;
   }
   function currencyFor(loc: Location) {
     return currencyValues[loc.id] ?? loc.currency;
@@ -467,7 +490,6 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
   }
 
   async function handleSave(loc: Location) {
-    const raw = overheadFor(loc).trim();
     const foodRaw = foodTargetFor(loc).trim();
     const drinkRaw = drinkTargetFor(loc).trim();
     setSaving((s) => ({ ...s, [loc.id]: true }));
@@ -476,7 +498,10 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
     try {
       await updateLocation(accessToken, loc.id, {
         currency: currencyFor(loc),
-        monthly_overhead: raw === "" ? null : raw,
+        overhead_rent: partFor(loc, "overhead_rent").trim() || null,
+        overhead_labour: partFor(loc, "overhead_labour").trim() || null,
+        overhead_utilities: partFor(loc, "overhead_utilities").trim() || null,
+        overhead_other: partFor(loc, "overhead_other").trim() || null,
         target_food_cost_pct: foodRaw === "" ? "30" : foodRaw,
         target_drink_cost_pct: drinkRaw === "" ? "30" : drinkRaw,
       });
@@ -493,95 +518,116 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
       <h2 style={{ marginTop: 0 }}>Locations</h2>
       <p className="hint">
         Currency changes which symbol this location's own prices/reports show — display only, no exchange-rate
-        conversion. Monthly overhead (rent, labour, other fixed costs) feeds End of day's net margin estimate;
-        leave blank to skip that estimate. Food/drink target % is what Reports and each recipe's own page flag
-        "over"/"under" against, in place of the old fixed 30%.
+        conversion. Monthly overhead (rent, labour, utilities and other fixed costs, entered per month) feeds End of
+        day's net margin estimate and the break-even on Reports; leave it blank to skip those. Recipe costs are
+        ingredient costs only and never include overhead. Food/drink target % is what Reports and each recipe's own
+        page flag "over"/"under" against.
       </p>
       {!locations.length && <p className="muted">No locations yet.</p>}
-      {locations.map((loc) => (
-        <div key={loc.id} className="price-row" style={{ alignItems: "center", flexWrap: "wrap" }}>
-          <label>{loc.name}</label>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            {errors[loc.id] && <span className="error" style={{ padding: "4px 8px" }}>{errors[loc.id]}</span>}
-            {saved[loc.id] && !errors[loc.id] && <span className="badge b-ok">Saved</span>}
-            <select
-              value={currencyFor(loc)}
-              onChange={(e) => {
-                setCurrencyValues((v) => ({ ...v, [loc.id]: e.target.value as CurrencyCode }));
-                setSaved((s) => ({ ...s, [loc.id]: false }));
-              }}
-            >
-              {CURRENCY_OPTIONS.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-            <input
-              className="price-in"
-              type="number"
-              min="0"
-              step="1"
-              placeholder="Overhead, e.g. 8000"
-              value={overheadFor(loc)}
-              onChange={(e) => {
-                setOverheadValues((v) => ({ ...v, [loc.id]: e.target.value }));
-                setSaved((s) => ({ ...s, [loc.id]: false }));
-              }}
-            />
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <span className="muted" style={{ fontSize: 11 }}>
-                Food target
-              </span>
-              <input
-                className="price-in"
-                style={{ width: 56 }}
-                type="number"
-                min="0"
-                max="100"
-                step="1"
-                value={foodTargetFor(loc)}
-                onChange={(e) => {
-                  setFoodTargetValues((v) => ({ ...v, [loc.id]: e.target.value }));
-                  setSaved((s) => ({ ...s, [loc.id]: false }));
-                }}
-              />
-              <span className="muted" style={{ fontSize: 11 }}>
-                %
-              </span>
+      {locations.map((loc) => {
+        const total = overheadTotal(loc);
+        return (
+          <div key={loc.id} className="loc-block">
+            <div className="loc-head">
+              <label>{loc.name}</label>
+              <div className="loc-top">
+                {errors[loc.id] && <span className="error" style={{ padding: "4px 8px" }}>{errors[loc.id]}</span>}
+                {saved[loc.id] && !errors[loc.id] && <span className="badge b-ok">Saved</span>}
+                <select
+                  value={currencyFor(loc)}
+                  onChange={(e) => {
+                    setCurrencyValues((v) => ({ ...v, [loc.id]: e.target.value as CurrencyCode }));
+                    setSaved((s) => ({ ...s, [loc.id]: false }));
+                  }}
+                >
+                  {CURRENCY_OPTIONS.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span className="muted" style={{ fontSize: 11 }}>
+                    Food target
+                  </span>
+                  <input
+                    className="price-in"
+                    style={{ width: 56 }}
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={foodTargetFor(loc)}
+                    onChange={(e) => {
+                      setFoodTargetValues((v) => ({ ...v, [loc.id]: e.target.value }));
+                      setSaved((s) => ({ ...s, [loc.id]: false }));
+                    }}
+                  />
+                  <span className="muted" style={{ fontSize: 11 }}>
+                    %
+                  </span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span className="muted" style={{ fontSize: 11 }}>
+                    Drink target
+                  </span>
+                  <input
+                    className="price-in"
+                    style={{ width: 56 }}
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={drinkTargetFor(loc)}
+                    onChange={(e) => {
+                      setDrinkTargetValues((v) => ({ ...v, [loc.id]: e.target.value }));
+                      setSaved((s) => ({ ...s, [loc.id]: false }));
+                    }}
+                  />
+                  <span className="muted" style={{ fontSize: 11 }}>
+                    %
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="btn-ghost small"
+                  disabled={saving[loc.id]}
+                  onClick={() => handleSave(loc)}
+                >
+                  {saving[loc.id] ? "Saving…" : "Save"}
+                </button>
+              </div>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <span className="muted" style={{ fontSize: 11 }}>
-                Drink target
-              </span>
-              <input
-                className="price-in"
-                style={{ width: 56 }}
-                type="number"
-                min="0"
-                max="100"
-                step="1"
-                value={drinkTargetFor(loc)}
-                onChange={(e) => {
-                  setDrinkTargetValues((v) => ({ ...v, [loc.id]: e.target.value }));
-                  setSaved((s) => ({ ...s, [loc.id]: false }));
-                }}
-              />
-              <span className="muted" style={{ fontSize: 11 }}>
-                %
-              </span>
+            <div className="oh-box">
+              <p className="oh-title">Monthly overhead (per month)</p>
+              <div className="oh-grid">
+                {OVERHEAD_PARTS.map((part) => (
+                  <label key={part.key} className="oh-field">
+                    {part.label}
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="per month"
+                      value={partFor(loc, part.key)}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setPartValues((pv) => ({ ...pv, [loc.id]: { ...pv[loc.id], [part.key]: v } }));
+                        setSaved((s) => ({ ...s, [loc.id]: false }));
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
+              <p className="oh-total">
+                {total === null
+                  ? "Not set — net margin and break-even stay blank until you add something."
+                  : `Total monthly overhead: ${formatMoney(total, currencyFor(loc), 2)}`}
+              </p>
             </div>
-            <button
-              type="button"
-              className="btn-ghost small"
-              disabled={saving[loc.id]}
-              onClick={() => handleSave(loc)}
-            >
-              {saving[loc.id] ? "Saving…" : "Save"}
-            </button>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

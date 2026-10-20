@@ -676,7 +676,7 @@ export default function RecipeDetail({
                 <tfoot>
                   <tr className="ing-total">
                     <td colSpan={3}>
-                      Total cost of ingredients ({recipe.yield_qty} {recipe.yield_unit}
+                      Total ingredient cost ({recipe.yield_qty} {recipe.yield_unit}
                       {yieldNum > 1 ? "s" : ""})
                     </td>
                     <td className="num">{formatMoney(recipe.batch_cost, currency)}</td>
@@ -684,7 +684,7 @@ export default function RecipeDetail({
                   </tr>
                   {yieldNum > 1 && (
                     <tr className="ing-total sub">
-                      <td colSpan={3}>Cost per {recipe.yield_unit}</td>
+                      <td colSpan={3}>Ingredient cost per {recipe.yield_unit}</td>
                       <td className="num">{formatMoney(recipe.per_portion_cost, currency)}</td>
                       <td></td>
                     </tr>
@@ -693,6 +693,10 @@ export default function RecipeDetail({
               )}
             </table>
           </div>
+          <p className="hint ing-note">
+            Ingredient cost only. Rent, staff and energy are not included; they are covered by your monthly overhead
+            in Settings and the break-even on Reports.
+          </p>
 
           <div className="add-block">
             <div className="add-col">
@@ -836,16 +840,16 @@ export default function RecipeDetail({
           {isSub ? (
             <>
               <div className="metric big-m">
-                <span className="ml">Batch cost</span>
+                <span className="ml">Ingredient cost of the batch</span>
                 <span className="mv">{formatMoney(recipe.batch_cost, currency)}</span>
               </div>
               <div className="metric big-m">
-                <span className="ml">Cost per {recipe.yield_unit}</span>
+                <span className="ml">Ingredient cost per {recipe.yield_unit}</span>
                 <span className="mv violet-text">{formatMoney(recipe.per_portion_cost, currency)}</span>
               </div>
               <div className="perplate">
                 Change an ingredient here and every dish using this sub-recipe re-costs automatically —
-                no double entry.
+                no double entry. These are ingredient costs only; overhead is not included.
               </div>
             </>
           ) : (
@@ -947,13 +951,13 @@ export default function RecipeDetail({
               </div>
               <div className="metric">
                 <span className="ml">
-                  Batch cost ({recipe.yield_qty} {recipe.yield_unit}
+                  Ingredient cost of the batch ({recipe.yield_qty} {recipe.yield_unit}
                   {yieldNum > 1 ? "s" : ""})
                 </span>
                 <span className="mv">{formatMoney(recipe.batch_cost, currency)}</span>
               </div>
               <div className="metric big-m">
-                <span className="ml">Cost per {recipe.yield_unit}</span>
+                <span className="ml">Ingredient cost per {recipe.yield_unit}</span>
                 <span className="mv">{formatMoney(recipe.per_portion_cost, currency)}</span>
               </div>
               <div className="metric">
@@ -964,7 +968,8 @@ export default function RecipeDetail({
                 One batch makes <b>{recipe.yield_qty} {recipe.yield_unit}{yieldNum > 1 ? "s" : ""}</b> at{" "}
                 <b>{formatMoney(menuPriceNum, currency)}</b> each — batch sales value{" "}
                 <b>{formatMoney(menuPriceNum * yieldNum, currency)}</b>, batch profit{" "}
-                <b>{formatMoney(menuPriceNum * yieldNum - recipe.batch_cost, currency)}</b>.
+                <b>{formatMoney(menuPriceNum * yieldNum - recipe.batch_cost, currency)}</b>. Costs and profit here are
+                after ingredients only; overhead (rent, staff, energy) is not included.
               </div>
             </>
           )}

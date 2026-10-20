@@ -2,7 +2,7 @@ import { createPortal } from "react-dom";
 import type { ReportsSummary } from "./api";
 import { FoodCostBars } from "./ReportCharts";
 import MenuEngineering from "./MenuEngineering";
-import { CategoryCard, MenuTable, ReportTiles, SplitBar, WasteCard, ZeroCostNote } from "./ReportParts";
+import { BreakEvenCard, CategoryCard, MenuTable, ReportTiles, SplitBar, WasteCard, ZeroCostNote } from "./ReportParts";
 import { sectionHeadStyle } from "./reportFormat";
 import type { PdfSections } from "./ReportPdfModal";
 
@@ -54,6 +54,9 @@ export default function ReportPrintSheet({
           </section>
           <div className="rp-print-block">
             <SplitBar report={report} currency={currency} />
+          </div>
+          <div className="rp-print-block">
+            <BreakEvenCard report={report} currency={currency} />
           </div>
         </>
       )}

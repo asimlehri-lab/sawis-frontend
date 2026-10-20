@@ -903,6 +903,12 @@ export interface Location {
   // margin can't be computed yet, and the report says so rather than
   // guessing zero overhead.
   monthly_overhead: string | null;
+  // The same monthly overhead split into lines. The server keeps
+  // monthly_overhead equal to their sum whenever any of them is saved.
+  overhead_rent: string | null;
+  overhead_labour: string | null;
+  overhead_utilities: string | null;
+  overhead_other: string | null;
   // How many days before a PurchaseOrder's expected_date the delivery
   // reminder notification (Phase 3) should first appear. Defaults to 1
   // server-side, adjustable per location in Settings.
@@ -925,6 +931,10 @@ export async function updateLocation(
   patch: {
     currency?: CurrencyCode;
     monthly_overhead?: string | null;
+    overhead_rent?: string | null;
+    overhead_labour?: string | null;
+    overhead_utilities?: string | null;
+    overhead_other?: string | null;
     delivery_reminder_lead_days?: number;
     target_food_cost_pct?: string;
     target_drink_cost_pct?: string;
@@ -2600,6 +2610,20 @@ export interface ReportsSummary {
   waste_by_reason: ReportsWasteReason[];
   cost_by_category: ReportsCostCategory[];
   menu: ReportsMenuRow[];
+  break_even: ReportsBreakEven;
+}
+
+// Sales needed to cover the location's monthly overhead at this period's
+// gross profit % (sales minus ingredient cost). Numbers are null until an
+// overhead is set and the period has sales to measure a margin from.
+export interface ReportsBreakEven {
+  configured: boolean;
+  monthly_overhead: number | null;
+  parts: { rent: number | null; labour: number | null; utilities: number | null; other: number | null };
+  gross_profit_pct: number | null;
+  sales_needed_month: number | null;
+  sales_needed_period: number | null;
+  sales_this_period: number;
 }
 
 // Computes the whole dashboard server-side from real ledger data — see

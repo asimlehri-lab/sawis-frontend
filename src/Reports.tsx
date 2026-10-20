@@ -7,7 +7,7 @@ import type { PdfSections } from "./ReportPdfModal";
 import ReportPrintSheet from "./ReportPrintSheet";
 import { FoodCostBars } from "./ReportCharts";
 import MenuEngineering from "./MenuEngineering";
-import { CategoryCard, MenuTable, ReportTiles, SplitBar, WasteCard, ZeroCostNote } from "./ReportParts";
+import { BreakEvenCard, CategoryCard, MenuTable, ReportTiles, SplitBar, WasteCard, ZeroCostNote } from "./ReportParts";
 import { sectionHeadStyle } from "./reportFormat";
 import { addDays, addMonths, monthEndOf, monthLabel, monthStartOf, mondayOf, todayIso, weekLabel } from "./reportPeriod";
 
@@ -301,6 +301,7 @@ export default function Reports({ accessToken, locations, isAdmin, initialTab, o
                 )}
               </section>
               <SplitBar report={report} currency={currency} />
+              <BreakEvenCard report={report} currency={currency} />
               <div className="rp-two">
                 <WasteCard report={report} currency={currency} />
                 <CategoryCard report={report} currency={currency} />

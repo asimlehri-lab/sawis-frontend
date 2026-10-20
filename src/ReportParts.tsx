@@ -208,6 +208,67 @@ export function SplitBar({ report, currency }: { report: ReportsSummary; currenc
   );
 }
 
+export function BreakEvenCard({ report, currency }: { report: ReportsSummary; currency?: string }) {
+  const be = report.break_even;
+  const when = report.period === "week" ? "this week" : report.period === "month" ? "this month" : "last month";
+  const parts: [string, number | null][] = [
+    ["Rent", be.parts.rent],
+    ["Labour", be.parts.labour],
+    ["Utilities", be.parts.utilities],
+    ["Other", be.parts.other],
+  ];
+  const shown = parts.filter(([, v]) => v !== null && v > 0);
+  const need = be.sales_needed_period;
+  const covered = need !== null && need > 0 ? Math.min(100, (be.sales_this_period / need) * 100) : 0;
+  return (
+    <section className="card rp-card">
+      <h2 style={{ ...sectionHeadStyle, marginBottom: 4 }}>Break-even on monthly overhead</h2>
+      {!be.configured ? (
+        <p className="muted" style={{ margin: 0 }}>
+          Add your monthly overhead (rent, labour, utilities) in Settings → Locations to see how much you need to sell
+          each month to cover it.
+        </p>
+      ) : be.sales_needed_month === null || need === null ? (
+        <p className="muted" style={{ margin: 0 }}>
+          Monthly overhead is {formatMoney(be.monthly_overhead ?? 0, currency, 0)}. Break-even needs sales in this
+          period to work out your margin; none are recorded yet.
+        </p>
+      ) : (
+        <>
+          <div className="be-head">
+            <span className="be-big">{formatMoney(be.sales_needed_month, currency, 0)}</span>
+            <span className="muted">of sales needed each month</span>
+          </div>
+          <p className="rp-hint">
+            Covers {formatMoney(be.monthly_overhead ?? 0, currency, 0)} of monthly overhead at your{" "}
+            {pct(be.gross_profit_pct)} gross profit (what is left of sales after ingredient cost).
+          </p>
+          <div className="be-bar" role="img" aria-label={`Sales ${when} against the break-even amount`}>
+            <div className={`be-fill ${covered >= 100 ? "met" : ""}`} style={{ width: `${covered}%` }} />
+          </div>
+          <div className="be-line">
+            <span>
+              Sales {when}: <b>{formatMoney(be.sales_this_period, currency, 0)}</b>
+            </span>
+            <span>
+              Needed {when}: <b>{formatMoney(need, currency, 0)}</b>
+              {be.sales_this_period >= need ? " · covered" : ""}
+            </span>
+          </div>
+          {shown.length > 0 && (
+            <p className="rp-hint">
+              Monthly overhead: {shown.map(([k, v]) => `${k} ${formatMoney(v ?? 0, currency, 0)}`).join(" · ")}
+            </p>
+          )}
+          {report.zero_cost_items.length > 0 && (
+            <p className="rp-hint">Some ingredient costs are missing, so the real amount needed is likely higher.</p>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 export function MenuTable({
   rows,
   currency,

@@ -129,12 +129,16 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "On the recipe's Ingredients tab click Edit at the end of the line. The quantity becomes a box you can change; click Save to keep it, Cancel to leave it as it was, or Delete to remove the ingredient from the recipe. You do not need to remove it and add it again. When you add a new ingredient, the quantity box goes back to a starting value each time you pick a different item, so the previous item's quantity is not carried over.",
       },
       {
+        q: "Does a recipe's cost include overhead?",
+        a: "No. The cost on a recipe, in Items and in the cost target is ingredient cost only: what the ingredients cost at the supplier prices you have on file. Rent, staff and energy are not spread over each plate, because what a plate really costs in energy and time varies too much to be accurate. Those costs are covered by your monthly overhead in Settings, which is used for the net margin on End of day and the break-even on Reports.",
+      },
+      {
         q: "How do I copy a recipe to make a variation?",
         a: "Open the recipe and click Duplicate at the top, beside its name (managers and admins). A copy opens straight away, named like Brown Sugar Latte 2, with the name selected so you can type a new one. It has the same ingredients, sub-recipes, yield, menu price, group, category and cost target, so you only change what differs: edit quantities, add or remove ingredients. The original is not touched. The POS ID and the sales history stay with the original, so add the till code to the copy yourself if it has its own.",
       },
       {
         q: "Where do I set my food and drink cost targets?",
-        a: "An Admin goes to Settings and scrolls to the Locations card — each location has a Food target and a Drink target (%) next to its currency and overhead. Change them, save, and the colours and Cost breaching target list follow. They start at 30%. One dish can have its own target instead: open the recipe, go to Cost & margin and type it in Cost target %.",
+        a: "An Admin goes to Settings and scrolls to the Locations card — each location has a Food target and a Drink target (%) next to its currency. Change them, save, and the colours and Cost breaching target list follow. They start at 30%. One dish can have its own target instead: open the recipe, go to Cost & margin and type it in Cost target %.",
       },
     ],
   },
@@ -301,6 +305,10 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         q: "How do I create a purchase order?",
         a: "Go to Procurement in the sidebar and click + New purchase order, top right. Pick a supplier and add lines for the items you're ordering — it starts as a draft, and stays one until you click Mark as Sent.",
+      },
+      {
+        q: "How do I set my monthly overhead, and what is the break-even?",
+        a: "An Admin goes to Settings → Locations and fills in the Monthly overhead lines for each location: rent, labour or staff, utilities and other fixed costs, each as a monthly amount. The total is added up for you. A yearly cost, such as insurance, goes in as the yearly amount divided by 12. On Reports → Overview the Break-even card then shows how much you need to sell each month to cover that overhead at your gross profit (what is left of sales after ingredient cost), and sets it beside what you have sold in the period on screen. It needs some sales in the period to work out the margin. If a month looks short, check whether any ingredient costs are missing, as that makes the real amount needed higher.",
       },
       {
         q: "What does a printed or emailed purchase order show?",
@@ -587,7 +595,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     questions: [
       {
         q: "How do I change the currency for a location?",
-        a: "Go to Settings and scroll to the Locations card — an Admin can set each location's currency and monthly overhead there.",
+        a: "Go to Settings and scroll to the Locations card — an Admin can set each location's currency, food and drink targets and monthly overhead there. Overhead is entered per month in four lines (rent, labour, utilities, other fixed costs) and the total is added up for you.",
       },
       {
         q: "Where do I download the import template?",
@@ -615,7 +623,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I set my food and drink cost targets?",
-        a: "Settings → Locations card: each location has a Food target and a Drink target (%) beside its currency and overhead. Change them and save. They drive the green, orange and red cost colours and the Actions tab's Cost breaching target list, and start at 30%. A single dish can override them in its own Cost & margin tab (Cost target %); clear that box to follow these again.",
+        a: "Settings → Locations card: each location has a Food target and a Drink target (%) beside its currency. Change them and save. They drive the green, orange and red cost colours and the Actions tab's Cost breaching target list, and start at 30%. A single dish can override them in its own Cost & margin tab (Cost target %); clear that box to follow these again.",
       },
       {
         q: "How do I change my password?",

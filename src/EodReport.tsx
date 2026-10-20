@@ -303,7 +303,7 @@ function KpiHeader({ report, currency }: { report: EodReportData; currency?: str
         <div className="kv">{report.overhead_configured ? pct(c.net_margin_pct) : "—"}</div>
         <div className="ks">
           {report.overhead_configured
-            ? "after labour & overheads (est.)"
+            ? "after monthly overhead (est.)"
             : "set monthly overhead in Settings to see this"}
         </div>
       </section>
