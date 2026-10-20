@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   fetchRecipe,
   updateRecipe,
   deleteRecipe,
+  duplicateRecipe,
   login,
   createRecipeLine,
   deleteRecipeLine,
@@ -62,6 +63,10 @@ interface Props {
   backLabel?: string;
 }
 
+// Set just before opening a freshly duplicated recipe, so the page that opens
+// puts the cursor in the name and explains what it is. Read once on mount.
+let justCopied: { id: string; from: string } | null = null;
+
 export default function RecipeDetail({
   recipeId,
   readOnly = false,
@@ -84,8 +89,13 @@ export default function RecipeDetail({
   backLabel,
 }: Props) {
   const [recipe, setRecipe] = useState<Recipe | null>(null);
+  const [copiedFrom] = useState<string | null>(() => (justCopied && justCopied.id === recipeId ? justCopied.from : null));
+  const [duplicating, setDuplicating] = useState(false);
+  const nameRef = useRef<HTMLInputElement>(null);
   // History is for managers and admins only; everyone else just sees the details.
-  const [tab, setTab] = useState<RecipeTab>(initialTab === "history" && readOnly ? "ingredients" : initialTab ?? "ingredients");
+  const [tab, setTab] = useState<RecipeTab>(
+    copiedFrom ? "ingredients" : initialTab === "history" && readOnly ? "ingredients" : initialTab ?? "ingredients"
+  );
   const [error, setError] = useState<string | null>(null);
   // Recipe cost/menu price are org-wide, not tied to one location — falls
   // back to the org's first location's currency (see defaultCurrency's own
@@ -167,6 +177,31 @@ export default function RecipeDetail({
     if (preselectSubId && subRecipeChoices.some((r) => r.id === preselectSubId)) setAddSubId(preselectSubId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preselectSubId, subRecipeChoices.length]);
+
+  // A just-made copy opens with the name selected, ready to be renamed.
+  useEffect(() => {
+    if (recipe && copiedFrom && justCopied?.id === recipe.id) {
+      justCopied = null;
+      nameRef.current?.focus();
+      nameRef.current?.select();
+    }
+  }, [recipe, copiedFrom]);
+
+  async function handleDuplicate() {
+    if (!recipe) return;
+    setError(null);
+    setDuplicating(true);
+    try {
+      const copy = await duplicateRecipe(accessToken, recipe.id);
+      justCopied = { id: copy.id, from: recipe.name };
+      onChanged();
+      onOpenRecipe(copy.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not duplicate this recipe.");
+    } finally {
+      setDuplicating(false);
+    }
+  }
 
   async function saveField(patch: Parameters<typeof updateRecipe>[2]) {
     if (!recipe) return;
@@ -384,10 +419,18 @@ export default function RecipeDetail({
         </p>
       )}
 
+      {copiedFrom && (
+        <p className="return-banner">
+          This is a copy of <b>{copiedFrom}</b>. Rename it, then change quantities or add ingredients; the original is
+          not touched.
+        </p>
+      )}
+
       {readOnly && <p className="ro-banner">View only — changes to recipes need a manager or admin.</p>}
       <fieldset className="ro-fieldset" disabled={readOnly}>
       <div className="detail-head">
         <input
+          ref={nameRef}
           className="name-edit"
           value={recipe.name}
           onChange={(e) => setRecipe({ ...recipe, name: e.target.value })}
@@ -399,6 +442,12 @@ export default function RecipeDetail({
           <span className="archived-badge" title="Archived: kept for history, hidden from End of day and the other lists">
             Archived
           </span>
+        )}
+        {!readOnly && (
+          <button type="button" className="dup-btn" disabled={duplicating} onClick={handleDuplicate}
+            title="Make a copy of this recipe to change, without touching this one">
+            {duplicating ? "Copying…" : "Duplicate"}
+          </button>
         )}
       </div>
       <p className="muted detail-sub">

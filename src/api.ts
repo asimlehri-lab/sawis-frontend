@@ -741,6 +741,19 @@ export async function updateRecipe(accessToken: string, id: string, patch: Recip
   return res.json();
 }
 
+// A copy of a recipe (ingredients, yield, price, group, category, cost
+// target) named "<name> 2", "<name> 3", ... The POS ID and sales history stay
+// with the original.
+export async function duplicateRecipe(accessToken: string, id: string): Promise<Recipe> {
+  const res = await fetch(`${API_URL}/api/catalog/recipes/${id}/duplicate/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: "{}",
+  });
+  if (!res.ok) throw new Error("Could not duplicate this recipe.");
+  return res.json();
+}
+
 export async function deleteRecipe(accessToken: string, id: string): Promise<void> {
   const res = await fetch(`${API_URL}/api/catalog/recipes/${id}/`, {
     method: "DELETE",

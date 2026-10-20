@@ -1468,6 +1468,14 @@ nav {
 .name-edit:focus { background: var(--surface); border-color: var(--border); outline: none; }
 
 .detail-sub { margin-bottom: 16px; }
+.dup-btn { font-family: inherit; font-size: 13px; font-weight: 600; line-height: 1.2; padding: 7px 14px; margin: 0 0 0 10px; width: auto; flex: none; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.dup-btn:hover { border-color: var(--brand); }
+.dup-btn:disabled { opacity: .6; cursor: default; }
+@media (max-width: 520px) {
+  .detail-head { flex-wrap: wrap; gap: 8px; }
+  .detail-head .name-edit { flex: 1 1 100%; }
+  .detail-head .dup-btn { margin-left: auto; }
+}
 
 .det-grid {
   display: grid;

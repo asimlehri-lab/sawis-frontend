@@ -129,6 +129,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "On the recipe's Ingredients tab click Edit at the end of the line. The quantity becomes a box you can change; click Save to keep it, Cancel to leave it as it was, or Delete to remove the ingredient from the recipe. You do not need to remove it and add it again. When you add a new ingredient, the quantity box goes back to a starting value each time you pick a different item, so the previous item's quantity is not carried over.",
       },
       {
+        q: "How do I copy a recipe to make a variation?",
+        a: "Open the recipe and click Duplicate at the top, beside its name (managers and admins). A copy opens straight away, named like Brown Sugar Latte 2, with the name selected so you can type a new one. It has the same ingredients, sub-recipes, yield, menu price, group, category and cost target, so you only change what differs: edit quantities, add or remove ingredients. The original is not touched. The POS ID and the sales history stay with the original, so add the till code to the copy yourself if it has its own.",
+      },
+      {
         q: "Where do I set my food and drink cost targets?",
         a: "An Admin goes to Settings and scrolls to the Locations card — each location has a Food target and a Drink target (%) next to its currency and overhead. Change them, save, and the colours and Cost breaching target list follow. They start at 30%. One dish can have its own target instead: open the recipe, go to Cost & margin and type it in Cost target %.",
       },
