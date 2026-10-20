@@ -76,6 +76,21 @@ function formatQty(n: number): string {
   return parseFloat(n.toFixed(2)).toString();
 }
 
+// What a PO line looks like on paper or in an email: the quantity in the unit
+// it was ordered in (the supplier's carton/bag/kg when one is recorded, else
+// the item's own unit), the price for ONE of that unit, and the line total.
+// A line's stored unit_price is per base unit, so with a supplier unit the
+// price shown is the line total divided by the ordered quantity.
+function poLineFigures(
+  l: { qty: string; unit_price: string; line_total: string; supplier_unit: string; supplier_qty: string | null },
+  baseUnit: string
+): { qty: string; unit: string; unitPrice: number; total: number } {
+  const total = Number(l.line_total);
+  const sq = l.supplier_unit && l.supplier_qty != null ? Number(l.supplier_qty) : 0;
+  if (sq > 0) return { qty: formatQty(sq), unit: l.supplier_unit, unitPrice: total / sq, total };
+  return { qty: formatQty(Number(l.qty)), unit: baseUnit, unitPrice: Number(l.unit_price), total };
+}
+
 // "1.2 MB" / "480 KB" / "900 B" -- attachments are photos/PDFs, not
 // something a user needs byte-precision on, just a sanity-check size.
 function formatBytes(n: number): string {
@@ -334,7 +349,11 @@ export default function ProcurementDetail({
       );
       const poNumberLine = po.po_number ? `PO number: ${po.po_number}%0D%0A%0D%0A` : "";
       const bodyLines = po.lines
-        .map((l) => `${Number(l.qty).toFixed(2)} × ${l.item_name} @ ${formatMoney(Number(l.unit_price), currency)}`)
+        .map((l) => {
+          const f = poLineFigures(l, items.find((it) => it.id === l.item)?.base_unit ?? "");
+          const line = `${f.qty}${f.unit ? ` ${f.unit}` : ""} × ${l.item_name} @ ${formatMoney(f.unitPrice, currency, f.unitPrice < 0.1 ? 4 : 2)}${f.unit ? ` per ${f.unit}` : ""} = ${formatMoney(f.total, currency)}`;
+          return encodeURIComponent(line);
+        })
         .join("%0D%0A");
       window.open(
         `mailto:${supplier.contact_email}?subject=${subject}&body=${poNumberLine}${bodyLines}%0D%0A%0D%0ATotal: ${formatMoney(Number(po.total), currency)}`,
@@ -958,19 +977,24 @@ export default function ProcurementDetail({
               <tr>
                 <th>Item</th>
                 <th>Qty</th>
+                <th>Unit</th>
                 <th>Unit price</th>
                 <th>Line total (ex VAT)</th>
               </tr>
             </thead>
             <tbody>
-              {po.lines.map((l) => (
-                <tr key={l.id}>
-                  <td>{l.item_name}</td>
-                  <td>{Number(l.qty).toFixed(2)}</td>
-                  <td>{formatMoney(Number(l.unit_price), currency)}</td>
-                  <td>{formatMoney(Number(l.line_total), currency)}</td>
-                </tr>
-              ))}
+              {po.lines.map((l) => {
+                const f = poLineFigures(l, items.find((it) => it.id === l.item)?.base_unit ?? "");
+                return (
+                  <tr key={l.id}>
+                    <td>{l.item_name}</td>
+                    <td>{f.qty}</td>
+                    <td>{f.unit || "—"}</td>
+                    <td>{formatMoney(f.unitPrice, currency, f.unitPrice < 0.1 ? 4 : 2)}</td>
+                    <td>{formatMoney(f.total, currency)}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

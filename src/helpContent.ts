@@ -303,6 +303,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "Go to Procurement in the sidebar and click + New purchase order, top right. Pick a supplier and add lines for the items you're ordering — it starts as a draft, and stays one until you click Mark as Sent.",
       },
       {
+        q: "What does a printed or emailed purchase order show?",
+        a: "Each line shows the item, the quantity, the unit it is ordered in (carton, bag, kg and so on), the price for one of that unit, and the line total before VAT. Under the lines you get the total before and after VAT. The email lists the same figures line by line, with the PO number first.",
+      },
+      {
         q: "How do I mark a PO as received?",
         a: "Open the PO from Procurement and click Mark as Received (it needs to already be Sent first — the button label follows the PO's status, so it reads Mark as Sent until then). Receiving opens a Receiving delivery panel where you can set the date it arrived (Received on, today unless you change it, never a future date) and type the supplier's invoice number, check the delivery against a photo (see Scan delivery below), and amend what actually arrived. Confirming records the stock coming in and, if a price differs from what's on file, updates that supplier's price for the item.",
       },
