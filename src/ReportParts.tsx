@@ -237,11 +237,14 @@ export function BreakEvenCard({ report, currency }: { report: ReportsSummary; cu
         <>
           <div className="be-head">
             <span className="be-big">{formatMoney(be.sales_needed_month, currency, 0)}</span>
-            <span className="muted">of sales needed each month</span>
+            <span className="muted">of sales needed each month to break even</span>
           </div>
           <p className="rp-hint">
-            Covers {formatMoney(be.monthly_overhead ?? 0, currency, 0)} of monthly overhead at your{" "}
-            {pct(be.gross_profit_pct)} gross profit (what is left of sales after ingredient cost).
+            Of every {currencySymbol(currency)}1 you sell, {currencySymbol(currency)}
+            {((be.gross_profit_pct ?? 0) / 100).toFixed(2)} is left after ingredients. To cover your{" "}
+            {formatMoney(be.monthly_overhead ?? 0, currency, 0)} of monthly overhead you need{" "}
+            {formatMoney(be.monthly_overhead ?? 0, currency, 0)} ÷ {((be.gross_profit_pct ?? 0) / 100).toFixed(2)} ={" "}
+            {formatMoney(be.sales_needed_month, currency, 0)} in sales.
           </p>
           <div className="be-bar" role="img" aria-label={`Sales ${when} against the break-even amount`}>
             <div className={`be-fill ${covered >= 100 ? "met" : ""}`} style={{ width: `${covered}%` }} />
@@ -255,6 +258,11 @@ export function BreakEvenCard({ report, currency }: { report: ReportsSummary; cu
               {be.sales_this_period >= need ? " · covered" : ""}
             </span>
           </div>
+          <p className={`be-result ${covered >= 100 ? "good" : "short"}`}>
+            {be.sales_this_period >= need
+              ? `${formatMoney(((be.sales_this_period - need) * (be.gross_profit_pct ?? 0)) / 100, currency, 0)} left ${when} after ingredients and monthly overhead.`
+              : `${formatMoney(need - be.sales_this_period, currency, 0)} more in sales needed ${when} to break even.`}
+          </p>
           {shown.length > 0 && (
             <p className="rp-hint">
               Monthly overhead: {shown.map(([k, v]) => `${k} ${formatMoney(v ?? 0, currency, 0)}`).join(" · ")}
