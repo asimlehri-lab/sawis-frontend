@@ -125,6 +125,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "On the recipe's Ingredients tab: under the list of ingredients, the Total cost of ingredients row adds up every line for one full batch, and when the batch makes more than one plate or portion a Cost per plate row beneath it divides that by the yield. A line tagged target cost has no supplier price yet, so it is counted at the item's target cost.",
       },
       {
+        q: "How do I change the quantity of an ingredient in a recipe?",
+        a: "On the recipe's Ingredients tab click Edit at the end of the line. The quantity becomes a box you can change; click Save to keep it, Cancel to leave it as it was, or Delete to remove the ingredient from the recipe. You do not need to remove it and add it again. When you add a new ingredient, the quantity box goes back to a starting value each time you pick a different item, so the previous item's quantity is not carried over.",
+      },
+      {
         q: "Where do I set my food and drink cost targets?",
         a: "An Admin goes to Settings and scrolls to the Locations card — each location has a Food target and a Drink target (%) next to its currency and overhead. Change them, save, and the colours and Cost breaching target list follow. They start at 30%. One dish can have its own target instead: open the recipe, go to Cost & margin and type it in Cost target %.",
       },
@@ -296,7 +300,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I mark a PO as received?",
-        a: "Open the PO from Procurement and click Mark as Received (it needs to already be Sent first — the button label follows the PO's status, so it reads Mark as Sent until then). Receiving opens a Receiving delivery panel where you can type the supplier's invoice number, check the delivery against a photo (see Scan delivery below), and amend what actually arrived. Confirming records the stock coming in and, if a price differs from what's on file, updates that supplier's price for the item.",
+        a: "Open the PO from Procurement and click Mark as Received (it needs to already be Sent first — the button label follows the PO's status, so it reads Mark as Sent until then). Receiving opens a Receiving delivery panel where you can set the date it arrived (Received on, today unless you change it, never a future date) and type the supplier's invoice number, check the delivery against a photo (see Scan delivery below), and amend what actually arrived. Confirming records the stock coming in and, if a price differs from what's on file, updates that supplier's price for the item.",
       },
       {
         q: "Can I delete a purchase order?",
@@ -304,7 +308,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I scan a receipt to create a PO?",
-        a: "From Procurement, click 📷 Scan receipt (next to 🏬 Suppliers, top of the page — managers and above), take or choose a photo of the invoice, and review the matched items and quantities before confirming — nothing is saved until you confirm. Each row has an Invoiced in menu: the unit the supplier already uses for that item is chosen for you, and you can switch it (or add a new pack size) if the invoice says carton, case or kg.",
+        a: "From Procurement, click 📷 Scan receipt (next to 🏬 Suppliers, top of the page — managers and above), take or choose a photo of the invoice, and review the matched items and quantities before confirming — nothing is saved until you confirm. Each row has an Invoiced in menu: the unit the supplier already uses for that item is chosen for you, and you can switch it (or add a new pack size) if the invoice says carton, case or kg. On each row Qty sits beside Invoiced in, and Unit price beside VAT %. If your business has only one location it is filled in for you, so there is nothing to pick. A Received on date (today by default, with a shortcut to use the invoice date) is recorded as the day the stock came in.",
         fact: "💡 If the invoice matches a purchase order you've already got open with that supplier, SAWIS spots it and offers to receive against that existing PO instead of creating a duplicate one.",
       },
       {
@@ -360,7 +364,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "What is a stock unit, and how do I count in bags or boxes?",
-        a: "A stock unit is a way an item sits on your shelf besides its base unit — for example a bag that holds 1000 g, or a case of 24. Open the item and add them in the Stock units box inside Stock by department with + Add a stock unit: it suggests common names for the item (bag, box, case), and you give the size in whichever unit suits you, such as 2 kg or 1.5 L, and see the sum before you save; an item can have several (a sack in dry storage, a tub at the counter). Then go to Inventory → Manage sections, edit a section, tick the item and pick the unit that section counts it in (an item in two sections can use a different unit in each). On the count sheet the item shows one box in that unit, so you type 5 for five bags. If part of a bag, tin or carton is open, tap the + beside the box to add another line, pick its unit (grams, cans or another of the item's units) and type that number. A grey line under the row adds it up, for example 5 bag + 250 g = 5,250 g. Everything is still saved as one total in the base unit, so costs, recipes and history do not change. If a section has no unit chosen it counts in the base unit, and + is still there when the item has other units. On the item page, the Suppliers & last prices section has a Sold as menu per supplier so you can say which of the stock units that supplier sells it in. Managers and admins can add and choose stock units; staff can use them when counting.",
+        a: "A stock unit is a way an item sits on your shelf besides its base unit — for example a bag that holds 1000 g, or a case of 24. Open the item and add them in the Stock units box inside Stock by department with + Add a stock unit: it suggests common names for the item (bag, box, case), and you give the size in whichever unit suits you, such as 2 kg or 1.5 L, and see the sum before you save; an item can have several (a sack in dry storage, a tub at the counter). To rename one, change its size or remove it, click Edit beside it. Then go to Inventory → Manage sections, edit a section, tick the item and pick the unit that section counts it in (an item in two sections can use a different unit in each). On the count sheet the item shows one box in that unit, so you type 5 for five bags. If part of a bag, tin or carton is open, tap the + beside the box to add another line, pick its unit (grams, cans or another of the item's units) and type that number. A grey line under the row adds it up, for example 5 bag + 250 g = 5,250 g. Everything is still saved as one total in the base unit, so costs, recipes and history do not change. If a section has no unit chosen it counts in the base unit, and + is still there when the item has other units. On the item page, the Suppliers & last prices section has a Sold as menu per supplier so you can say which of the stock units that supplier sells it in. Managers and admins can add and choose stock units; staff can use them when counting.",
       },
       {
         q: "What is the target cost on an item?",
@@ -372,7 +376,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "I saved the wrong pack size — how do I change it?",
-        a: "Open the item and go to the Stock tab (one tab along from Suppliers). The Stock units box lists every pack the item has, such as 1 Pkg = 25 ea. Click the number, type the right one (30, say) and click away; it saves by itself. You can rename a pack the same way, or remove it with the × beside it. The Sold as menu on the Suppliers tab shows the new size straight away. Orders and invoices you have already saved keep the figures they were saved with, but any section that counts the item in that pack will use the new size from now on. Only managers and admins can edit stock units.",
+        a: "Open the item and go to the Stock tab (one tab along from Suppliers). The Stock units box lists every pack the item has, such as 1 Pkg = 25 ea. Click Edit beside the pack, change its name or the number of base units it holds (30, say), then click Save. Delete in the same row removes the pack, and Cancel leaves it as it was. The Sold as menu on the Suppliers tab shows the new size straight away. Orders and invoices you have already saved keep the figures they were saved with, but any section that counts the item in that pack will use the new size from now on. Only managers and admins can edit stock units.",
       },
       {
         q: "Can one item be kept in more than one section?",

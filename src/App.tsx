@@ -22,6 +22,8 @@ import {
   updatePurchaseOrder,
   createPOLine,
   receivePurchaseOrder,
+  todayIso,
+  invoiceDateToIso,
   scanReceipt,
   uploadPOAttachment,
   fetchItemSuppliers,
@@ -845,6 +847,11 @@ export default function App() {
   const [scanResult, setScanResult] = useState<ScannedReceipt | null>(null);
   const [scanSupplierId, setScanSupplierId] = useState("");
   const [scanLocationId, setScanLocationId] = useState("");
+  // With only one location there is nothing to choose: use it and hide the
+  // "Deliver to" pickers.
+  const soleLocationId = locations.length === 1 ? locations[0].id : "";
+  const scanLocation = scanLocationId || soleLocationId;
+  const poLocation = newPOLocation || soleLocationId;
   const [scanRows, setScanRows] = useState<ScanRow[]>([]);
   // Editable, pre-filled from Textract's own INVOICE_RECEIPT_ID read (see
   // scanReceipt's response) -- shown as a real input in the review modal
@@ -853,6 +860,8 @@ export default function App() {
   // same "detect, then let the user confirm" pattern as the item/supplier
   // matches on this same modal.
   const [scanInvoiceNumberInput, setScanInvoiceNumberInput] = useState("");
+  // The day the goods arrived (today unless changed).
+  const [scanReceivedDate, setScanReceivedDate] = useState(todayIso());
   const [creatingPOFromScan, setCreatingPOFromScan] = useState(false);
   const [scanCreateError, setScanCreateError] = useState<string | null>(null);
   // Set once the PO + lines are actually created, before the "mark as
@@ -1417,13 +1426,13 @@ export default function App() {
 
   async function handleCreatePO(e: React.FormEvent) {
     e.preventDefault();
-    if (!accessToken || !newPOSupplier || !newPOLocation) return;
+    if (!accessToken || !newPOSupplier || !poLocation) return;
     setNewPOError(null);
     setSavingPO(true);
     try {
       const created = await createPurchaseOrder(accessToken, {
         supplier: newPOSupplier,
-        location: newPOLocation,
+        location: poLocation,
         expected_date: newPOExpected || null,
       });
       setShowNewPO(false);
@@ -1446,6 +1455,7 @@ export default function App() {
     setScanLocationId("");
     setScanRows([]);
     setScanInvoiceNumberInput("");
+    setScanReceivedDate(todayIso());
     setScanCreateError(null);
     setScanShowNewSupplier(false);
     setScanNewSupplierName("");
@@ -1759,7 +1769,7 @@ export default function App() {
     invoiceNumber?: string | null
   ) {
     await updatePurchaseOrder(accessToken as string, po.id, { status: "sent" });
-    await receivePurchaseOrder(accessToken as string, po.id, overrides, invoiceNumber);
+    await receivePurchaseOrder(accessToken as string, po.id, overrides, invoiceNumber, scanReceivedDate || null);
     // receive() above teaches ItemSupplier the supplier's unit/pack for
     // every overridden line (see PurchaseOrderViewSet.receive), but
     // itemSupplierLinks in state is only ever (re)fetched on page-load --
@@ -1867,7 +1877,7 @@ export default function App() {
       return;
     }
 
-    if (!scanSupplierId || !scanLocationId) return;
+    if (!scanSupplierId || !scanLocation) return;
     setScanCreateError(null);
     setCreatingPOFromScan(true);
     try {
@@ -1877,7 +1887,7 @@ export default function App() {
       // new PO-creation logic.
       const created = await createPurchaseOrder(accessToken, {
         supplier: scanSupplierId,
-        location: scanLocationId,
+        location: scanLocation,
         expected_date: null,
       });
       const overrides: ReceiveLineOverride[] = [];
@@ -3167,9 +3177,9 @@ export default function App() {
                   ))}
                 </select>
               </label>
-              <label>
+              <label style={soleLocationId ? { display: "none" } : undefined}>
                 Deliver to
-                <select value={newPOLocation} onChange={(e) => setNewPOLocation(e.target.value)} required>
+                <select value={poLocation} onChange={(e) => setNewPOLocation(e.target.value)} required={!soleLocationId}>
                   <option value="">Choose a location…</option>
                   {locations.map((l) => (
                     <option key={l.id} value={l.id}>
@@ -3304,7 +3314,7 @@ export default function App() {
                       }.`
                     : "No vendor name detected — pick the supplier below."}{" "}
                   {scanResult.total &&
-                    `Receipt total: ${currencySymbol(locations.find((l) => l.id === scanLocationId)?.currency)}${scanResult.total}.`}
+                    `Receipt total: ${currencySymbol(locations.find((l) => l.id === scanLocation)?.currency)}${scanResult.total}.`}
                 </div>
 
                 {scanSupplierNote && (
@@ -3417,9 +3427,9 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="field" style={{ marginBottom: 12, display: scanUseMatchedPO ? "none" : undefined }}>
+                <div className="field" style={{ marginBottom: 12, display: scanUseMatchedPO || soleLocationId ? "none" : undefined }}>
                   <label>Deliver to</label>
-                  <select value={scanLocationId} onChange={(e) => setScanLocationId(e.target.value)} required>
+                  <select value={scanLocation} onChange={(e) => setScanLocationId(e.target.value)} required={!soleLocationId}>
                     <option value="">Choose a location…</option>
                     {locations.map((l) => (
                       <option key={l.id} value={l.id}>
@@ -3427,6 +3437,27 @@ export default function App() {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div className="field" style={{ marginBottom: 12, maxWidth: 220 }}>
+                  <label>Received on</label>
+                  <input
+                    type="date"
+                    value={scanReceivedDate}
+                    max={todayIso()}
+                    onChange={(e) => setScanReceivedDate(e.target.value)}
+                  />
+                  {(() => {
+                    const inv = invoiceDateToIso(scanResult.date);
+                    return inv && inv !== scanReceivedDate ? (
+                      <p className="hint" style={{ marginTop: 4 }}>
+                        Invoice dated {inv}.{" "}
+                        <button type="button" className="link-btn" onClick={() => setScanReceivedDate(inv)}>
+                          Use that date
+                        </button>
+                      </p>
+                    ) : null;
+                  })()}
                 </div>
 
                 <div className="field" style={{ marginBottom: 12 }}>
@@ -3575,28 +3606,11 @@ export default function App() {
                                   {scanNewItemError && <p className="error">{scanNewItemError}</p>}
                                 </div>
                               )}
-                              {matchedItem && !row.skip && (
-                                <SupplierUnitPicker
-                                  key={`${i}-${matchedItem.id}`}
-                                  item={matchedItem}
-                                  unit={row.supplierUnit}
-                                  packQty={row.packQty}
-                                  accessToken={accessToken ?? ""}
-                                  label="Invoiced in"
-                                  suggestName={row.printedUnit && row.printedUnit.toLowerCase() !== matchedItem.base_unit.toLowerCase() ? row.printedUnit : undefined}
-                                  onChange={(c) => updateScanRow(i, { supplierUnit: c.unit, packQty: c.packQty })}
-                                  onUnitAdded={() => accessToken && loadItems(accessToken)}
-                                />
-                              )}
                             </div>
 
                             <div className="scan-row-nums">
                               <div className="field">
-                                <label>
-                                  {row.supplierUnit && row.supplierUnit !== matchedItem?.base_unit
-                                    ? `Qty received (in ${row.supplierUnit})`
-                                    : "Qty"}
-                                </label>
+                                <label>Qty</label>
                                 <input
                                   type="number"
                                   min="0"
@@ -3606,6 +3620,22 @@ export default function App() {
                                   disabled={row.skip}
                                 />
                               </div>
+                              <SupplierUnitPicker
+                                key={`${i}-${matchedItem?.id ?? "none"}`}
+                                item={matchedItem}
+                                unit={row.supplierUnit}
+                                packQty={row.packQty}
+                                accessToken={accessToken ?? ""}
+                                label="Invoiced in"
+                                disabled={row.skip}
+                                suggestName={
+                                  matchedItem && !row.skip && row.printedUnit && row.printedUnit.toLowerCase() !== matchedItem.base_unit.toLowerCase()
+                                    ? row.printedUnit
+                                    : undefined
+                                }
+                                onChange={(c) => updateScanRow(i, { supplierUnit: c.unit, packQty: c.packQty })}
+                                onUnitAdded={() => accessToken && loadItems(accessToken)}
+                              />
                               <div className="field">
                                 <label>
                                   {row.supplierUnit && row.supplierUnit !== matchedItem?.base_unit
@@ -3738,7 +3768,7 @@ export default function App() {
                       disabled={
                         creatingPOFromScan ||
                         scanIncludedRows.length === 0 ||
-                        (scanUseMatchedPO ? !scanMatchedPO : !scanSupplierId || !scanLocationId)
+                        (scanUseMatchedPO ? !scanMatchedPO : !scanSupplierId || !scanLocation)
                       }
                     >
                       {creatingPOFromScan

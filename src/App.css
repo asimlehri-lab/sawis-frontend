@@ -2147,7 +2147,9 @@ input[type="file"] {
 .scan-row-card .field { margin-bottom: 0; }
 .scan-row-card .field label { margin-bottom: 3px; }
 .scan-row-nums { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 6px; }
-@media (max-width: 420px) { .scan-row-nums { grid-template-columns: 1fr; } }
+/* Qty beside Invoiced in, Unit price beside VAT %, on every screen width. */
+.scan-row-nums { align-items: start; }
+.scan-row-nums .sup-unit { margin-top: 0; }
 /* The real converted total for a supplier pack/unit line -- sits right
    under the Qty/Price inputs the user just typed into (see App.tsx's
    comment above its usage), not tucked inside the collapsed pack-settings
@@ -2175,7 +2177,7 @@ input[type="file"] {
 .sup-unit-new.inline .sup-unit-new-row .sup-unit-name { flex: 0 1 130px; }
 .sup-unit-new.inline .sup-unit-new-row select.sup-unit-qtyunit { flex: 0 1 150px; }
 .sup-unit-new.inline .sup-unit-new-actions { margin: 0 0 0 auto; }
-.scan-row-card .sup-unit { margin-top: 8px; }
+.scan-row-card .sup-unit { margin-top: 0; }
 .scan-qty-note { margin: 6px 0 0; padding: 6px 10px; border-radius: 8px; background: var(--caution-soft); color: var(--ink); font-size: 13px; }
 .scan-read { margin: 0 0 12px; }
 .scan-read summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
@@ -3488,3 +3490,27 @@ button.rp-gcard:hover { border-color: var(--muted); }
   .rp-print table { margin-top: 6px; }
   .rp-print-foot { display: flex; justify-content: space-between; margin-top: 18px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 10px; color: var(--muted); }
 }
+
+/* Ingredient line edit mode (RecipeDetail) */
+.ing-actions { white-space: nowrap; text-align: right; }
+.ing-actions > * { margin-left: 6px; }
+.ing-edit-qty { display: inline-flex; align-items: center; gap: 6px; }
+.ing-edit-qty input { width: 90px; font-family: var(--mono, monospace); font-size: 13px; text-align: right; border: 1.5px solid var(--brand); border-radius: 8px; padding: 5px 8px; background: var(--surface); }
+.row-btn { font-family: inherit; font-size: 12.5px; font-weight: 600; line-height: 1.2; padding: 6px 12px; margin: 0; width: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.row-btn:hover { border-color: var(--brand); }
+.row-btn.save { background: var(--brand); border-color: var(--brand); color: #fff; }
+.row-btn.del { border-color: var(--brick); color: var(--brick); background: transparent; }
+.row-btn:disabled { opacity: .6; cursor: default; }
+/* Keep the Edit / Save / Cancel / Delete column inside the phone screen. */
+@media (max-width: 520px) {
+  .ing-tbl th, .ing-tbl td { padding-left: 3px; padding-right: 3px; }
+  .ing-tbl td { font-size: 12px; }
+  .ing-tbl th { font-size: 10px; letter-spacing: 0; }
+  .ing-actions .row-btn { padding: 4px 8px; font-size: 12px; }
+  .ing-actions { white-space: normal; }
+  .ing-actions > * { margin: 0 0 4px 0; display: block; margin-left: auto; }
+  .ing-edit-qty input { width: 58px; padding: 5px 4px; }
+}
+.addrow-unit { align-self: center; min-width: 28px; font-size: 12.5px; }
+.su-editing { padding: 8px 10px; background: var(--bg); border-radius: 10px; }
+.su-edit-actions { display: inline-flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }

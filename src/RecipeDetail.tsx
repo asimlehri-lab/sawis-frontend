@@ -6,6 +6,7 @@ import {
   login,
   createRecipeLine,
   deleteRecipeLine,
+  updateRecipeLine,
   createItem,
   BASE_UNITS,
   YIELD_UNITS,
@@ -96,6 +97,10 @@ export default function RecipeDetail({
   const [addSubId, setAddSubId] = useState("");
   const [addSubQty, setAddSubQty] = useState("1");
   const [savingLine, setSavingLine] = useState(false);
+  // One ingredient line at a time can be opened for editing.
+  const [editLineId, setEditLineId] = useState<string | null>(null);
+  const [editQty, setEditQty] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // "+ New sub-recipe" inline form in the purple section.
 
@@ -119,6 +124,20 @@ export default function RecipeDetail({
   const [newItemSaving, setNewItemSaving] = useState(false);
   const [newItemError, setNewItemError] = useState<string | null>(null);
 
+  // A sensible starting amount for the item just picked, so the number from
+  // the previous ingredient never carries over: counted things start at 1,
+  // small units (g, ml) at 100, big ones (kg, L) at 0.1.
+  function defaultQtyFor(unit: string | undefined): string {
+    if (unit === "g" || unit === "ml") return "100";
+    if (unit === "kg" || unit === "L") return "0.1";
+    return "1";
+  }
+
+  function pickAddItem(id: string, list: CatalogItem[] = localItems) {
+    setAddItemId(id);
+    setAddItemQty(defaultQtyFor(list.find((i) => i.id === id)?.base_unit));
+  }
+
   function reload() {
     setError(null);
     fetchRecipe(accessToken, recipeId)
@@ -132,7 +151,7 @@ export default function RecipeDetail({
   }, [recipeId]);
 
   useEffect(() => {
-    if (items.length && !addItemId) setAddItemId(items[0].id);
+    if (items.length && !addItemId) pickAddItem(items[0].id, items);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items]);
 
@@ -207,6 +226,7 @@ export default function RecipeDetail({
         qty: addItemQty,
         unit: item.base_unit,
       });
+      setAddItemQty(defaultQtyFor(item.base_unit));
       reload();
       onChanged();
     } catch (err) {
@@ -235,6 +255,7 @@ export default function RecipeDetail({
       });
       setLocalItems((prev) => [...prev, created]);
       setAddItemId(created.id);
+      setAddItemQty(defaultQtyFor(created.base_unit));
       setNewItemOpen(false);
       setNewItemName("");
       onItemsChanged();
@@ -259,6 +280,7 @@ export default function RecipeDetail({
         qty: addSubQty,
         unit: sub.yield_unit,
       });
+      setAddSubQty("1");
       reload();
       onChanged();
     } catch (err) {
@@ -268,10 +290,36 @@ export default function RecipeDetail({
     }
   }
 
+  function startEditLine(lineId: string, qty: string) {
+    setEditLineId(lineId);
+    setEditQty(String(parseFloat(Number(qty).toFixed(4))));
+    setError(null);
+  }
+
+  async function handleSaveEditLine(lineId: string) {
+    if (!(Number(editQty) > 0)) {
+      setError("Enter an amount above zero, or use Delete to remove the ingredient.");
+      return;
+    }
+    setSavingEdit(true);
+    setError(null);
+    try {
+      await updateRecipeLine(accessToken, lineId, { qty: editQty });
+      setEditLineId(null);
+      reload();
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save the ingredient.");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   async function handleRemoveLine(lineId: string) {
     setError(null);
     try {
       await deleteRecipeLine(accessToken, lineId);
+      setEditLineId(null);
       reload();
       onChanged();
     } catch (err) {
@@ -520,14 +568,57 @@ export default function RecipeDetail({
                       )}
                     </td>
                     <td className="num">
-                      {Number(line.qty).toFixed(2)} {line.unit}
+                      {editLineId === line.id ? (
+                        <span className="ing-edit-qty">
+                          <input
+                            type="number"
+                            step="any"
+                            min="0"
+                            autoFocus
+                            aria-label={`Amount of ${line.item_name ?? line.sub_recipe_name ?? "ingredient"}`}
+                            value={editQty}
+                            onChange={(e) => setEditQty(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handleSaveEditLine(line.id);
+                              } else if (e.key === "Escape") {
+                                setEditLineId(null);
+                              }
+                            }}
+                          />
+                          {line.unit}
+                        </span>
+                      ) : (
+                        <>
+                          {parseFloat(Number(line.qty).toFixed(3))} {line.unit}
+                        </>
+                      )}
                     </td>
                     <td className="num">{formatMoney(Number(line.unit_cost), currency)}</td>
-                    <td className="num">{formatMoney(Number(line.line_cost), currency)}</td>
-                    <td>
-                      <button className="rm" onClick={() => handleRemoveLine(line.id)}>
-                        ×
-                      </button>
+                    <td className="num">
+                      {editLineId === line.id
+                        ? formatMoney((Number(editQty) || 0) * Number(line.unit_cost), currency)
+                        : formatMoney(Number(line.line_cost), currency)}
+                    </td>
+                    <td className="ing-actions">
+                      {editLineId === line.id ? (
+                        <>
+                          <button type="button" className="row-btn save" disabled={savingEdit} onClick={() => handleSaveEditLine(line.id)}>
+                            {savingEdit ? "Saving…" : "Save"}
+                          </button>
+                          <button type="button" className="row-btn" onClick={() => setEditLineId(null)}>
+                            Cancel
+                          </button>
+                          <button type="button" className="row-btn del" onClick={() => handleRemoveLine(line.id)}>
+                            Delete
+                          </button>
+                        </>
+                      ) : (
+                        <button type="button" className="row-btn" onClick={() => startEditLine(line.id, line.qty)}>
+                          Edit
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -570,7 +661,7 @@ export default function RecipeDetail({
                       setNewItemUnit(BASE_UNITS[0]);
                       setNewItemError(null);
                     } else {
-                      setAddItemId(val);
+                      pickAddItem(val);
                     }
                   }}
                 />
@@ -582,6 +673,7 @@ export default function RecipeDetail({
                     value={addItemQty}
                     onChange={(e) => setAddItemQty(e.target.value)}
                   />
+                  <span className="muted addrow-unit">{localItems.find((i) => i.id === addItemId)?.base_unit}</span>
                   <button className="add-btn" disabled={savingLine || !localItems.length} onClick={handleAddItem}>
                     + Add
                   </button>
@@ -628,7 +720,10 @@ export default function RecipeDetail({
                 <div className="addrow">
                   <SearchSelect
                     value={addSubId}
-                    onChange={setAddSubId}
+                    onChange={(id) => {
+                      setAddSubId(id);
+                      setAddSubQty("1");
+                    }}
                     aria-label="Add a sub-recipe"
                     options={subRecipeChoices.map((r) => ({
                       value: r.id,

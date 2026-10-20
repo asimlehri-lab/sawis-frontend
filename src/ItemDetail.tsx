@@ -226,6 +226,11 @@ export default function ItemDetail({
   const [showAddUnit, setShowAddUnit] = useState(false);
   const [unitBusy, setUnitBusy] = useState(false);
   const [unitErr, setUnitErr] = useState<string | null>(null);
+  // The stock unit row open for editing (name, size, save or delete).
+  const [editUnitId, setEditUnitId] = useState<string | null>(null);
+  const [editUnitName, setEditUnitName] = useState("");
+  const [editUnitQty, setEditUnitQty] = useState("");
+  const [editUnitBusy, setEditUnitBusy] = useState(false);
   // Supplier row currently creating a brand-new stock unit from its "Sold as" menu.
   const [soldAsNewRow, setSoldAsNewRow] = useState<string | null>(null);
   const [unitNew, setUnitNew] = useState("kg");
@@ -658,16 +663,41 @@ export default function ItemDetail({
     if (created) setShowAddUnit(false);
   }
 
-  async function handleEditStockUnit(u: ItemStockUnit, patch: { name?: string; qty?: string }) {
-    if ((patch.name === undefined || patch.name.trim() === u.name) && (patch.qty === undefined || Number(patch.qty) === Number(u.qty))) return;
+  function startEditUnit(u: ItemStockUnit) {
+    setEditUnitId(u.id);
+    setEditUnitName(u.name);
+    setEditUnitQty(tidy(Number(u.qty)));
+    setUnitErr(null);
+  }
+
+  async function handleSaveUnitEdit(u: ItemStockUnit) {
+    const name = editUnitName.trim();
+    if (!name) {
+      setUnitErr("Give the stock unit a name.");
+      return;
+    }
+    if (!(Number(editUnitQty) > 0)) {
+      setUnitErr(`Say how many ${item?.base_unit ?? "units"} one ${name} holds.`);
+      return;
+    }
+    const patch: { name?: string; qty?: string } = {};
+    if (name !== u.name) patch.name = name;
+    if (Number(editUnitQty) !== Number(u.qty)) patch.qty = editUnitQty;
+    if (!Object.keys(patch).length) {
+      setEditUnitId(null);
+      return;
+    }
+    setEditUnitBusy(true);
     setUnitErr(null);
     try {
-      await updateItemStockUnit(accessToken, u.id, { ...patch, ...(patch.name !== undefined ? { name: patch.name.trim() } : {}) });
+      await updateItemStockUnit(accessToken, u.id, patch);
+      setEditUnitId(null);
       onChanged();
     } catch (err) {
       setUnitErr(err instanceof Error ? err.message : "Could not save the stock unit.");
     } finally {
-      reload(); // also puts the box back to the saved value if the edit was refused
+      setEditUnitBusy(false);
+      reload();
     }
   }
 
@@ -675,6 +705,7 @@ export default function ItemDetail({
     setUnitErr(null);
     try {
       await deleteItemStockUnit(accessToken, u.id);
+      setEditUnitId(null);
       reload();
       onChanged();
     } catch (err) {
@@ -1072,32 +1103,60 @@ export default function ItemDetail({
             </span>
           </div>
           {item.stock_units.length === 0 && <p className="muted su-none">No stock units yet.</p>}
-          {item.stock_units.map((u) => (
-            <div className="su-row" key={`${u.id}-${u.name}-${u.qty}`}>
-              <span>1</span>
-              <input
-                className="su-name"
-                defaultValue={u.name}
-                maxLength={20}
-                aria-label="Stock unit name"
-                onBlur={(e) => handleEditStockUnit(u, { name: e.target.value })}
-              />
-              <span>=</span>
-              <input
-                className="su-qty"
-                type="number"
-                min="0"
-                step="any"
-                defaultValue={tidy(Number(u.qty))}
-                aria-label={`How many ${item.base_unit} in one ${u.name}`}
-                onBlur={(e) => handleEditStockUnit(u, { qty: e.target.value })}
-              />
-              <span>{item.base_unit}</span>
-              <button className="rm" title="Remove this stock unit" onClick={() => handleRemoveStockUnit(u)}>
-                ×
-              </button>
-            </div>
-          ))}
+          {item.stock_units.map((u) =>
+            editUnitId === u.id ? (
+              <div className="su-row su-editing" key={u.id}>
+                <span>1</span>
+                <input
+                  className="su-name"
+                  value={editUnitName}
+                  maxLength={20}
+                  autoFocus
+                  aria-label="Stock unit name"
+                  onChange={(e) => setEditUnitName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSaveUnitEdit(u);
+                    else if (e.key === "Escape") setEditUnitId(null);
+                  }}
+                />
+                <span>=</span>
+                <input
+                  className="su-qty"
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={editUnitQty}
+                  aria-label={`How many ${item.base_unit} in one ${u.name}`}
+                  onChange={(e) => setEditUnitQty(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSaveUnitEdit(u);
+                    else if (e.key === "Escape") setEditUnitId(null);
+                  }}
+                />
+                <span>{item.base_unit}</span>
+                <span className="su-edit-actions">
+                  <button type="button" className="row-btn save" disabled={editUnitBusy} onClick={() => handleSaveUnitEdit(u)}>
+                    {editUnitBusy ? "Saving…" : "Save"}
+                  </button>
+                  <button type="button" className="row-btn" onClick={() => { setEditUnitId(null); setUnitErr(null); }}>
+                    Cancel
+                  </button>
+                  <button type="button" className="row-btn del" disabled={editUnitBusy} onClick={() => handleRemoveStockUnit(u)}>
+                    Delete
+                  </button>
+                </span>
+              </div>
+            ) : (
+              <div className="su-row" key={u.id}>
+                <span>
+                  1 <b>{u.name}</b> = {tidy(Number(u.qty))} {item.base_unit}
+                </span>
+                <button type="button" className="row-btn" onClick={() => startEditUnit(u)}>
+                  Edit
+                </button>
+              </div>
+            )
+          )}
           {packSuggestions.map((p) => (
             <div className="su-suggest" key={p.key}>
               {p.supplier} sells this as 1 {p.name} = {tidy(p.qty)} {item.base_unit}.{" "}

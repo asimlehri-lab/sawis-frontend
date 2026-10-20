@@ -783,6 +783,26 @@ export async function createRecipeLine(accessToken: string, input: NewRecipeLine
   return res.json();
 }
 
+export async function updateRecipeLine(
+  accessToken: string,
+  lineId: string,
+  patch: { qty?: string }
+): Promise<RecipeLine> {
+  const res = await fetch(`${API_URL}/api/catalog/recipe-lines/${lineId}/`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error((body && (body.detail || body.qty?.[0] || body.non_field_errors?.[0])) || "Could not save the ingredient.");
+  }
+  return res.json();
+}
+
 export async function deleteRecipeLine(accessToken: string, lineId: string): Promise<void> {
   const res = await fetch(`${API_URL}/api/catalog/recipe-lines/${lineId}/`, {
     method: "DELETE",
@@ -2120,11 +2140,42 @@ export interface ReceiveLineOverride {
   raw_description?: string;
 }
 
+// Today as yyyy-mm-dd in the browser's own calendar (not UTC), for date boxes.
+export function todayIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// A date read off an invoice ("17.09.2026", "17/09/2026" or "2026-09-17") as
+// yyyy-mm-dd, or null when it is not a real date or is in the future.
+export function invoiceDateToIso(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const t = raw.trim();
+  let y: number, m: number, d: number;
+  let hit = t.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+  if (hit) {
+    d = Number(hit[1]);
+    m = Number(hit[2]);
+    y = Number(hit[3]);
+  } else if ((hit = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) {
+    y = Number(hit[1]);
+    m = Number(hit[2]);
+    d = Number(hit[3]);
+  } else {
+    return null;
+  }
+  const check = new Date(y, m - 1, d);
+  if (check.getFullYear() !== y || check.getMonth() !== m - 1 || check.getDate() !== d) return null;
+  const iso = `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  return iso > todayIso() ? null : iso;
+}
+
 export async function receivePurchaseOrder(
   accessToken: string,
   id: string,
   lines: ReceiveLineOverride[],
-  invoiceNumber?: string | null
+  invoiceNumber?: string | null,
+  receivedDate?: string | null
 ): Promise<PurchaseOrder> {
   const res = await fetch(`${API_URL}/api/procurement/purchase-orders/${id}/receive/`, {
     method: "POST",
@@ -2132,7 +2183,11 @@ export async function receivePurchaseOrder(
       "Content-Type": "application/json",
       Authorization: `Bearer ${accessToken}`,
     },
-    body: JSON.stringify(invoiceNumber ? { lines, invoice_number: invoiceNumber } : { lines }),
+    body: JSON.stringify({
+      lines,
+      ...(invoiceNumber ? { invoice_number: invoiceNumber } : {}),
+      ...(receivedDate ? { received_date: receivedDate } : {}),
+    }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null);

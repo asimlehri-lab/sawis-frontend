@@ -8,6 +8,7 @@ import {
   deletePurchaseOrder,
   reopenPurchaseOrder,
   receivePurchaseOrder,
+  todayIso,
   createPurchaseOrder,
   fetchOnHand,
   formatMoney,
@@ -183,6 +184,7 @@ export default function ProcurementDetail({
   const [receiving, setReceiving] = useState(false);
   const [receiveError, setReceiveError] = useState<string | null>(null);
   const [invoiceNumberInput, setInvoiceNumberInput] = useState("");
+  const [receivedDateInput, setReceivedDateInput] = useState(todayIso());
   // "Scan delivery" -- cross-checks a photo of what actually arrived
   // against THIS PO's own lines (not a whole-catalogue match like the
   // top-level Scan receipt flow), so the user can see at a glance whether
@@ -304,6 +306,7 @@ export default function ProcurementDetail({
       setReceiveLines(initial);
       setReceiveError(null);
       setInvoiceNumberInput(po.invoice_number ?? "");
+      setReceivedDateInput(todayIso());
       setDeliveryScan(null);
       setScanDeliveryError(null);
       setShowReceive(true);
@@ -548,7 +551,7 @@ export default function ProcurementDetail({
         received_qty: receiveLines[l.id]?.qty ?? l.qty,
         received_unit_price: receiveLines[l.id]?.price ?? l.unit_price,
       }));
-      const updated = await receivePurchaseOrder(accessToken, po.id, overrides, invoiceNumberInput.trim() || null);
+      const updated = await receivePurchaseOrder(accessToken, po.id, overrides, invoiceNumberInput.trim() || null, receivedDateInput || null);
       setPo(updated);
       setShowReceive(false);
       onChanged();
@@ -1419,13 +1422,24 @@ export default function ProcurementDetail({
             Confirm what actually arrived. Any changes here post as real stock movements and update
             this supplier's price for next time — the ordered amounts above stay on record either way.
           </p>
-          <div className="field" style={{ marginBottom: 12, maxWidth: 260 }}>
-            <label>Supplier's invoice number (optional)</label>
-            <input
-              value={invoiceNumberInput}
-              onChange={(e) => setInvoiceNumberInput(e.target.value)}
-              placeholder="e.g. INV-10432"
-            />
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+            <div className="field" style={{ maxWidth: 200 }}>
+              <label>Received on</label>
+              <input
+                type="date"
+                value={receivedDateInput}
+                max={todayIso()}
+                onChange={(e) => setReceivedDateInput(e.target.value)}
+              />
+            </div>
+            <div className="field" style={{ maxWidth: 260 }}>
+              <label>Supplier's invoice number (optional)</label>
+              <input
+                value={invoiceNumberInput}
+                onChange={(e) => setInvoiceNumberInput(e.target.value)}
+                placeholder="e.g. INV-10432"
+              />
+            </div>
           </div>
 
           <div className="field" style={{ marginBottom: 12 }}>
