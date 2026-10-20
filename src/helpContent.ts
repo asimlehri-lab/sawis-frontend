@@ -304,7 +304,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "What does a printed or emailed purchase order show?",
-        a: "Each line shows the item, the quantity, the unit it is ordered in (carton, bag, kg and so on), the price for one of that unit, and the line total before VAT. Under the lines you get the total before and after VAT. The email lists the same figures line by line, with the PO number first.",
+        a: "Each line shows the item, the quantity, the unit it is ordered in with what one holds (for example bag (25 kg)), the price for one of that unit, and the line total before VAT. Under the lines you get the total before and after VAT. The email lists the same figures line by line, with the PO number first.",
       },
       {
         q: "How do I mark a PO as received?",

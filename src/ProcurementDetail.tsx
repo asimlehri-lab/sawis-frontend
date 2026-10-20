@@ -84,11 +84,19 @@ function formatQty(n: number): string {
 function poLineFigures(
   l: { qty: string; unit_price: string; line_total: string; supplier_unit: string; supplier_qty: string | null },
   baseUnit: string
-): { qty: string; unit: string; unitPrice: number; total: number } {
+): { qty: string; unit: string; unitPrice: number; total: number; label: string } {
   const total = Number(l.line_total);
   const sq = l.supplier_unit && l.supplier_qty != null ? Number(l.supplier_qty) : 0;
-  if (sq > 0) return { qty: formatQty(sq), unit: l.supplier_unit, unitPrice: total / sq, total };
-  return { qty: formatQty(Number(l.qty)), unit: baseUnit, unitPrice: Number(l.unit_price), total };
+  if (sq > 0) {
+    // "bag (25 kg)": say how much one bag holds, so the supplier needs no guess.
+    const size = Number(l.qty) / sq;
+    const label =
+      baseUnit && l.supplier_unit.toLowerCase() !== baseUnit.toLowerCase() && size > 0
+        ? `${l.supplier_unit} (${formatQty(size)} ${baseUnit})`
+        : l.supplier_unit;
+    return { qty: formatQty(sq), unit: l.supplier_unit, unitPrice: total / sq, total, label };
+  }
+  return { qty: formatQty(Number(l.qty)), unit: baseUnit, unitPrice: Number(l.unit_price), total, label: baseUnit };
 }
 
 // "1.2 MB" / "480 KB" / "900 B" -- attachments are photos/PDFs, not
@@ -351,7 +359,7 @@ export default function ProcurementDetail({
       const bodyLines = po.lines
         .map((l) => {
           const f = poLineFigures(l, items.find((it) => it.id === l.item)?.base_unit ?? "");
-          const line = `${f.qty}${f.unit ? ` ${f.unit}` : ""} × ${l.item_name} @ ${formatMoney(f.unitPrice, currency, f.unitPrice < 0.1 ? 4 : 2)}${f.unit ? ` per ${f.unit}` : ""} = ${formatMoney(f.total, currency)}`;
+          const line = `${f.qty}${f.label ? ` ${f.label}` : ""} × ${l.item_name} @ ${formatMoney(f.unitPrice, currency, f.unitPrice < 0.1 ? 4 : 2)}${f.unit ? ` per ${f.unit}` : ""} = ${formatMoney(f.total, currency)}`;
           return encodeURIComponent(line);
         })
         .join("%0D%0A");
@@ -989,7 +997,7 @@ export default function ProcurementDetail({
                   <tr key={l.id}>
                     <td>{l.item_name}</td>
                     <td>{f.qty}</td>
-                    <td>{f.unit || "—"}</td>
+                    <td>{f.label || "—"}</td>
                     <td>{formatMoney(f.unitPrice, currency, f.unitPrice < 0.1 ? 4 : 2)}</td>
                     <td>{formatMoney(f.total, currency)}</td>
                   </tr>
