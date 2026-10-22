@@ -6,6 +6,9 @@ interface Props {
   accessToken: string;
   items: CatalogItem[];
   locations: Location[];
+  // The location chosen on End of day's location tabs. The parent mounts this
+  // with key={location}, so switching location starts the screen afresh.
+  location: string;
   itemSupplierLinks: ItemSupplierRow[];
 }
 
@@ -33,21 +36,7 @@ interface ReorderLine {
 // price is always suggested alongside it as a one-click cost-saving swap —
 // picking "usual" never happens silently at the expense of a cheaper option
 // sitting right there.
-export default function Reorder({ accessToken, items, locations, itemSupplierLinks }: Props) {
-  const [location, setLocation] = useState(locations[0]?.id ?? "");
-  // locations loads asynchronously -- if this component's first render
-  // happens before that resolves, the useState initializer above bakes in ""
-  // permanently, since it only ever runs once. Fill it in as soon as the real
-  // locations array arrives, in the same render pass rather than a useEffect
-  // (this project's lint config flags setState-in-effect outright). Same race
-  // already confirmed live in EndOfDay.tsx (a single-location org's every
-  // import silently failing with "No location selected") -- see that file's
-  // own comment on this exact pattern for the full writeup.
-  const [locationsSeen, setLocationsSeen] = useState(locations);
-  if (locations !== locationsSeen) {
-    setLocationsSeen(locations);
-    if (!location && locations[0]?.id) setLocation(locations[0].id);
-  }
+export default function Reorder({ accessToken, items, locations, location, itemSupplierLinks }: Props) {
   const currency = locations.find((l) => l.id === location)?.currency;
   const gbp = (n: number) => formatMoney(n, currency);
   const [onHand, setOnHand] = useState<Record<string, number>>({});
@@ -268,21 +257,6 @@ export default function Reorder({ accessToken, items, locations, itemSupplierLin
             Starts from each item's default supplier (or its last order, if no default is set) — cheaper options are flagged
           </div>
         </div>
-        {locations.length > 1 && (
-          <select
-            value={location}
-            onChange={(e) => {
-              setLocation(e.target.value);
-              setResult(null);
-            }}
-          >
-            {locations.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-          </select>
-        )}
       </div>
 
       {!locations.length && <p className="error" style={{ margin: 18 }}>No locations yet.</p>}

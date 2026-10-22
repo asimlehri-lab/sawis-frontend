@@ -268,6 +268,9 @@ export function BreakEvenCard({ report, currency }: { report: ReportsSummary; cu
               Monthly overhead: {shown.map(([k, v]) => `${k} ${formatMoney(v ?? 0, currency, 0)}`).join(" · ")}
             </p>
           )}
+          {be.partial && (
+            <p className="rp-hint">Some of these locations have no overhead set, so the amount needed is likely higher.</p>
+          )}
           {report.zero_cost_items.length > 0 && (
             <p className="rp-hint">Some ingredient costs are missing, so the real amount needed is likely higher.</p>
           )}

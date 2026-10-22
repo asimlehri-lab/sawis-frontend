@@ -307,6 +307,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "Go to Procurement in the sidebar and click + New purchase order, top right. Pick a supplier and add lines for the items you're ordering — it starts as a draft, and stays one until you click Mark as Sent.",
       },
       {
+        q: "How do I see one location, or all of them, on End of day and Reports?",
+        a: "Both pages have a row of location tabs across the top, with the venue name on each. Click a name to see only that location; the page starts on the first one. Managers and admins also get an All tab at the left that adds up every location. Food cost % on All is total ingredient cost divided by total sales, so a busy location counts for more, and a By location table underneath shows each venue side by side with On target or Over target against its own target. If your locations use different currencies, All shows one block per currency (for example Euro locations, then Pound locations) and never adds them together. With a single location you just see its name. Importing or scanning sales, Actions, Reorder and the Menu map profit chart work one location at a time, so on All they ask you to pick a location; with mixed currencies the Menu map under All shows units sold only. Export CSV and Download PDF are available when one location is on screen.",
+      },
+      {
         q: "How do I set my monthly overhead, and what is the break-even?",
         a: "An Admin goes to Settings → Locations and fills in the Monthly overhead lines for each location: rent, labour or staff, utilities and other fixed costs, each as a monthly amount. The total is added up for you. A yearly cost, such as insurance, goes in as the yearly amount divided by 12. On Reports → Overview the Break-even card then shows how much you need to sell each month to cover that overhead at your gross profit (what is left of sales after ingredient cost), and sets it beside what you have sold in the period on screen. It needs some sales in the period to work out the margin. If a month looks short, check whether any ingredient costs are missing, as that makes the real amount needed higher.",
       },

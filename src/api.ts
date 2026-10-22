@@ -2527,6 +2527,42 @@ export async function fetchEodReport(
   return authedFetch(`/api/ledger/sales/eod_report/?${params.toString()}`, accessToken);
 }
 
+// "All locations" -- the same report added up over every location the
+// manager can see, in one block per currency (amounts in different
+// currencies are never added together), with a row per location.
+export interface EodLocationRow {
+  id: string;
+  name: string;
+  net_sales: number;
+  covers: number | null;
+  food_cost_pct: number | null;
+  gross_margin_pct: number | null;
+}
+
+export interface EodAllGroup {
+  currency: string;
+  location_ids: string[];
+  location_names: string[];
+  report: EodReport;
+  by_location: EodLocationRow[];
+}
+
+export interface EodReportAll {
+  all: true;
+  period: "today" | "week" | "month";
+  groups: EodAllGroup[];
+}
+
+export async function fetchEodReportAll(
+  accessToken: string,
+  period: "today" | "week" | "month",
+  date?: string
+): Promise<EodReportAll> {
+  const params = new URLSearchParams({ location: "all", period });
+  if (date) params.set("date", date);
+  return authedFetch(`/api/ledger/sales/eod_report/?${params.toString()}`, accessToken);
+}
+
 // ---------------------------------------------------------------------------
 // Reports — the longer-horizon, finance-oriented dashboard
 // ---------------------------------------------------------------------------
@@ -2584,6 +2620,48 @@ export interface ReportsMenuRow {
   gp_contribution: number;
 }
 
+export interface ReportsLocationRow {
+  id: string;
+  name: string;
+  net_sales: number;
+  cogs: number;
+  food_cost_pct: number | null;
+  gross_profit_pct: number | null;
+  waste_cost: number;
+  waste_pct: number | null;
+  top_category: string | null;
+  monthly_overhead: number | null;
+  sales_needed_month: number | null;
+}
+
+export interface ReportsAllGroup {
+  currency: string;
+  location_ids: string[];
+  location_names: string[];
+  report: ReportsSummary;
+  by_location: ReportsLocationRow[];
+}
+
+export interface ReportsAll {
+  all: true;
+  period: "week" | "month" | "lastmonth";
+  range: { start: string; end: string };
+  groups: ReportsAllGroup[];
+  // Units sold per dish over every location: units can be added across
+  // currencies, money cannot.
+  menu_units: { recipe_id: string; name: string; qty: number }[];
+}
+
+export async function fetchReportsAll(
+  accessToken: string,
+  period: "week" | "month" | "lastmonth",
+  date?: string
+): Promise<ReportsAll> {
+  const params = new URLSearchParams({ location: "all", period });
+  if (date) params.set("date", date);
+  return authedFetch(`/api/ledger/sales/reports_summary/?${params.toString()}`, accessToken);
+}
+
 export interface ReportsSummary {
   period: "week" | "month" | "lastmonth";
   range: { start: string; end: string };
@@ -2618,6 +2696,8 @@ export interface ReportsSummary {
 // overhead is set and the period has sales to measure a margin from.
 export interface ReportsBreakEven {
   configured: boolean;
+  // All locations only: some of the locations added up have no overhead set.
+  partial?: boolean;
   monthly_overhead: number | null;
   parts: { rent: number | null; labour: number | null; utilities: number | null; other: number | null };
   gross_profit_pct: number | null;

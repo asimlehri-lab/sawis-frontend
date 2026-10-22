@@ -76,6 +76,7 @@ import Loader from "./Loader";
 import ProcurementDetail from "./ProcurementDetail";
 import SupplierUnitPicker from "./SupplierUnitPicker";
 import { cartonView, findSupplierFromScan, isOwnName, unitFromPrinted } from "./scanSupplier";
+import { canSeeAllLocations } from "./locationScope";
 import SupplierDeliveries from "./SupplierDeliveries";
 import SupplierList from "./SupplierList";
 import WasteLog from "./WasteLog";
@@ -2805,6 +2806,7 @@ export default function App() {
                 accessToken={accessToken}
                 locations={locations}
                 isAdmin={me.memberships.some((m) => m.role === "admin")}
+                canSeeAll={canSeeAllLocations(me, locations)}
                 initialTab={reportsTab}
                 onOpenRecipe={(id) => {
                   goToNav("Recipes");

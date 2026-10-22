@@ -1,11 +1,26 @@
 import { useEffect, useState } from "react";
-import { fetchEodReport, formatMoney, costBand, costBandColor } from "./api";
-import type { EodChampionEntry, EodReport as EodReportData, Location } from "./api";
+import { fetchEodReport, fetchEodReportAll, formatMoney, costBand, costBandColor } from "./api";
+import type { EodChampionEntry, EodLocationRow, EodReport as EodReportData, EodReportAll, Location } from "./api";
+import { EodByLocation } from "./AllLocationsParts";
+import { ALL_LOCATIONS, currencyBlockTitle } from "./locationScope";
 import PeriodPicker from "./PeriodPicker";
 
 interface Props {
   accessToken: string;
   locations: Location[];
+  // The location (or "all") chosen on End of day's location tabs.
+  location: string;
+}
+
+// One screenful: a single location, or one currency's worth of locations
+// added up (All).
+interface Block {
+  key: string;
+  title: string | null;
+  report: EodReportData;
+  currency?: string;
+  rows: EodLocationRow[] | null;
+  compareReport: EodReportData | null;
 }
 
 const PERIOD_LABEL: Record<string, string> = {
@@ -50,14 +65,16 @@ function fmtAnchor(period: "today" | "week" | "month", anchorIso: string): strin
   return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
 
-export default function EodReport({ accessToken, locations }: Props) {
-  const [location, setLocation] = useState(locations[0]?.id ?? "");
+export default function EodReport({ accessToken, locations, location }: Props) {
+  const isAll = location === ALL_LOCATIONS;
   const currency = locations.find((l) => l.id === location)?.currency;
   const [period, setPeriod] = useState<"today" | "week" | "month">("today");
   const [anchorDate, setAnchorDate] = useState(todayIso());
   const [pickerOpen, setPickerOpen] = useState(false);
   const [champKind, setChampKind] = useState<"food" | "drink">("food");
   const [report, setReport] = useState<EodReportData | null>(null);
+  const [allData, setAllData] = useState<EodReportAll | null>(null);
+  const [compareAll, setCompareAll] = useState<EodReportAll | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,21 +87,25 @@ export default function EodReport({ accessToken, locations }: Props) {
   const [compareLoading, setCompareLoading] = useState(false);
 
   useEffect(() => {
-    // Also replaces a location that is not in the list (left over from
-    // another account), which the server would reject.
-    if ((!location || !locations.some((l) => l.id === location)) && locations[0]) setLocation(locations[0].id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locations]);
-
-  useEffect(() => {
-    if (!location || !locations.some((l) => l.id === location)) return;
+    if (!location || (location !== ALL_LOCATIONS && !locations.some((l) => l.id === location))) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchEodReport(accessToken, location, period, anchorDate)
-      .then((data) => {
-        if (!cancelled) setReport(data);
-      })
+    const request =
+      location === ALL_LOCATIONS
+        ? fetchEodReportAll(accessToken, period, anchorDate).then((data) => {
+            if (!cancelled) {
+              setAllData(data);
+              setReport(null);
+            }
+          })
+        : fetchEodReport(accessToken, location, period, anchorDate).then((data) => {
+            if (!cancelled) {
+              setReport(data);
+              setAllData(null);
+            }
+          });
+    request
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : "Could not load the report.");
       })
@@ -100,16 +121,25 @@ export default function EodReport({ accessToken, locations }: Props) {
   useEffect(() => {
     if (!location || !compareDate) {
       setCompareReport(null);
+      setCompareAll(null);
       return;
     }
     let cancelled = false;
     setCompareLoading(true);
-    fetchEodReport(accessToken, location, period, compareDate)
-      .then((data) => {
-        if (!cancelled) setCompareReport(data);
-      })
+    const request =
+      location === ALL_LOCATIONS
+        ? fetchEodReportAll(accessToken, period, compareDate).then((data) => {
+            if (!cancelled) setCompareAll(data);
+          })
+        : fetchEodReport(accessToken, location, period, compareDate).then((data) => {
+            if (!cancelled) setCompareReport(data);
+          });
+    request
       .catch(() => {
-        if (!cancelled) setCompareReport(null);
+        if (!cancelled) {
+          setCompareReport(null);
+          setCompareAll(null);
+        }
       })
       .finally(() => {
         if (!cancelled) setCompareLoading(false);
@@ -123,18 +153,23 @@ export default function EodReport({ accessToken, locations }: Props) {
     return <p className="error">No locations yet — add one before there's anything to report on.</p>;
   }
 
+  const blocks: Block[] =
+    isAll && allData
+      ? allData.groups.map((g) => ({
+          key: g.currency,
+          title: allData.groups.length > 1 ? currencyBlockTitle(g.currency, g.location_names) : null,
+          report: g.report,
+          currency: g.currency,
+          rows: g.by_location,
+          compareReport: compareAll?.groups.find((x) => x.currency === g.currency)?.report ?? null,
+        }))
+      : !isAll && report
+      ? [{ key: location, title: null, report, currency, rows: null, compareReport }]
+      : [];
+
   return (
     <div>
       <div className="eod-toolbar">
-        {locations.length > 1 && (
-          <select value={location} onChange={(e) => setLocation(e.target.value)}>
-            {locations.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.name}
-              </option>
-            ))}
-          </select>
-        )}
         <div className="rtabs" style={{ marginBottom: 0 }}>
           <button
             className={`rtab ${period === "today" ? "on" : ""}`}
@@ -170,23 +205,25 @@ export default function EodReport({ accessToken, locations }: Props) {
       </div>
 
       {error && <p className="error">{error}</p>}
-      {loading && !report && <p className="muted">Loading…</p>}
+      {loading && blocks.length === 0 && <p className="muted">Loading…</p>}
 
-      {report && (
-        <>
-          <KpiHeader report={report} currency={currency} />
+      {blocks.map((b) => (
+        <div key={b.key} className="lblock">
+          {b.title && <h2 className="lblock-h">{b.title}</h2>}
+          <KpiHeader report={b.report} currency={b.currency} />
+          {b.rows && <EodByLocation rows={b.rows} currency={b.currency ?? ""} locations={locations} />}
           <ComparisonCard
-            report={report}
-            currency={currency}
+            report={b.report}
+            currency={b.currency}
             compareDate={compareDate}
-            compareReport={compareReport}
+            compareReport={b.compareReport}
             compareLoading={compareLoading}
             onPickCompareDate={() => setComparePickerOpen(true)}
             onClearCompareDate={() => setCompareDate(null)}
           />
-          <ChampionsSection report={report} champKind={champKind} setChampKind={setChampKind} currency={currency} />
-        </>
-      )}
+          <ChampionsSection report={b.report} champKind={champKind} setChampKind={setChampKind} currency={b.currency} />
+        </div>
+      ))}
 
       {pickerOpen && (
         <PeriodPicker

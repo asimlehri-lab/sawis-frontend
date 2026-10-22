@@ -4,6 +4,9 @@ import { fetchLastImportDate, importSales } from "./api";
 import type { CatalogItem, ItemSupplierRow, Location, Me, Recipe, StockMovementRow } from "./api";
 import Reorder from "./Reorder";
 import EodReport from "./EodReport";
+import LocationTabs from "./LocationTabs";
+import { ALL_LOCATIONS, canSeeAllLocations } from "./locationScope";
+import { PickLocationPrompt } from "./AllLocationsParts";
 import EodTasks from "./EodTasks";
 import SearchSelect from "./SearchSelect";
 import ScanEodSales from "./ScanEodSales";
@@ -191,6 +194,10 @@ export default function EndOfDay({
     isManagerOrAbove ? (initialTab ?? "overview") : "tasks"
   );
   const [location, setLocation] = useState(locations[0]?.id ?? "");
+  // "all" is the All tab: every location added up. Only the Sales tab can
+  // show that; importing, Actions and Reorder belong to one location.
+  const isAll = location === ALL_LOCATIONS;
+  const showAllTab = isManagerOrAbove && canSeeAllLocations(me, locations);
   // locations loads asynchronously (App.tsx only fetches it once activePage
   // becomes "End of day" -- see the effect keyed on activePage there) -- if
   // this component's first render happens before that resolves, the
@@ -245,7 +252,7 @@ export default function EndOfDay({
   const [lastImportLoading, setLastImportLoading] = useState(false);
 
   function refreshLastImport(loc: string) {
-    if (!loc) return;
+    if (!loc || loc === ALL_LOCATIONS) return;
     setLastImportLoading(true);
     fetchLastImportDate(accessToken, loc)
       .then(setLastImportedAt)
@@ -615,19 +622,13 @@ export default function EndOfDay({
 
   return (
     <>
-      {isManagerOrAbove && (
+      {isManagerOrAbove && <LocationTabs locations={locations} value={location} onChange={setLocation} allowAll={showAllTab} />}
+      {isManagerOrAbove && isAll && (
+        <p className="lnote">Importing and scanning sales work one location at a time. Pick a location to use them.</p>
+      )}
+      {isManagerOrAbove && !isAll && (
       <div className="eod-head">
         <div className="eod-import">
-          {locations.length > 1 && (
-            <select className="eod-import-loc" value={location} onChange={(e) => setLocation(e.target.value)}>
-              {locations.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name}
-                </option>
-              ))}
-            </select>
-          )}
-
           <div
             className="eod-dropzone"
             onDragOver={(e) => {
@@ -695,7 +696,7 @@ export default function EndOfDay({
       </div>
       )}
 
-      {showScanTest && (
+      {showScanTest && !isAll && (
         <ScanEodSales
           accessToken={accessToken}
           location={location}
@@ -721,9 +722,18 @@ export default function EndOfDay({
         )}
       </div>
 
-      {tab === "overview" && isManagerOrAbove && <EodReport accessToken={accessToken} locations={locations} />}
+      {tab === "overview" && isManagerOrAbove && <EodReport accessToken={accessToken} locations={locations} location={location} />}
 
-      {tab === "tasks" && (
+      {tab === "tasks" && isAll && (
+        <PickLocationPrompt
+          title="Actions work one location at a time"
+          text="Counts, checks and stock belong to a location."
+          locations={locations}
+          onPick={setLocation}
+        />
+      )}
+
+      {tab === "tasks" && !isAll && (
         <EodTasks
           me={me}
           accessToken={accessToken}
@@ -742,8 +752,24 @@ export default function EndOfDay({
         />
       )}
 
-      {tab === "reorder" && isManagerOrAbove && (
-        <Reorder accessToken={accessToken} items={items} locations={locations} itemSupplierLinks={itemSupplierLinks} />
+      {tab === "reorder" && isManagerOrAbove && isAll && (
+        <PickLocationPrompt
+          title="Reorder works one location at a time"
+          text="Stock levels and orders belong to a location."
+          locations={locations}
+          onPick={setLocation}
+        />
+      )}
+
+      {tab === "reorder" && isManagerOrAbove && !isAll && (
+        <Reorder
+          key={location}
+          accessToken={accessToken}
+          items={items}
+          locations={locations}
+          location={location}
+          itemSupplierLinks={itemSupplierLinks}
+        />
       )}
 
       {showImportModal && (
