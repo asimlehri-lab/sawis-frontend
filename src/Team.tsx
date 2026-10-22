@@ -154,6 +154,7 @@ export default function Team({ accessToken, me, memberships, membershipsError, l
       {editingId && (
         <EditMemberModal
           accessToken={accessToken}
+          locations={locations}
           membership={memberships.find((m) => m.id === editingId)!}
           onClose={() => setEditingId(null)}
           onSaved={() => {
@@ -302,11 +303,13 @@ function AddMemberModal({
 
 function EditMemberModal({
   accessToken,
+  locations,
   membership,
   onClose,
   onSaved,
 }: {
   accessToken: string;
+  locations: Location[];
   membership: Membership;
   onClose: () => void;
   onSaved: () => void;
@@ -314,6 +317,7 @@ function EditMemberModal({
   const [jobTitle, setJobTitle] = useState(membership.job_title);
   const [role, setRole] = useState(membership.role);
   const [department, setDepartment] = useState(membership.department ?? "");
+  const [location, setLocation] = useState(membership.location ?? "");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -324,6 +328,7 @@ function EditMemberModal({
       await updateMembership(accessToken, membership.id, {
         job_title: jobTitle.trim(),
         role,
+        location: location || null,
         department: (department || null) as "kitchen" | "bar" | "foh" | null,
       });
       onSaved();
@@ -339,12 +344,27 @@ function EditMemberModal({
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h2>{membership.name || membership.email}</h2>
         <p className="muted" style={{ fontSize: 12.5, marginTop: 0 }}>
-          {membership.location_name ?? "All locations"} · editing this membership only — if they have more than one,
-          the others are unaffected.
+          Editing this entry only — if they have more than one, the others are unaffected.
         </p>
         <div className="field">
           <label>Job title</label>
           <input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="e.g. Head Chef" />
+        </div>
+        <div className="field">
+          <label>Location</label>
+          <select value={location} onChange={(e) => setLocation(e.target.value)}>
+            <option value="">All locations</option>
+            {locations.map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.name}
+              </option>
+            ))}
+          </select>
+          {location === "" && (
+            <p className="muted" style={{ fontSize: 12.5, margin: "6px 0 0" }}>
+              They will see every location's sales, costs and stock.
+            </p>
+          )}
         </div>
         <div className="fgrid fgrid-2">
           <div className="field">

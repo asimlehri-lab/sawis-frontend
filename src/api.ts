@@ -1116,7 +1116,12 @@ export async function updateMembership(accessToken: string, id: string, patch: M
     },
     body: JSON.stringify(patch),
   });
-  if (!res.ok) throw new Error("Could not update this team member.");
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const first = body && typeof body === "object" ? Object.values(body)[0] : null;
+    const detail = Array.isArray(first) ? first[0] : first;
+    throw new Error(typeof detail === "string" && detail ? detail : "Could not update this team member.");
+  }
   return res.json();
 }
 

@@ -575,6 +575,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "Go to Team in the sidebar and click + Add team member, top right. Enter their email, role, and location — they can sign in once their account is set up.",
       },
       {
+        q: "How do I change which location a team member works at?",
+        a: "An Admin goes to Team, clicks Edit on the person, and picks a Location: one venue, or All locations. Someone on All locations sees every venue's sales, costs and stock, and managers on All locations get the All tab on End of day and Reports. Someone on one venue sees that venue only. Save changes edits just that entry; if the person has several entries (for example two venues), change each one separately. SAWIS will not save a change that would give the same person two identical entries for the same location and department.",
+      },
+      {
         q: "Where do I see who's actively using the app?",
         a: "Team shows a Last active column for each member.",
       },
