@@ -6,12 +6,12 @@ export const ALL_LOCATIONS = "all";
 const MANAGER_ROLES = ["admin", "manager", "finance"];
 
 // The All tab is for managers who can look at more than one location: either
-// a manager role that is not tied to a single location, or manager roles at
-// two or more locations. Staff never see it.
+// an admin, a manager role that is not tied to a single location, or manager
+// roles at two or more locations. Staff never see it.
 export function canSeeAllLocations(me: Me, locations: Location[]): boolean {
   if (locations.length < 2) return false;
   const mine = me.memberships.filter((m) => MANAGER_ROLES.includes(m.role));
-  if (mine.some((m) => m.location === null)) return true;
+  if (mine.some((m) => m.role === "admin" || m.location === null)) return true;
   return new Set(mine.map((m) => m.location)).size > 1;
 }
 
