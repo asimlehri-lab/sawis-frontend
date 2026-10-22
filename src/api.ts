@@ -1512,6 +1512,17 @@ export interface Supplier {
   archived: boolean;
 }
 
+// How much of each supplier's uploaded price list is linked to your items.
+export async function fetchPriceListOverview(
+  accessToken: string
+): Promise<{ supplier: string; total: number; linked: number }[]> {
+  const res = await fetch(`${API_URL}/api/catalog/suppliers/price_list_overview/`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("Could not load the price list overview.");
+  return res.json();
+}
+
 export async function fetchSuppliers(accessToken: string): Promise<Supplier[]> {
   return authedFetchAllPages<Supplier>("/api/catalog/suppliers/", accessToken);
 }

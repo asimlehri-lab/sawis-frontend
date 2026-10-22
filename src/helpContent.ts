@@ -17,7 +17,7 @@
 //
 // Writing rule for every answer below: name the exact page, then the exact
 // button/label text and where on that page it sits, in that order --
-// "Go to Procurement, then click 🏬 Suppliers at the top of the page", not
+// "Go to Procurement, then open the Suppliers tab", not
 // just "Click Suppliers". A user reading this while lost on a different
 // screen should be able to follow it with zero guessing. Every navigation
 // claim here has been checked against the actual component it describes,
@@ -91,7 +91,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "Can I bulk-import items or recipes?",
-        a: "Yes — an Admin goes to Settings in the sidebar and finds the Import recipes & items card. Click ⇩ Download Excel template (it asks for your password first, because it holds your costs and suppliers) to get one workbook with three tabs: Items, Recipes and Recipe Ingredients, already filled with what you have so far. Add rows in the blank section under each tab, save it, and upload it back in the same card — new items are created first, then the recipes that use them. This is different from the ⇪ Import supplier list button on the Items page — see \"What's the difference between Import recipes & items and Import supplier list?\" under Settings if that's what you're looking for instead.",
+        a: "Yes — an Admin goes to Settings in the sidebar, opens the Import tab and finds the Import recipes & items card. Click ⇩ Download Excel template (it asks for your password first, because it holds your costs and suppliers) to get one workbook with three tabs: Items, Recipes and Recipe Ingredients, already filled with what you have so far. Add rows in the blank section under each tab, save it, and upload it back in the same card — new items are created first, then the recipes that use them. This is different from the ⇪ Import supplier list button on the Items page — see \"What's the difference between Import recipes & items and Import supplier list?\" under Settings if that's what you're looking for instead.",
         fact: "💡 Every tab has filter arrows on its header row, so you can search a long catalogue in Excel before editing. The Items tab can also carry allergens (six dropdown columns) and a waste_pct target for brand-new items.",
       },
       {
@@ -138,7 +138,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "Where do I set my food and drink cost targets?",
-        a: "An Admin goes to Settings and scrolls to the Locations card — each location has a Food target and a Drink target (%) next to its currency. Change them, save, and the colours and Cost breaching target list follow. They start at 30%. One dish can have its own target instead: open the recipe, go to Cost & margin and type it in Cost target %.",
+        a: "An Admin goes to Settings, opens the Locations tab and finds the Locations card — each location has a Food target and a Drink target (%) next to its currency. Change them, save, and the colours and Cost breaching target list follow. They start at 30%. One dish can have its own target instead: open the recipe, go to Cost & margin and type it in Cost target %.",
       },
     ],
   },
@@ -264,7 +264,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     questions: [
       {
         q: "How do I see all my suppliers?",
-        a: "Suppliers isn't its own item in the sidebar — it lives inside Procurement. Click Procurement in the sidebar first, then click the 🏬 Suppliers button at the top of that page (it sits next to 📷 Scan receipt and + New purchase order). That opens a searchable list of every supplier you have.",
+        a: "Suppliers isn't its own item in the sidebar — it lives inside Procurement. Click Procurement in the sidebar, then the Suppliers tab next to Orders. That opens a searchable list of every supplier you have, with their open orders and how much of each price list is linked to your items.",
       },
       {
         q: "How do I import a supplier's product catalogue?",
@@ -273,12 +273,12 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "Where can I see a supplier's uploaded price list and link its lines to my items?",
-        a: "Open the supplier (Procurement → 🏬 Suppliers, or click the supplier name on a purchase order) and go to the Price list tab. It lists every line from their uploaded list with the list price in their own unit, the date that line was last updated (in orange when it has not been in an upload for over 60 days), the item of yours it is linked to, and what you were last invoiced for that item. A line with no item shows Not linked: click Link to item, pick your item, and if the supplier sells it in a carton or case, enter how many of your unit it holds (for example 1 ctn holds 100 ea). SAWIS shows the sum in plain words, then sets that item's cost from this supplier. Change moves a line to a different item and Unlink removes the link. The filters above the table show All, Linked, Not linked or Older than 60 days. Upload new list opens the same upload as Items → Import supplier list. On a purchase order, View price list opens this tab for that supplier.",
+        a: "Open the supplier (Procurement → Suppliers tab, or click the supplier name on a purchase order) and go to the Price list tab. It lists every line from their uploaded list with the list price in their own unit, the date that line was last updated (in orange when it has not been in an upload for over 60 days), the item of yours it is linked to, and what you were last invoiced for that item. A line with no item shows Not linked: click Link to item, pick your item, and if the supplier sells it in a carton or case, enter how many of your unit it holds (for example 1 ctn holds 100 ea). SAWIS shows the sum in plain words, then sets that item's cost from this supplier. Change moves a line to a different item and Unlink removes the link. The filters above the table show All, Linked, Not linked or Older than 60 days. Upload new list opens the same upload as Items → Import supplier list. On a purchase order, View price list opens this tab for that supplier.",
         fact: "💡 An orange arrow beside Last invoiced means the delivery was charged at a different price from the list price, which is a quick way to spot a supplier whose invoices and price list disagree.",
       },
       {
         q: "How do I add a new supplier?",
-        a: "From the Suppliers list (Procurement → 🏬 Suppliers), click + New supplier. Only the name is required — email, phone, delivery day, minimum order value and notes are all optional and can be filled in later.",
+        a: "From the Suppliers list (Procurement → Suppliers tab), click + New supplier. Only the name is required — email, phone, delivery day, minimum order value and notes are all optional and can be filled in later.",
         fact: "💡 Two shortcuts worth knowing: if you're logging a delivery invoice, Scan receipt has its own + New supplier right on the scan screen, so you never have to leave that flow. And if you'd rather not add suppliers one at a time at all, upload their whole product list instead via Items → ⇪ Import supplier list — SAWIS matches it against your items in the background.",
       },
       {
@@ -287,7 +287,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I archive a supplier I no longer use?",
-        a: "Open the supplier's page (Procurement → 🏬 Suppliers, then click their name) and scroll down to the Archive card near the bottom — click Archive supplier there. It's its own card, separate from Contact & terms further up the page.",
+        a: "Open the supplier's page (Procurement → Suppliers tab, then click their name) and scroll down to the Archive card near the bottom — click Archive supplier there. It's its own card, separate from Contact & terms further up the page.",
       },
       {
         q: "What does a supplier's delivery day do?",
@@ -295,7 +295,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "Where do I update a supplier's phone number or notes?",
-        a: "Open the supplier from the Suppliers list (Procurement → 🏬 Suppliers) and edit the Contact & terms card directly — phone, email, delivery day, minimum order value and notes are all there, and changes save as you go (no separate Save button).",
+        a: "Open the supplier from the Suppliers list (Procurement → Suppliers tab) and edit the Contact & terms card directly — phone, email, delivery day, minimum order value and notes are all there, and changes save as you go (no separate Save button).",
       },
     ],
   },
@@ -333,7 +333,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I scan a receipt to create a PO?",
-        a: "From Procurement, click 📷 Scan receipt (next to 🏬 Suppliers, top of the page — managers and above), take or choose a photo of the invoice, and review the matched items and quantities before confirming — nothing is saved until you confirm. Each row has an Invoiced in menu: the unit the supplier already uses for that item is chosen for you, and you can switch it (or add a new pack size) if the invoice says carton, case or kg. On each row Qty sits beside Invoiced in, and Unit price beside VAT %. If your business has only one location it is filled in for you, so there is nothing to pick. A Received on date (today by default, with a shortcut to use the invoice date) is recorded as the day the stock came in.",
+        a: "From Procurement, click 📷 Scan receipt (top right of the Orders tab — managers and above), take or choose a photo of the invoice, and review the matched items and quantities before confirming — nothing is saved until you confirm. Each row has an Invoiced in menu: the unit the supplier already uses for that item is chosen for you, and you can switch it (or add a new pack size) if the invoice says carton, case or kg. On each row Qty sits beside Invoiced in, and Unit price beside VAT %. If your business has only one location it is filled in for you, so there is nothing to pick. A Received on date (today by default, with a shortcut to use the invoice date) is recorded as the day the stock came in.",
         fact: "💡 If the invoice matches a purchase order you've already got open with that supplier, SAWIS spots it and offers to receive against that existing PO instead of creating a duplicate one.",
       },
       {
@@ -555,7 +555,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I set reminder timing for deliveries?",
-        a: "Go to Settings and scroll to the \"Delivery reminders & inventory checks\" card — an Admin can set how many days ahead of an expected delivery the reminder should appear, per location.",
+        a: "Go to Settings, open the Locations tab and find the \"Delivery reminders & inventory checks\" card — an Admin can set how many days ahead of an expected delivery the reminder should appear, per location.",
       },
       {
         q: "Can I get a notification on my phone or desktop, not just in the app?",
@@ -593,7 +593,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I change my own password?",
-        a: "Admins go to Settings, find the Password card, enter the Current password, the New password twice and click Change password. Only Admins can open Settings, so Managers, Finance and Staff ask an Admin to reset it from Team.",
+        a: "Admins go to Settings, open the Account tab, find the Password card, enter the Current password, the New password twice and click Change password. Only Admins can open Settings, so Managers, Finance and Staff ask an Admin to reset it from Team.",
       },
       {
         q: "What can staff see and do?",
@@ -611,12 +611,16 @@ export const HELP_TOPICS: HelpTopic[] = [
     ],
     questions: [
       {
+        q: "Where is everything in Settings?",
+        a: "Settings is for Admins and is split into four tabs along the top. Locations holds each location's currency, food and drink targets and monthly overhead, plus Delivery reminders & inventory checks. Catalogue holds Item categories and Names on your invoices. Import holds Import recipes & items. Account holds your Password. Settings opens on Locations, and anything you have typed in one tab is still there when you switch tabs.",
+      },
+      {
         q: "How do I change the currency for a location?",
-        a: "Go to Settings and scroll to the Locations card — an Admin can set each location's currency, food and drink targets and monthly overhead there. Overhead is entered per month in four lines (rent, labour, utilities, other fixed costs) and the total is added up for you.",
+        a: "Go to Settings, open the Locations tab — an Admin can set each location's currency, food and drink targets and monthly overhead there. Overhead is entered per month in four lines (rent, labour, utilities, other fixed costs) and the total is added up for you.",
       },
       {
         q: "Where do I download the import template?",
-        a: "Go to Settings and find the Import recipes & items card — click ⇩ Download Excel template. SAWIS asks for your password first (every time), because the workbook contains your costs and suppliers. It opens with a Read me tab explaining each column.",
+        a: "Go to Settings, open the Import tab and find the Import recipes & items card — click ⇩ Download Excel template. SAWIS asks for your password first (every time), because the workbook contains your costs and suppliers. It opens with a Read me tab explaining each column.",
       },
       {
         q: "Can I update categories, costs, VAT, par levels, waste % and allergens for existing items from the template?",
@@ -636,15 +640,15 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I delete a category I don't use?",
-        a: "An Admin goes to Settings and finds the Item categories card. Each category shows how many items use it. One marked Unused has a Delete button (click it, then Confirm delete), and if several are unused, Delete all unused removes them in one go. A category that items still use can't be deleted: move those items to another category first, then it shows as Unused. Deleting a category never deletes items. Managers can also reach the same pop-up without Settings: click Manage categories under the Category field on an item page, or at the bottom of the Category filter on the Items list.",
+        a: "An Admin goes to Settings, opens the Catalogue tab and finds the Item categories card. Each category shows how many items use it. One marked Unused has a Delete button (click it, then Confirm delete), and if several are unused, Delete all unused removes them in one go. A category that items still use can't be deleted: move those items to another category first, then it shows as Unused. Deleting a category never deletes items. Managers can also reach the same pop-up without Settings: click Manage categories under the Category field on an item page, or at the bottom of the Category filter on the Items list.",
       },
       {
         q: "How do I set my food and drink cost targets?",
-        a: "Settings → Locations card: each location has a Food target and a Drink target (%) beside its currency. Change them and save. They drive the green, orange and red cost colours and the Actions tab's Cost breaching target list, and start at 30%. A single dish can override them in its own Cost & margin tab (Cost target %); clear that box to follow these again.",
+        a: "Settings → Locations tab: each location has a Food target and a Drink target (%) beside its currency. Change them and save. They drive the green, orange and red cost colours and the Actions tab's Cost breaching target list, and start at 30%. A single dish can override them in its own Cost & margin tab (Cost target %); clear that box to follow these again.",
       },
       {
         q: "How do I change my password?",
-        a: "Settings → Password card (Admins). Enter your Current password, the New password twice, then click Change password. Forgotten it? Another Admin can reset it from Team.",
+        a: "Settings → Account tab → Password card (Admins). Enter your Current password, the New password twice, then click Change password. Forgotten it? Another Admin can reset it from Team.",
       },
       {
         q: "Why does SAWIS ask for my password when I download something?",

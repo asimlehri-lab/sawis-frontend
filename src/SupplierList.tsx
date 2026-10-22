@@ -7,9 +7,16 @@ interface Props {
   suppliers: Supplier[];
   locations: Location[];
   accessToken: string;
-  onBack: () => void;
   onOpenSupplier: (id: string) => void;
   onSupplierCreated: (created: Supplier) => void;
+  // The "+ New supplier" button sits in the page header (Procurement), which
+  // asks this list to open its form.
+  showNew: boolean;
+  onShowNewChange: (show: boolean) => void;
+  // Open purchase orders per supplier, and how much of each supplier's
+  // uploaded price list is linked to your items.
+  openOrders: Record<string, number>;
+  listInfo: Record<string, { total: number; linked: number }>;
 }
 
 type Filter = "active" | "archived" | "all";
@@ -18,14 +25,16 @@ export default function SupplierList({
   suppliers,
   locations,
   accessToken,
-  onBack,
   onOpenSupplier,
   onSupplierCreated,
+  showNew,
+  onShowNewChange,
+  openOrders,
+  listInfo,
 }: Props) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("active");
 
-  const [showNewSupplier, setShowNewSupplier] = useState(false);
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPhone, setNewPhone] = useState("");
@@ -60,7 +69,7 @@ export default function SupplierList({
         notes: newNotes.trim(),
       });
       onSupplierCreated(created);
-      setShowNewSupplier(false);
+      onShowNewChange(false);
       resetNewSupplierForm();
       // Jump straight into the new supplier's own record -- there's more to
       // fill in (delivery day, notes, etc. if skipped here) than fits
@@ -92,26 +101,6 @@ export default function SupplierList({
 
   return (
     <div>
-      <button className="back-link" onClick={onBack}>
-        ← Procurement
-      </button>
-
-      <div className="detail-head" style={{ justifyContent: "space-between" }}>
-        <h1 className="page-title" style={{ margin: 0 }}>
-          Suppliers
-        </h1>
-        <button
-          type="button"
-          className="btn-primary small"
-          onClick={() => {
-            resetNewSupplierForm();
-            setShowNewSupplier(true);
-          }}
-        >
-          + New supplier
-        </button>
-      </div>
-
       <div className="content-head" style={{ marginTop: 4 }}>
         <div className="rtabs">
           {(["active", "archived", "all"] as const).map((f) => (
@@ -146,6 +135,8 @@ export default function SupplierList({
                 <th>Phone</th>
                 <th>Delivery day</th>
                 <th className="num">Min order</th>
+                <th className="num">Open orders</th>
+                <th>Price list</th>
               </tr>
             </thead>
             <tbody>
@@ -165,6 +156,18 @@ export default function SupplierList({
                   <td className="num">
                     {s.min_order_value ? formatMoney(Number(s.min_order_value), defaultCurrency(locations), 0) : "—"}
                   </td>
+                  <td className="num">{openOrders[s.id] ?? 0}</td>
+                  <td>
+                    {(() => {
+                      const info = listInfo[s.id];
+                      if (!info || info.total === 0) return <span className="spl-pill mut">No list yet</span>;
+                      return (
+                        <span className={`spl-pill ${info.linked < info.total ? "warn" : "ok"}`}>
+                          {info.linked} of {info.total} linked
+                        </span>
+                      );
+                    })()}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -172,11 +175,11 @@ export default function SupplierList({
         </div>
       )}
 
-      {showNewSupplier && (
+      {showNew && (
         <div
           className="modal-backdrop"
           onClick={() => {
-            setShowNewSupplier(false);
+            onShowNewChange(false);
             resetNewSupplierForm();
           }}
         >
@@ -232,7 +235,7 @@ export default function SupplierList({
                   type="button"
                   className="btn-ghost"
                   onClick={() => {
-                    setShowNewSupplier(false);
+                    onShowNewChange(false);
                     resetNewSupplierForm();
                   }}
                 >

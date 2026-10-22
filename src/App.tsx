@@ -14,6 +14,7 @@ import {
   fetchCategories,
   fetchLocations,
   fetchSuppliers,
+  fetchPriceListOverview,
   fetchSupplierItems,
   bulkImportSupplierItems,
   createSupplier,
@@ -814,7 +815,11 @@ export default function App() {
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
   // Tab the supplier screen opens on (the PO screen's "View price list" link asks for the Price list).
   const [supplierTab, setSupplierTab] = useState<SupplierTab | undefined>(undefined);
-  const [showSupplierList, setShowSupplierList] = useState(false);
+  // Procurement's two tabs, and the "+ New supplier" form the Suppliers tab opens.
+  const [procTab, setProcTab] = useState<"orders" | "suppliers">("orders");
+  const [showNewSupplierForm, setShowNewSupplierForm] = useState(false);
+  // How much of each supplier's uploaded price list is linked (Suppliers tab).
+  const [priceListInfo, setPriceListInfo] = useState<Record<string, { total: number; linked: number }>>({});
   const [showHelp, setShowHelp] = useState(false);
   const [showNewPO, setShowNewPO] = useState(false);
   const [newPOSupplier, setNewPOSupplier] = useState("");
@@ -971,6 +976,24 @@ export default function App() {
       .then(setMemberships)
       .catch((err) => setMembershipsError(err instanceof Error ? err.message : "Could not load the team."));
   }
+
+  // Price list column and dot on Procurement's Suppliers tab: refreshed on
+  // arrival and whenever a list is uploaded or a link is made or removed.
+  useEffect(() => {
+    if (!accessToken || activePage !== "Procurement" || !me || !canManage(me)) return;
+    let cancelled = false;
+    fetchPriceListOverview(accessToken)
+      .then((rows) => {
+        if (cancelled) return;
+        const next: Record<string, { total: number; linked: number }> = {};
+        rows.forEach((r) => (next[r.supplier] = { total: r.total, linked: r.linked }));
+        setPriceListInfo(next);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, activePage, me, supplierItems, itemSupplierLinks]);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -1189,6 +1212,7 @@ export default function App() {
     setSelectedPOId(null);
     setSelectedSupplierId(null);
     setSupplierTab(undefined);
+    setProcTab("orders");
     setShowNewPO(false);
     // Every ordinary nav click lands End of day back on Overview -- only the
     // notification bell's "View reorder list" passes eodTab explicitly.
@@ -2291,18 +2315,6 @@ export default function App() {
               setSelectedRecipeId(id);
             }}
           />
-        ) : activePage === "Procurement" && showSupplierList && accessToken ? (
-          <SupplierList
-            suppliers={suppliers}
-            locations={locations}
-            accessToken={accessToken}
-            onBack={() => setShowSupplierList(false)}
-            onOpenSupplier={(id) => {
-              setShowSupplierList(false);
-              setSelectedSupplierId(id);
-            }}
-            onSupplierCreated={(created) => setSuppliers((prev) => [...prev, created])}
-          />
         ) : activePage === "Procurement" && selectedPOId && accessToken ? (
           <ProcurementDetail
             poId={selectedPOId}
@@ -2436,18 +2448,13 @@ export default function App() {
               )}
               {activePage === "Procurement" && (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {canManage(me) && (
+                  {canManage(me) && procTab === "suppliers" && (
+                    <button className="btn-primary small" onClick={() => setShowNewSupplierForm(true)}>
+                      + New supplier
+                    </button>
+                  )}
+                  {canManage(me) && procTab === "orders" && (
                     <>
-                      <button
-                        className="btn-ghost small"
-                        onClick={() => {
-                          setSelectedPOId(null);
-                          setSelectedSupplierId(null);
-                          setShowSupplierList(true);
-                        }}
-                      >
-                        🏬 Suppliers
-                      </button>
                       <button className="btn-ghost small" onClick={() => setShowScanReceipt(true)}>
                         📷 Scan receipt
                       </button>
@@ -2459,6 +2466,59 @@ export default function App() {
                 </div>
               )}
             </div>
+
+            {activePage === "Procurement" && canManage(me) && (
+              <div className="rp-tabs" role="tablist" aria-label="Procurement sections">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={procTab === "orders"}
+                  className={`rp-tab ${procTab === "orders" ? "on" : ""}`}
+                  onClick={() => setProcTab("orders")}
+                >
+                  Orders
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={procTab === "suppliers"}
+                  className={`rp-tab ${procTab === "suppliers" ? "on" : ""}`}
+                  onClick={() => setProcTab("suppliers")}
+                >
+                  Suppliers
+                  {suppliers.filter((s) => !s.archived).length > 0 && (
+                    <span className="rp-tab-n">{suppliers.filter((s) => !s.archived).length}</span>
+                  )}
+                  {Object.values(priceListInfo).some((i) => i.linked < i.total) && (
+                    <span
+                      className="it-tab-dot"
+                      role="img"
+                      aria-label="Some price list lines are not linked to an item"
+                      title="Some price list lines are not linked to an item"
+                    />
+                  )}
+                </button>
+              </div>
+            )}
+
+            {activePage === "Procurement" && canManage(me) && procTab === "suppliers" && accessToken && (
+              <SupplierList
+                suppliers={suppliers}
+                locations={locations}
+                accessToken={accessToken}
+                onOpenSupplier={(id) => setSelectedSupplierId(id)}
+                onSupplierCreated={(created) => setSuppliers((prev) => [...prev, created])}
+                showNew={showNewSupplierForm}
+                onShowNewChange={setShowNewSupplierForm}
+                openOrders={(purchaseOrders ?? []).reduce<Record<string, number>>((acc, po) => {
+                  if (po.status === "draft" || po.status === "sent" || po.status === "awaiting") {
+                    acc[po.supplier] = (acc[po.supplier] ?? 0) + 1;
+                  }
+                  return acc;
+                }, {})}
+                listInfo={priceListInfo}
+              />
+            )}
 
             {activePage === "Items" && (
               <>
@@ -2654,7 +2714,7 @@ export default function App() {
               </>
             )}
 
-            {activePage === "Procurement" && (
+            {activePage === "Procurement" && (procTab === "orders" || !canManage(me)) && (
               <>
                 {poError && <p className="error">{poError}</p>}
                 {!poError && !purchaseOrders && <p className="muted">Loading purchase orders…</p>}

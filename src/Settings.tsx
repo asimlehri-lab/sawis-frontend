@@ -150,32 +150,66 @@ function cleanNumeric(raw: string | null): string {
   return cleaned;
 }
 
+type SettingsTab = "locations" | "catalogue" | "import" | "account";
+const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
+  { key: "locations", label: "Locations" },
+  { key: "catalogue", label: "Catalogue" },
+  { key: "import", label: "Import" },
+  { key: "account", label: "Account" },
+];
+
 export default function Settings({ accessToken, items, recipes, allergens, locations, onItemsChanged, onRecipesChanged, onCategoriesChanged }: Props) {
+  const [tab, setTab] = useState<SettingsTab>("locations");
+  // Every pane stays mounted and is only hidden when it is not the open tab,
+  // so a half-filled form or an import in progress survives a tab switch.
   return (
     <>
-      <p className="muted" style={{ fontSize: 13, marginTop: 0, marginBottom: 16 }}>
-        Bulk-import a customer's existing menu and stock catalogue from a spreadsheet, instead of adding everything
-        one at a time — items and recipes both come from the same file.
-      </p>
-      <RecipeAndItemImportPanel
-        accessToken={accessToken}
-        items={items}
-        recipes={recipes}
-        allergens={allergens}
-        locations={locations}
-        onItemsChanged={onItemsChanged}
-        onRecipesChanged={onRecipesChanged}
-      />
-      <div style={{ height: 20 }} />
-      <LocationSettingsPanel accessToken={accessToken} locations={locations} />
-      <div style={{ height: 20 }} />
-      <CategorySettingsPanel accessToken={accessToken} onCategoriesChanged={onCategoriesChanged} />
-      <div style={{ height: 20 }} />
-      <OwnNamesPanel accessToken={accessToken} />
-      <div style={{ height: 20 }} />
-      <NotificationSettingsPanel accessToken={accessToken} locations={locations} />
-      <div style={{ height: 20 }} />
-      <ChangePasswordPanel accessToken={accessToken} />
+      <div className="rp-tabs" role="tablist" aria-label="Settings sections">
+        {SETTINGS_TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.key}
+            className={`rp-tab ${tab === t.key ? "on" : ""}`}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div hidden={tab !== "locations"}>
+        <LocationSettingsPanel accessToken={accessToken} locations={locations} />
+        <div style={{ height: 20 }} />
+        <NotificationSettingsPanel accessToken={accessToken} locations={locations} />
+      </div>
+
+      <div hidden={tab !== "catalogue"}>
+        <CategorySettingsPanel accessToken={accessToken} onCategoriesChanged={onCategoriesChanged} />
+        <div style={{ height: 20 }} />
+        <OwnNamesPanel accessToken={accessToken} />
+      </div>
+
+      <div hidden={tab !== "import"}>
+        <p className="muted" style={{ fontSize: 13, marginTop: 0, marginBottom: 16 }}>
+          Bulk-import a customer's existing menu and stock catalogue from a spreadsheet, instead of adding everything
+          one at a time — items and recipes both come from the same file.
+        </p>
+        <RecipeAndItemImportPanel
+          accessToken={accessToken}
+          items={items}
+          recipes={recipes}
+          allergens={allergens}
+          locations={locations}
+          onItemsChanged={onItemsChanged}
+          onRecipesChanged={onRecipesChanged}
+        />
+      </div>
+
+      <div hidden={tab !== "account"}>
+        <ChangePasswordPanel accessToken={accessToken} />
+      </div>
     </>
   );
 }

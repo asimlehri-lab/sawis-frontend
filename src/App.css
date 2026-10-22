@@ -3628,3 +3628,7 @@ button.rp-gcard:hover { border-color: var(--muted); }
 .po-list-strip { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; margin: 0 0 14px; font-size: 13px; }
 .po-list-strip b { color: var(--ink); }
 .po-list-link { margin-left: auto; color: var(--brand); font: inherit; font-weight: 600; cursor: pointer; background: none; border: 0; padding: 0; }
+.spl-pill { border-radius: 20px; padding: 3px 10px; font-size: 11px; font-weight: 700; display: inline-block; white-space: nowrap; }
+.spl-pill.warn { background: var(--caution-soft); color: var(--caution); }
+.spl-pill.ok { background: var(--good-soft); color: var(--good); }
+.spl-pill.mut { background: var(--bg); border: 1px solid var(--border); color: var(--muted); }
