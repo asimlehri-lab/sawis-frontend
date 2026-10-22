@@ -78,6 +78,7 @@ import SupplierUnitPicker from "./SupplierUnitPicker";
 import { cartonView, findSupplierFromScan, isOwnName, unitFromPrinted } from "./scanSupplier";
 import { canSeeAllLocations } from "./locationScope";
 import SupplierDeliveries from "./SupplierDeliveries";
+import type { SupplierTab } from "./SupplierDeliveries";
 import SupplierList from "./SupplierList";
 import WasteLog from "./WasteLog";
 import Inventory from "./Inventory";
@@ -811,6 +812,8 @@ export default function App() {
   const [poError, setPoError] = useState<string | null>(null);
   const [selectedPOId, setSelectedPOId] = useState<string | null>(null);
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
+  // Tab the supplier screen opens on (the PO screen's "View price list" link asks for the Price list).
+  const [supplierTab, setSupplierTab] = useState<SupplierTab | undefined>(undefined);
   const [showSupplierList, setShowSupplierList] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showNewPO, setShowNewPO] = useState(false);
@@ -1185,6 +1188,7 @@ export default function App() {
     setShowAllergenReview(false);
     setSelectedPOId(null);
     setSelectedSupplierId(null);
+    setSupplierTab(undefined);
     setShowNewPO(false);
     // Every ordinary nav click lands End of day back on Overview -- only the
     // notification bell's "View reorder list" passes eodTab explicitly.
@@ -2313,6 +2317,11 @@ export default function App() {
             onChanged={() => loadPOs(accessToken)}
             onItemsChanged={() => loadItems(accessToken)}
             onOpenPO={(id) => setSelectedPOId(id)}
+            onOpenPriceList={(sid) => {
+              setSelectedPOId(null);
+              setSelectedSupplierId(sid);
+              setSupplierTab("prices");
+            }}
             backLabel={
               selectedSupplierId ? `← ${suppliers.find((s) => s.id === selectedSupplierId)?.name ?? "supplier"}` : undefined
             }
@@ -2332,13 +2341,32 @@ export default function App() {
           />
         ) : activePage === "Procurement" && selectedSupplierId && accessToken ? (
           <SupplierDeliveries
+            key={`${selectedSupplierId}-${supplierTab ?? ""}`}
             supplierId={selectedSupplierId}
             readOnly={!canManage(me)}
             accessToken={accessToken}
             suppliers={suppliers}
             purchaseOrders={purchaseOrders ?? []}
             locations={locations}
-            onBack={() => setSelectedSupplierId(null)}
+            items={items ?? []}
+            initialTab={supplierTab}
+            listVersion={supplierItems}
+            onUploadList={(sid) => {
+              setImportSupplier(sid);
+              setShowImport(true);
+            }}
+            onLinksChanged={() => {
+              loadItems(accessToken);
+              fetchItemSuppliers(accessToken).then(setItemSupplierLinks).catch(() => {});
+            }}
+            onOpenItem={(id) => {
+              goToNav("Items");
+              setSelectedItemId(id);
+            }}
+            onBack={() => {
+              setSelectedSupplierId(null);
+              setSupplierTab(undefined);
+            }}
             onOpenPO={(id) => setSelectedPOId(id)}
             onNewPO={openNewPOForSupplier}
             onSupplierUpdated={(updated) =>

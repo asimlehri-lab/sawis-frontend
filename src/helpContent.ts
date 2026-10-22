@@ -272,6 +272,11 @@ export const HELP_TOPICS: HelpTopic[] = [
         fact: "💡 This isn't a one-time match at upload — a catalogue you import today keeps working for items you add next month too, since the matching runs whenever you open an item's page, not just once at import time.",
       },
       {
+        q: "Where can I see a supplier's uploaded price list and link its lines to my items?",
+        a: "Open the supplier (Procurement → 🏬 Suppliers, or click the supplier name on a purchase order) and go to the Price list tab. It lists every line from their uploaded list with the list price in their own unit, the date that line was last updated (in orange when it has not been in an upload for over 60 days), the item of yours it is linked to, and what you were last invoiced for that item. A line with no item shows Not linked: click Link to item, pick your item, and if the supplier sells it in a carton or case, enter how many of your unit it holds (for example 1 ctn holds 100 ea). SAWIS shows the sum in plain words, then sets that item's cost from this supplier. Change moves a line to a different item and Unlink removes the link. The filters above the table show All, Linked, Not linked or Older than 60 days. Upload new list opens the same upload as Items → Import supplier list. On a purchase order, View price list opens this tab for that supplier.",
+        fact: "💡 An orange arrow beside Last invoiced means the delivery was charged at a different price from the list price, which is a quick way to spot a supplier whose invoices and price list disagree.",
+      },
+      {
         q: "How do I add a new supplier?",
         a: "From the Suppliers list (Procurement → 🏬 Suppliers), click + New supplier. Only the name is required — email, phone, delivery day, minimum order value and notes are all optional and can be filled in later.",
         fact: "💡 Two shortcuts worth knowing: if you're logging a delivery invoice, Scan receipt has its own + New supplier right on the scan screen, so you never have to leave that flow. And if you'd rather not add suppliers one at a time at all, upload their whole product list instead via Items → ⇪ Import supplier list — SAWIS matches it against your items in the background.",

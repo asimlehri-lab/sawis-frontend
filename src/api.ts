@@ -1771,6 +1771,84 @@ export async function updateItemSupplier(
   return res.json();
 }
 
+// ---- Supplier price list (the uploaded catalogue, line by line) ----
+
+export interface PriceListLink {
+  id: string; // the ItemSupplier link
+  item: string;
+  item_name: string;
+  base_unit: string;
+  unit_price: string; // per the item's base unit
+  // True when SAWIS matched an existing link to this line by name rather
+  // than because the link was made from this line.
+  inferred: boolean;
+}
+
+export interface PriceListLine {
+  id: string;
+  raw_name: string;
+  unit: string;
+  price: string;
+  base_qty_per_unit: string;
+  imported_at: string;
+  link: PriceListLink | null;
+  last_invoiced: { price: string; unit: string; date: string; direction: "up" | "down" | "same" } | null;
+}
+
+export interface SupplierPriceList {
+  supplier: string;
+  last_upload: string | null;
+  total: number;
+  linked: number;
+  stale: number;
+  lines: PriceListLine[];
+}
+
+async function priceListError(res: Response, fallback: string): Promise<Error> {
+  const body = await res.json().catch(() => null);
+  if (body && typeof body === "object") {
+    const first = Object.values(body)[0];
+    const msg = Array.isArray(first) ? first[0] : first;
+    if (typeof msg === "string" && msg) return new Error(msg);
+  }
+  return new Error(fallback);
+}
+
+// summaryOnly asks for the counts without the lines (a PO screen's headline).
+export async function fetchSupplierPriceList(
+  accessToken: string,
+  supplierId: string,
+  summaryOnly = false
+): Promise<SupplierPriceList> {
+  const res = await fetch(`${API_URL}/api/catalog/suppliers/${supplierId}/price_list/${summaryOnly ? "?summary=1" : ""}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw await priceListError(res, "Could not load this supplier's price list.");
+  return res.json();
+}
+
+export async function linkPriceListLine(
+  accessToken: string,
+  supplierId: string,
+  input: { line: string; item: string; qty_per_unit?: string; replace_link?: string }
+): Promise<PriceListLine> {
+  const res = await fetch(`${API_URL}/api/catalog/suppliers/${supplierId}/link_line/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw await priceListError(res, "Could not link this line.");
+  return res.json();
+}
+
+export async function deleteItemSupplier(accessToken: string, id: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/catalog/item-suppliers/${id}/`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw await priceListError(res, "Could not remove this link.");
+}
+
 export interface POLineRow {
   id: string;
   po: string;

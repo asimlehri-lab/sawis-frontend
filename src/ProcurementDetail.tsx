@@ -19,6 +19,7 @@ import {
   uploadPOAttachment,
   fetchPOAttachmentDownloadUrl,
   deletePOAttachment,
+  fetchSupplierPriceList,
 } from "./api";
 import type { PurchaseOrder, CatalogItem, Supplier, ItemSupplierRow, Location } from "./api";
 import SearchSelect from "./SearchSelect";
@@ -44,6 +45,8 @@ interface Props {
   onItemsChanged?: () => void;
   onOpenPO: (id: string) => void;
   backLabel?: string;
+  // Opens the supplier screen on its Price list tab.
+  onOpenPriceList?: (supplierId: string) => void;
 }
 
 const STATUS_FLOW: PurchaseOrder["status"][] = ["draft", "sent", "received"];
@@ -168,6 +171,7 @@ export default function ProcurementDetail({
   onItemsChanged,
   onOpenPO,
   backLabel,
+  onOpenPriceList,
 }: Props) {
   const label = backLabel ?? "← All purchase orders";
   const [po, setPo] = useState<PurchaseOrder | null>(null);
@@ -265,6 +269,20 @@ export default function ProcurementDetail({
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poId]);
+
+  // How fresh the supplier's uploaded price list is, for the strip under the title.
+  const [listInfo, setListInfo] = useState<{ last_upload: string | null; total: number; linked: number } | null>(null);
+  const supplierIdForList = po?.supplier;
+  useEffect(() => {
+    if (!supplierIdForList || !onOpenPriceList) return;
+    let cancelled = false;
+    fetchSupplierPriceList(accessToken, supplierIdForList, true)
+      .then((d) => !cancelled && setListInfo({ last_upload: d.last_upload, total: d.total, linked: d.linked }))
+      .catch(() => !cancelled && setListInfo(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, supplierIdForList, onOpenPriceList]);
 
   useEffect(() => {
     // Waits on `po` too (not just `items`) so the very first default-selected
@@ -940,6 +958,23 @@ export default function ProcurementDetail({
         {po.location_name} · created for delivery to this location
         {po.invoice_number && ` · Supplier's invoice: ${po.invoice_number}`}
       </p>
+
+      {onOpenPriceList && listInfo && listInfo.total > 0 && (
+        <div className="po-list-strip">
+          <span className="muted">
+            Price list updated{" "}
+            <b>
+              {listInfo.last_upload
+                ? new Date(listInfo.last_upload).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+                : "—"}
+            </b>{" "}
+            · <b>{listInfo.linked}</b> of <b>{listInfo.total}</b> lines linked
+          </span>
+          <button type="button" className="po-list-link" onClick={() => onOpenPriceList(po.supplier)}>
+            View price list →
+          </button>
+        </div>
+      )}
 
       {error && <p className="error">{error}</p>}
       {readOnly && (

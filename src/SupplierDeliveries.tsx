@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DAY_NAMES, fmtDate, nextDeliveryDate } from "./App";
-import { formatMoney, defaultCurrency, updateSupplier } from "./api";
-import type { PurchaseOrder, Supplier, Location } from "./api";
+import { fetchSupplierPriceList, formatMoney, defaultCurrency, updateSupplier } from "./api";
+import type { CatalogItem, PurchaseOrder, Supplier, Location } from "./api";
+import SupplierPriceList from "./SupplierPriceList";
 
 interface Props {
   supplierId: string;
@@ -15,7 +16,17 @@ interface Props {
   // View-only (staff): contact fields locked, no "new purchase order" buttons.
   readOnly?: boolean;
   onSupplierUpdated: (updated: Supplier) => void;
+  items: CatalogItem[];
+  // Which tab to open on (the PO screen's "View price list" link opens Price list).
+  initialTab?: SupplierTab;
+  // Changes when a new list was uploaded, so the Price list tab fetches again.
+  listVersion: unknown;
+  onUploadList: (supplierId: string) => void;
+  onLinksChanged: () => void;
+  onOpenItem?: (itemId: string) => void;
 }
+
+export type SupplierTab = "details" | "orders" | "prices";
 
 function toISODate(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -36,10 +47,25 @@ export default function SupplierDeliveries({
   onNewPO,
   readOnly = false,
   onSupplierUpdated,
+  items,
+  initialTab,
+  listVersion,
+  onUploadList,
+  onLinksChanged,
+  onOpenItem,
 }: Props) {
   const supplier = suppliers.find((s) => s.id === supplierId);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [archiving, setArchiving] = useState(false);
+  const [tab, setTab] = useState<SupplierTab>(initialTab ?? "orders");
+  // Price list headline for the tab label: how many lines, and whether any are unlinked.
+  const [listCounts, setListCounts] = useState<{ total: number; notLinked: number } | null>(null);
+
+  useEffect(() => {
+    fetchSupplierPriceList(accessToken, supplierId, true)
+      .then((d) => setListCounts({ total: d.total, notLinked: d.total - d.linked }))
+      .catch(() => {});
+  }, [accessToken, supplierId, listVersion]);
 
   if (!supplier) {
     return (
@@ -137,157 +163,210 @@ export default function SupplierDeliveries({
       {saveError && <p className="error">{saveError}</p>}
       {readOnly && <p className="ro-banner">View only — changes to suppliers need a manager or admin.</p>}
 
-      <fieldset className="ro-fieldset" disabled={readOnly}>
-      <div className="card">
-        <h2>Contact & terms</h2>
-        <div className="fgrid fgrid-2">
-          <div className="field">
-            <label>Contact email</label>
-            <input
-              type="email"
-              defaultValue={supplier.contact_email ?? ""}
-              onBlur={(e) => handleSaveField({ contact_email: e.target.value || null })}
-              placeholder="optional"
-            />
-          </div>
-          <div className="field">
-            <label>Contact phone</label>
-            <input
-              defaultValue={supplier.contact_phone}
-              onBlur={(e) => handleSaveField({ contact_phone: e.target.value })}
-              placeholder="optional"
-            />
-          </div>
-          <div className="field">
-            <label>VAT number</label>
-            <input
-              defaultValue={supplier.vat_number ?? ""}
-              onBlur={(e) => handleSaveField({ vat_number: e.target.value.trim() })}
-              placeholder="optional, as printed on their invoices"
-            />
-          </div>
-          <div className="field">
-            <label>Delivery day</label>
-            <select
-              defaultValue={supplier.delivery_day ?? ""}
-              onChange={(e) =>
-                handleSaveField({ delivery_day: e.target.value === "" ? null : Number(e.target.value) })
-              }
-            >
-              <option value="">No regular delivery day</option>
-              {DAY_NAMES.map((day, idx) => (
-                <option key={idx} value={idx}>
-                  {day}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>Minimum order value</label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              defaultValue={supplier.min_order_value ?? ""}
-              onBlur={(e) =>
-                handleSaveField({
-                  min_order_value: e.target.value === "" ? null : Number(e.target.value).toFixed(2),
-                })
-              }
-              placeholder="optional"
-            />
-          </div>
-        </div>
-        <div className="field" style={{ marginTop: 16 }}>
-          <label>Notes</label>
-          <textarea
-            defaultValue={supplier.notes}
-            onBlur={(e) => handleSaveField({ notes: e.target.value })}
-            placeholder="optional — e.g. account number, delivery instructions"
-            rows={3}
-          />
-        </div>
-      </div>
-
-      </fieldset>
-
-      <div className="card">
-        <div className="content-head" style={{ marginBottom: open.length ? 18 : 0 }}>
-          <h2 style={{ margin: 0 }}>Open orders</h2>
-          {!readOnly && (
-            <button className="btn-ghost small" onClick={() => onNewPO(supplierId, nextISO)}>
-              + New purchase order
-            </button>
-          )}
-        </div>
-
-        {open.length === 0 ? (
-          <div style={{ padding: "8px 0 4px", textAlign: "center" }}>
-            <p className="muted" style={{ marginTop: 0 }}>
-              {nextLabel
-                ? `No purchase order yet for the next delivery (${nextLabel}).`
-                : "No open purchase orders for this supplier."}
-            </p>
-            {!readOnly && (
-              <button className="btn-primary small" onClick={() => onNewPO(supplierId, nextISO)}>
-                + New purchase order{nextLabel ? ` for ${nextLabel}` : ""}
-              </button>
+      <div className="rp-tabs" role="tablist" aria-label="Supplier sections">
+        {(
+          [
+            ["details", "Details"],
+            ["orders", "Open orders"],
+            ["prices", "Price list"],
+          ] as [SupplierTab, string][]
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            className={`rp-tab ${tab === key ? "on" : ""}`}
+            onClick={() => setTab(key)}
+          >
+            {label}
+            {key === "orders" && open.length > 0 && <span className="rp-tab-n">{open.length}</span>}
+            {key === "prices" && listCounts && listCounts.total > 0 && <span className="rp-tab-n">{listCounts.total}</span>}
+            {key === "prices" && listCounts && listCounts.notLinked > 0 && (
+              <span
+                className="it-tab-dot"
+                role="img"
+                aria-label="Some lines are not linked to an item"
+                title="Some lines are not linked to an item"
+              />
             )}
-          </div>
-        ) : (
-          <div className="table-scroll">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Status</th>
-                  <th>Location</th>
-                  <th>Expected</th>
-                  <th className="num">Lines</th>
-                  <th className="num">Total</th>
-                </tr>
-              </thead>
-              <tbody>{open.map(renderRow)}</tbody>
-            </table>
-          </div>
-        )}
+          </button>
+        ))}
       </div>
 
-      {history.length > 0 && (
-        <div className="card">
-          <h2 style={{ marginTop: 0 }}>Order history</h2>
-          <div className="table-scroll">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Status</th>
-                  <th>Location</th>
-                  <th>Expected</th>
-                  <th className="num">Lines</th>
-                  <th className="num">Total</th>
-                </tr>
-              </thead>
-              <tbody>{history.map(renderRow)}</tbody>
-            </table>
+      {tab === "details" && (
+        <>
+          <fieldset className="ro-fieldset" disabled={readOnly}>
+          <div className="card">
+            <h2>Contact & terms</h2>
+            <div className="fgrid fgrid-2">
+              <div className="field">
+                <label>Contact email</label>
+                <input
+                  type="email"
+                  defaultValue={supplier.contact_email ?? ""}
+                  onBlur={(e) => handleSaveField({ contact_email: e.target.value || null })}
+                  placeholder="optional"
+                />
+              </div>
+              <div className="field">
+                <label>Contact phone</label>
+                <input
+                  defaultValue={supplier.contact_phone}
+                  onBlur={(e) => handleSaveField({ contact_phone: e.target.value })}
+                  placeholder="optional"
+                />
+              </div>
+              <div className="field">
+                <label>VAT number</label>
+                <input
+                  defaultValue={supplier.vat_number ?? ""}
+                  onBlur={(e) => handleSaveField({ vat_number: e.target.value.trim() })}
+                  placeholder="optional, as printed on their invoices"
+                />
+              </div>
+              <div className="field">
+                <label>Delivery day</label>
+                <select
+                  defaultValue={supplier.delivery_day ?? ""}
+                  onChange={(e) =>
+                    handleSaveField({ delivery_day: e.target.value === "" ? null : Number(e.target.value) })
+                  }
+                >
+                  <option value="">No regular delivery day</option>
+                  {DAY_NAMES.map((day, idx) => (
+                    <option key={idx} value={idx}>
+                      {day}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="field">
+                <label>Minimum order value</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  defaultValue={supplier.min_order_value ?? ""}
+                  onBlur={(e) =>
+                    handleSaveField({
+                      min_order_value: e.target.value === "" ? null : Number(e.target.value).toFixed(2),
+                    })
+                  }
+                  placeholder="optional"
+                />
+              </div>
+            </div>
+            <div className="field" style={{ marginTop: 16 }}>
+              <label>Notes</label>
+              <textarea
+                defaultValue={supplier.notes}
+                onBlur={(e) => handleSaveField({ notes: e.target.value })}
+                placeholder="optional — e.g. account number, delivery instructions"
+                rows={3}
+              />
+            </div>
           </div>
-        </div>
+
+          </fieldset>
+          <div className="card">
+            <h2 style={{ marginTop: 0 }}>Archive</h2>
+            <div className="dz-row">
+              <div>
+                <b>{supplier.archived ? "This supplier is archived" : "Archive this supplier"}</b>
+                <p className="hint" style={{ margin: "3px 0 0" }}>
+                  {supplier.archived
+                    ? "Hidden from new-item supplier suggestions and pickers, but every past order stays intact."
+                    : "Stops it being suggested for new items or new purchase orders, without losing any order history — reversible any time. If it's still set as an item's default supplier or has an open order, those keep working; you'll just see an \"archived\" note."}
+                </p>
+              </div>
+              <button className="btn-ghost" onClick={handleToggleArchive} disabled={archiving}>
+                {archiving ? "Saving…" : supplier.archived ? "Unarchive" : "Archive supplier"}
+              </button>
+            </div>
+          </div>
+        </>
       )}
 
-      <div className="card">
-        <h2 style={{ marginTop: 0 }}>Archive</h2>
-        <div className="dz-row">
-          <div>
-            <b>{supplier.archived ? "This supplier is archived" : "Archive this supplier"}</b>
-            <p className="hint" style={{ margin: "3px 0 0" }}>
-              {supplier.archived
-                ? "Hidden from new-item supplier suggestions and pickers, but every past order stays intact."
-                : "Stops it being suggested for new items or new purchase orders, without losing any order history — reversible any time. If it's still set as an item's default supplier or has an open order, those keep working; you'll just see an \"archived\" note."}
-            </p>
+      {tab === "orders" && (
+        <>
+          <div className="card">
+            <div className="content-head" style={{ marginBottom: open.length ? 18 : 0 }}>
+              <h2 style={{ margin: 0 }}>Open orders</h2>
+              {!readOnly && (
+                <button className="btn-ghost small" onClick={() => onNewPO(supplierId, nextISO)}>
+                  + New purchase order
+                </button>
+              )}
+            </div>
+
+            {open.length === 0 ? (
+              <div style={{ padding: "8px 0 4px", textAlign: "center" }}>
+                <p className="muted" style={{ marginTop: 0 }}>
+                  {nextLabel
+                    ? `No purchase order yet for the next delivery (${nextLabel}).`
+                    : "No open purchase orders for this supplier."}
+                </p>
+                {!readOnly && (
+                  <button className="btn-primary small" onClick={() => onNewPO(supplierId, nextISO)}>
+                    + New purchase order{nextLabel ? ` for ${nextLabel}` : ""}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="table-scroll">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Status</th>
+                      <th>Location</th>
+                      <th>Expected</th>
+                      <th className="num">Lines</th>
+                      <th className="num">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>{open.map(renderRow)}</tbody>
+                </table>
+              </div>
+            )}
           </div>
-          <button className="btn-ghost" onClick={handleToggleArchive} disabled={archiving}>
-            {archiving ? "Saving…" : supplier.archived ? "Unarchive" : "Archive supplier"}
-          </button>
-        </div>
-      </div>
+
+          {history.length > 0 && (
+            <div className="card">
+              <h2 style={{ marginTop: 0 }}>Order history</h2>
+              <div className="table-scroll">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Status</th>
+                      <th>Location</th>
+                      <th>Expected</th>
+                      <th className="num">Lines</th>
+                      <th className="num">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>{history.map(renderRow)}</tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+        </>
+      )}
+
+      {tab === "prices" && (
+        <SupplierPriceList
+          supplier={supplier}
+          accessToken={accessToken}
+          items={items}
+          currency={defaultCurrency(locations)}
+          readOnly={readOnly}
+          listVersion={listVersion}
+          onUploadList={onUploadList}
+          onLinksChanged={onLinksChanged}
+          onOpenItem={onOpenItem}
+        />
+      )}
     </div>
   );
 }
