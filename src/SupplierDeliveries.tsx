@@ -11,6 +11,8 @@ interface Props {
   purchaseOrders: PurchaseOrder[];
   locations: Location[];
   onBack: () => void;
+  // Says where Back lands: the Suppliers tab, or Procurement.
+  backLabel?: string;
   onOpenPO: (id: string) => void;
   onNewPO: (supplierId: string, expectedDateISO: string) => void;
   // View-only (staff): contact fields locked, no "new purchase order" buttons.
@@ -43,6 +45,7 @@ export default function SupplierDeliveries({
   purchaseOrders,
   locations,
   onBack,
+  backLabel = "← Procurement",
   onOpenPO,
   onNewPO,
   readOnly = false,
@@ -71,7 +74,7 @@ export default function SupplierDeliveries({
     return (
       <div>
         <button className="back-link" onClick={onBack}>
-          ← All purchase orders
+          {backLabel}
         </button>
         <p className="error">Supplier not found.</p>
       </div>
@@ -141,7 +144,7 @@ export default function SupplierDeliveries({
   return (
     <div key={supplier.id}>
       <button className="back-link" onClick={onBack}>
-        ← All purchase orders
+        {backLabel}
       </button>
 
       <div className="detail-head">

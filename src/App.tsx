@@ -2383,6 +2383,7 @@ export default function App() {
               setSelectedSupplierId(null);
               setSupplierTab(undefined);
             }}
+            backLabel={procTab === "suppliers" && canManage(me) ? "← All suppliers" : "← Procurement"}
             onOpenPO={(id) => setSelectedPOId(id)}
             onNewPO={openNewPOForSupplier}
             onSupplierUpdated={(updated) =>
