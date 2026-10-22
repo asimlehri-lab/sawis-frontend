@@ -57,7 +57,7 @@ export default function SupplierDeliveries({
   const supplier = suppliers.find((s) => s.id === supplierId);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [archiving, setArchiving] = useState(false);
-  const [tab, setTab] = useState<SupplierTab>(initialTab ?? "orders");
+  const [tab, setTab] = useState<SupplierTab>(initialTab ?? "details");
   // Price list headline for the tab label: how many lines, and whether any are unlinked.
   const [listCounts, setListCounts] = useState<{ total: number; notLinked: number } | null>(null);
 
