@@ -1513,9 +1513,18 @@ export interface Supplier {
 }
 
 // How much of each supplier's uploaded price list is linked to your items.
+export interface PriceListInfo {
+  total: number;
+  linked: number;
+  // Items received from this supplier that no list line covers.
+  delivered: number;
+  delivered_newest: string | null;
+  delivered_stale: number;
+}
+
 export async function fetchPriceListOverview(
   accessToken: string
-): Promise<{ supplier: string; total: number; linked: number }[]> {
+): Promise<(PriceListInfo & { supplier: string })[]> {
   const res = await fetch(`${API_URL}/api/catalog/suppliers/price_list_overview/`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
@@ -1806,13 +1815,29 @@ export interface PriceListLine {
   last_invoiced: { price: string; unit: string; date: string; direction: "up" | "down" | "same" } | null;
 }
 
+// An item you have received from this supplier that no uploaded list line covers.
+export interface PriceListDelivery {
+  id: string; // the ItemSupplier link
+  item: string;
+  item_name: string;
+  base_unit: string;
+  unit: string; // the unit it was last invoiced in
+  price: string; // per that unit, as last invoiced
+  per_base: string; // per the item's base unit
+  date: string; // the day that delivery was received
+}
+
 export interface SupplierPriceList {
   supplier: string;
   last_upload: string | null;
   total: number;
   linked: number;
   stale: number;
+  delivered: number;
+  delivered_stale: number;
+  delivered_newest: string | null;
   lines: PriceListLine[];
+  deliveries: PriceListDelivery[];
 }
 
 async function priceListError(res: Response, fallback: string): Promise<Error> {

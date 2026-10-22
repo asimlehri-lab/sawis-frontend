@@ -271,13 +271,29 @@ export default function ProcurementDetail({
   }, [poId]);
 
   // How fresh the supplier's uploaded price list is, for the strip under the title.
-  const [listInfo, setListInfo] = useState<{ last_upload: string | null; total: number; linked: number } | null>(null);
+  const [listInfo, setListInfo] = useState<{
+    last_upload: string | null;
+    total: number;
+    linked: number;
+    delivered: number;
+    delivered_newest: string | null;
+  } | null>(null);
   const supplierIdForList = po?.supplier;
   useEffect(() => {
     if (!supplierIdForList || !onOpenPriceList) return;
     let cancelled = false;
     fetchSupplierPriceList(accessToken, supplierIdForList, true)
-      .then((d) => !cancelled && setListInfo({ last_upload: d.last_upload, total: d.total, linked: d.linked }))
+      .then(
+        (d) =>
+          !cancelled &&
+          setListInfo({
+            last_upload: d.last_upload,
+            total: d.total,
+            linked: d.linked,
+            delivered: d.delivered,
+            delivered_newest: d.delivered_newest,
+          })
+      )
       .catch(() => !cancelled && setListInfo(null));
     return () => {
       cancelled = true;
@@ -959,16 +975,39 @@ export default function ProcurementDetail({
         {po.invoice_number && ` · Supplier's invoice: ${po.invoice_number}`}
       </p>
 
-      {onOpenPriceList && listInfo && listInfo.total > 0 && (
+      {onOpenPriceList && listInfo && (listInfo.total > 0 || listInfo.delivered > 0) && (
         <div className="po-list-strip">
           <span className="muted">
-            Price list updated{" "}
-            <b>
-              {listInfo.last_upload
-                ? new Date(listInfo.last_upload).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
-                : "—"}
-            </b>{" "}
-            · <b>{listInfo.linked}</b> of <b>{listInfo.total}</b> lines linked
+            {listInfo.total > 0 ? (
+              <>
+                Price list updated{" "}
+                <b>
+                  {listInfo.last_upload
+                    ? new Date(listInfo.last_upload).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+                    : "—"}
+                </b>{" "}
+                · <b>{listInfo.linked}</b> of <b>{listInfo.total}</b> lines linked
+                {listInfo.delivered > 0 && (
+                  <>
+                    {" "}
+                    · <b>{listInfo.delivered}</b> more from deliveries
+                  </>
+                )}
+              </>
+            ) : (
+              <>
+                Prices from deliveries · <b>{listInfo.delivered}</b> {listInfo.delivered === 1 ? "item" : "items"}
+                {listInfo.delivered_newest && (
+                  <>
+                    {" "}
+                    · newest{" "}
+                    <b>
+                      {new Date(listInfo.delivered_newest).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                    </b>
+                  </>
+                )}
+              </>
+            )}
           </span>
           <button type="button" className="po-list-link" onClick={() => onOpenPriceList(po.supplier)}>
             View price list →

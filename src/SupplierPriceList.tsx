@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { autoFactor, deleteItemSupplier, fetchSupplierPriceList, formatMoney, linkPriceListLine } from "./api";
-import type { CatalogItem, PriceListLine, Supplier, SupplierPriceList as PriceListData } from "./api";
+import type {
+  CatalogItem,
+  PriceListDelivery,
+  PriceListLine,
+  Supplier,
+  SupplierPriceList as PriceListData,
+} from "./api";
 
 interface Props {
   supplier: Supplier;
@@ -16,7 +22,7 @@ interface Props {
   onOpenItem?: (itemId: string) => void;
 }
 
-type Filter = "all" | "linked" | "not" | "old";
+type Filter = "all" | "linked" | "not" | "del" | "old";
 
 const SHOW_STEP = 100;
 const STALE_DAYS = 60;
@@ -31,6 +37,10 @@ function fmtLong(iso: string): string {
 
 function isStale(line: PriceListLine): boolean {
   return Date.now() - new Date(line.imported_at).getTime() > STALE_DAYS * 86400000;
+}
+
+function isStaleDelivery(d: PriceListDelivery): boolean {
+  return Date.now() - new Date(d.date).getTime() > STALE_DAYS * 86400000;
 }
 
 // A price with as many decimals as it needs (0.379), never fewer than 2.
@@ -242,19 +252,23 @@ export default function SupplierPriceList({
   }, [supplier.id, listVersion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lines = useMemo(() => data?.lines ?? [], [data]);
+  // Items received from this supplier that no list line covers: shown after the list.
+  const deliveries = useMemo(() => data?.deliveries ?? [], [data]);
   const counts = useMemo(
     () => ({
-      all: lines.length,
-      linked: lines.filter((l) => l.link).length,
+      all: lines.length + deliveries.length,
+      linked: lines.filter((l) => l.link).length + deliveries.length,
       not: lines.filter((l) => !l.link).length,
-      old: lines.filter(isStale).length,
+      del: deliveries.length,
+      old: lines.filter(isStale).length + deliveries.filter(isStaleDelivery).length,
     }),
-    [lines]
+    [lines, deliveries]
   );
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return lines.filter((l) => {
+      if (filter === "del") return false;
       if (filter === "linked" && !l.link) return false;
       if (filter === "not" && l.link) return false;
       if (filter === "old" && !isStale(l)) return false;
@@ -263,6 +277,15 @@ export default function SupplierPriceList({
       return true;
     });
   }, [lines, filter, query]);
+
+  const shownDeliveries = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return deliveries.filter((d) => {
+      if (filter === "not") return false;
+      if (filter === "old" && !isStaleDelivery(d)) return false;
+      return !q || d.item_name.toLowerCase().includes(q);
+    });
+  }, [deliveries, filter, query]);
 
   async function handleLink(itemId: string, qty: string) {
     if (!picking) return;
@@ -286,12 +309,11 @@ export default function SupplierPriceList({
     }
   }
 
-  async function handleUnlink(line: PriceListLine) {
-    if (!line.link) return;
+  async function handleUnlink(linkId: string) {
     setBusy(true);
     setError(null);
     try {
-      await deleteItemSupplier(accessToken, line.link.id);
+      await deleteItemSupplier(accessToken, linkId);
       setConfirmUnlink(null);
       onLinksChanged();
       load();
@@ -308,7 +330,7 @@ export default function SupplierPriceList({
       return (
         <span className="spl-confirm">
           <span className="muted">Remove link?</span>
-          <button className="spl-btn pri" onClick={() => handleUnlink(line)} disabled={busy}>
+          <button className="spl-btn pri" onClick={() => handleUnlink(line.link!.id)} disabled={busy}>
             Remove
           </button>
           <button className="spl-btn ghost" onClick={() => setConfirmUnlink(null)} disabled={busy}>
@@ -343,6 +365,45 @@ export default function SupplierPriceList({
         <button className="spl-btn ghost" onClick={() => setConfirmUnlink(line.id)}>
           Unlink
         </button>
+      </>
+    );
+  }
+
+  function deliveryActions(d: PriceListDelivery) {
+    if (readOnly) return null;
+    if (confirmUnlink === d.id) {
+      return (
+        <span className="spl-confirm">
+          <span className="muted">Remove link?</span>
+          <button className="spl-btn pri" onClick={() => handleUnlink(d.id)} disabled={busy}>
+            Remove
+          </button>
+          <button className="spl-btn ghost" onClick={() => setConfirmUnlink(null)} disabled={busy}>
+            Keep
+          </button>
+        </span>
+      );
+    }
+    return (
+      <button className="spl-btn ghost" onClick={() => setConfirmUnlink(d.id)}>
+        Unlink
+      </button>
+    );
+  }
+
+  function deliveryItem(d: PriceListDelivery) {
+    return (
+      <>
+        {onOpenItem ? (
+          <button className="spl-lnk" onClick={() => onOpenItem(d.item)}>
+            {d.item_name}
+          </button>
+        ) : (
+          <b>{d.item_name}</b>
+        )}
+        <span className="spl-sub">
+          costs {money(Number(d.per_base), currency)} per {d.base_unit}
+        </span>
       </>
     );
   }
@@ -387,7 +448,7 @@ export default function SupplierPriceList({
   if (error && !data) return <p className="error">{error}</p>;
   if (!data) return <p className="muted">Loading the price list…</p>;
 
-  if (data.total === 0) {
+  if (data.total === 0 && deliveries.length === 0) {
     return (
       <div className="card" style={{ textAlign: "center" }}>
         <h2 style={{ marginTop: 0 }}>No price list yet</h2>
@@ -411,28 +472,53 @@ export default function SupplierPriceList({
     <div className="spl">
       {error && <p className="error">{error}</p>}
       <div className="spl-sum">
-        <span className="spl-facts">
-          Last upload <b>{data.last_upload ? fmtLong(data.last_upload) : "—"}</b> · <b>{data.linked}</b> of{" "}
-          <b>{data.total}</b> lines linked
-          <span className="spl-bar" aria-hidden="true">
-            <i style={{ width: `${pct}%` }} />
+        {data.total > 0 ? (
+          <span className="spl-facts">
+            Last upload <b>{data.last_upload ? fmtLong(data.last_upload) : "—"}</b> · <b>{data.linked}</b> of{" "}
+            <b>{data.total}</b> lines linked
+            <span className="spl-bar" aria-hidden="true">
+              <i style={{ width: `${pct}%` }} />
+            </span>
+            {deliveries.length > 0 && (
+              <>
+                {" "}
+                · <b>{deliveries.length}</b> more from deliveries
+              </>
+            )}
           </span>
-        </span>
+        ) : (
+          <span className="spl-facts">
+            <b>{deliveries.length}</b> {deliveries.length === 1 ? "item" : "items"} with a remembered price · built from
+            your deliveries
+            {data.delivered_newest && (
+              <>
+                {" "}
+                · newest <b>{fmtLong(data.delivered_newest)}</b>
+              </>
+            )}
+          </span>
+        )}
         {!readOnly && (
           <button className="btn-primary small" onClick={() => onUploadList(supplier.id)}>
-            ⇪ Upload new list
+            {data.total > 0 ? "⇪ Upload new list" : "⇪ Upload price list"}
           </button>
         )}
       </div>
 
       <div className="spl-tools">
         {(
-          [
-            ["all", "All", counts.all],
-            ["linked", "Linked", counts.linked],
-            ["not", "Not linked", counts.not],
-            ["old", `Older than ${STALE_DAYS} days`, counts.old],
-          ] as [Filter, string, number][]
+          (data.total === 0
+            ? [
+                ["all", "All", counts.all],
+                ["old", `Not bought for ${STALE_DAYS}+ days`, counts.old],
+              ]
+            : [
+                ["all", "All", counts.all],
+                ["linked", "Linked", counts.linked],
+                ["not", "Not linked", counts.not],
+                ...(deliveries.length > 0 ? [["del", "From deliveries", counts.del]] : []),
+                ["old", `Older than ${STALE_DAYS} days`, counts.old],
+              ]) as [Filter, string, number][]
         ).map(([key, label, n]) => (
           <button key={key} className={`spl-chip ${filter === key ? "on" : ""}`} onClick={() => {
               setFilter(key);
@@ -449,12 +535,12 @@ export default function SupplierPriceList({
             setQuery(e.target.value);
             setLimit(SHOW_STEP);
           }}
-          placeholder="Search the list or your items"
+          placeholder={data.total === 0 ? "Search your items" : "Search the list or your items"}
           aria-label="Search the price list"
         />
       </div>
 
-      {shown.length === 0 ? (
+      {shown.length === 0 && shownDeliveries.length === 0 ? (
         <p className="muted">No lines match.</p>
       ) : (
         <>
@@ -463,7 +549,7 @@ export default function SupplierPriceList({
               <thead>
                 <tr>
                   <th>Supplier's product</th>
-                  <th className="num">List price</th>
+                  <th className="num">Price</th>
                   <th>Updated</th>
                   <th>Your item</th>
                   <th className="num">Last invoiced</th>
@@ -490,6 +576,33 @@ export default function SupplierPriceList({
                     <td className="num">{actions(l)}</td>
                   </tr>
                 ))}
+                {shownDeliveries.map((d) => (
+                  <tr key={`d-${d.id}`}>
+                    <td>
+                      <span className="spl-raw">{d.item_name}</span>
+                      <span className="spl-del">From deliveries</span>
+                      <span className="spl-sub">{d.unit}</span>
+                    </td>
+                    <td className="num">
+                      <b>{money(Number(d.price), currency)}</b>
+                      <span className="spl-sub">
+                        last paid
+                        {d.unit !== d.base_unit ? ` · ${money(Number(d.per_base), currency)} per ${d.base_unit}` : ` · per ${d.unit}`}
+                      </span>
+                    </td>
+                    <td className={isStaleDelivery(d) ? "spl-old" : ""}>
+                      {fmtShort(d.date)}
+                      <span className={`spl-sub ${isStaleDelivery(d) ? "spl-oldtxt" : ""}`}>
+                        {isStaleDelivery(d) ? `over ${STALE_DAYS} days` : "received"}
+                      </span>
+                    </td>
+                    <td>{deliveryItem(d)}</td>
+                    <td className="num">
+                      <span className="muted">same as price</span>
+                    </td>
+                    <td className="num">{deliveryActions(d)}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
@@ -514,6 +627,30 @@ export default function SupplierPriceList({
                   {actions(l)}
                 </div>
                 {l.last_invoiced && <div className="row3">Last invoiced {invoiced(l)}</div>}
+              </div>
+            ))}
+            {shownDeliveries.map((d) => (
+              <div className="spl-card" key={`d-${d.id}`}>
+                <div className="top">
+                  <span className="spl-raw">
+                    {d.item_name}
+                    <span className="spl-sub">{d.unit}</span>
+                  </span>
+                  <span className="price">
+                    {money(Number(d.price), currency)}
+                    <span className={`spl-sub ${isStaleDelivery(d) ? "spl-oldtxt" : ""}`} style={{ textAlign: "right" }}>
+                      paid {fmtShort(d.date)}
+                    </span>
+                  </span>
+                </div>
+                <div className="row2">
+                  <span>
+                    <span className="spl-del" style={{ marginLeft: 0 }}>
+                      From deliveries
+                    </span>
+                  </span>
+                  {deliveryActions(d)}
+                </div>
               </div>
             ))}
           </div>

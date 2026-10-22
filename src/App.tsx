@@ -15,6 +15,7 @@ import {
   fetchLocations,
   fetchSuppliers,
   fetchPriceListOverview,
+  type PriceListInfo,
   fetchSupplierItems,
   bulkImportSupplierItems,
   createSupplier,
@@ -819,7 +820,7 @@ export default function App() {
   const [procTab, setProcTab] = useState<"orders" | "suppliers">("orders");
   const [showNewSupplierForm, setShowNewSupplierForm] = useState(false);
   // How much of each supplier's uploaded price list is linked (Suppliers tab).
-  const [priceListInfo, setPriceListInfo] = useState<Record<string, { total: number; linked: number }>>({});
+  const [priceListInfo, setPriceListInfo] = useState<Record<string, PriceListInfo>>({});
   const [showHelp, setShowHelp] = useState(false);
   const [showNewPO, setShowNewPO] = useState(false);
   const [newPOSupplier, setNewPOSupplier] = useState("");
@@ -985,8 +986,11 @@ export default function App() {
     fetchPriceListOverview(accessToken)
       .then((rows) => {
         if (cancelled) return;
-        const next: Record<string, { total: number; linked: number }> = {};
-        rows.forEach((r) => (next[r.supplier] = { total: r.total, linked: r.linked }));
+        const next: Record<string, PriceListInfo> = {};
+        rows.forEach((r) => {
+          const { supplier: sid, ...info } = r;
+          next[sid] = info;
+        });
         setPriceListInfo(next);
       })
       .catch(() => {});

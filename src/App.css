@@ -3632,3 +3632,4 @@ button.rp-gcard:hover { border-color: var(--muted); }
 .spl-pill.warn { background: var(--caution-soft); color: var(--caution); }
 .spl-pill.ok { background: var(--good-soft); color: var(--good); }
 .spl-pill.mut { background: var(--bg); border: 1px solid var(--border); color: var(--muted); }
+.spl-del { display: inline-block; background: var(--brand-soft); color: var(--brand); border-radius: 20px; padding: 2px 9px; font-size: 10.5px; font-weight: 700; white-space: nowrap; margin-left: 6px; vertical-align: middle; }

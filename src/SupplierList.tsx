@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { DAY_NAMES } from "./App";
 import { formatMoney, defaultCurrency, currencySymbol, createSupplier } from "./api";
-import type { Supplier, Location } from "./api";
+import type { Supplier, Location, PriceListInfo } from "./api";
 
 interface Props {
   suppliers: Supplier[];
@@ -16,7 +16,7 @@ interface Props {
   // Open purchase orders per supplier, and how much of each supplier's
   // uploaded price list is linked to your items.
   openOrders: Record<string, number>;
-  listInfo: Record<string, { total: number; linked: number }>;
+  listInfo: Record<string, PriceListInfo>;
 }
 
 type Filter = "active" | "archived" | "all";
@@ -160,10 +160,26 @@ export default function SupplierList({
                   <td>
                     {(() => {
                       const info = listInfo[s.id];
-                      if (!info || info.total === 0) return <span className="spl-pill mut">No list yet</span>;
+                      if (!info || (info.total === 0 && info.delivered === 0))
+                        return <span className="spl-pill mut">Nothing received yet</span>;
+                      if (info.total === 0) {
+                        const old =
+                          info.delivered_newest !== null &&
+                          Date.now() - new Date(info.delivered_newest).getTime() > 60 * 86400000;
+                        return (
+                          <span className={`spl-pill ${old ? "warn" : "ok"}`}>
+                            {old && info.delivered_newest
+                              ? `${info.delivered} ${info.delivered === 1 ? "price" : "prices"} · newest ${new Date(
+                                  info.delivered_newest
+                                ).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`
+                              : `${info.delivered} ${info.delivered === 1 ? "price" : "prices"} from deliveries`}
+                          </span>
+                        );
+                      }
                       return (
                         <span className={`spl-pill ${info.linked < info.total ? "warn" : "ok"}`}>
                           {info.linked} of {info.total} linked
+                          {info.delivered > 0 ? ` · +${info.delivered} from deliveries` : ""}
                         </span>
                       );
                     })()}

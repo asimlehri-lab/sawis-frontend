@@ -63,7 +63,7 @@ export default function SupplierDeliveries({
 
   useEffect(() => {
     fetchSupplierPriceList(accessToken, supplierId, true)
-      .then((d) => setListCounts({ total: d.total, notLinked: d.total - d.linked }))
+      .then((d) => setListCounts({ total: d.total + d.delivered, notLinked: d.total - d.linked }))
       .catch(() => {});
   }, [accessToken, supplierId, listVersion]);
 
