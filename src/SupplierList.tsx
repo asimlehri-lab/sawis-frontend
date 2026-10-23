@@ -257,23 +257,26 @@ export default function SupplierList({
             resetNewSupplierForm();
           }}
         >
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal ns-modal" onClick={(e) => e.stopPropagation()}>
             <h2>New supplier</h2>
             <form onSubmit={handleCreateSupplier}>
               <label>
                 Name
                 <input value={newName} onChange={(e) => setNewName(e.target.value)} required autoFocus />
               </label>
+              <div className="ns-row">
               <label>
-                Contact email <span className="optional">optional</span>
+                <span>Contact email <span className="optional">optional</span></span>
                 <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
               </label>
               <label>
-                Contact phone <span className="optional">optional</span>
+                <span>Contact phone <span className="optional">optional</span></span>
                 <input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} />
               </label>
+              </div>
+              <div className="ns-row">
               <label>
-                Delivery day <span className="optional">optional</span>
+                <span>Delivery day <span className="optional">optional</span></span>
                 <select value={newDay} onChange={(e) => setNewDay(e.target.value)}>
                   <option value="">No fixed delivery day</option>
                   {DAY_NAMES.map((name, i) => (
@@ -284,7 +287,7 @@ export default function SupplierList({
                 </select>
               </label>
               <label>
-                Minimum order value <span className="optional">optional</span>
+                <span>Minimum order value <span className="optional">optional</span></span>
                 <input
                   type="number"
                   min="0"
@@ -294,62 +297,35 @@ export default function SupplierList({
                   placeholder={currencySymbol(defaultCurrency(locations))}
                 />
               </label>
+              </div>
               <label>
-                Notes <span className="optional">optional</span>
+                <span>Notes <span className="optional">optional</span></span>
                 <textarea
                   value={newNotes}
                   onChange={(e) => setNewNotes(e.target.value)}
                   placeholder="e.g. account number, delivery instructions"
-                  rows={3}
+                  rows={2}
                 />
               </label>
               <div className="ns-sec">
-                <h4>
-                  Price list <span className="optional">optional</span>
-                </h4>
-                <p className="vhint">
-                  Did they send you a list? Add it now and it goes straight onto their Price list tab. One product per
-                  row: name, unit, price.{" "}
+                <div className="ns-sec-head">
+                  <h4>
+                    Price list <span className="optional">optional</span>
+                  </h4>
                   <button type="button" className="mini" onClick={() => downloadSupplierListTemplate()}>
-                    ⇩ Download the template
+                    ⇩ Template
                   </button>
-                </p>
+                </div>
+                <p className="vhint">Did they send you a list? Add it now: name, unit, price. It goes onto their Price list tab.</p>
                 <input
                   type="file"
                   accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                   onChange={handleListFile}
                 />
                 {listFileName && !listError && listRows.length > 0 && (
-                  <>
-                    <div className="im-note">
-                      ✓ <b>{listRows.length} products</b> read from {listFileName}.
-                    </div>
-                    <div className="table-scroll">
-                      <table className="im-tbl">
-                        <thead>
-                          <tr>
-                            <th>Product line</th>
-                            <th>Unit</th>
-                            <th className="num">Price</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {listRows.slice(0, 5).map((r, i) => (
-                            <tr key={i}>
-                              <td>{r.name}</td>
-                              <td>{r.unit}</td>
-                              <td className="num">{formatMoney(Number(r.price), defaultCurrency(locations))}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    {listRows.length > 5 && (
-                      <p className="muted" style={{ fontSize: 12 }}>
-                        …and {listRows.length - 5} more.
-                      </p>
-                    )}
-                  </>
+                  <div className="im-note">
+                    ✓ <b>{listRows.length} products</b> read from {listFileName}. They are stored when you create the supplier.
+                  </div>
                 )}
                 {listError && <p className="error">{listError}</p>}
               </div>

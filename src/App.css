@@ -3637,3 +3637,16 @@ button.rp-gcard:hover { border-color: var(--muted); }
 .im-supplier { background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 9px 12px; font-weight: 600; }
 .ns-sec { border-top: 1px solid var(--border); margin: 14px 0 0; padding: 14px 0 0; }
 .ns-sec h4 { margin: 0 0 4px; font-size: 14px; }
+.modal.ns-modal { max-width: 540px; max-height: 92vh; overflow-y: auto; }
+.ns-modal { padding: 22px 24px; }
+.ns-modal h2 { margin-bottom: 12px; }
+.ns-modal form { display: flex; flex-direction: column; gap: 10px; }
+.ns-modal label { gap: 4px; }
+.ns-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ns-row label { min-width: 0; }
+@media (max-width: 560px) { .ns-row { grid-template-columns: 1fr; } }
+.ns-sec-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+.ns-sec-head h4 { margin: 0; }
+.ns-sec .vhint { margin: 0 0 8px; }
+.ns-sec .im-note { margin: 8px 0 0; }
+.ns-modal .modal-actions { position: sticky; bottom: -22px; background: var(--surface); padding: 12px 0 2px; margin-top: 4px; border-top: 1px solid var(--border); z-index: 2; }
