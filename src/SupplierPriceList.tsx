@@ -498,11 +498,6 @@ export default function SupplierPriceList({
             )}
           </span>
         )}
-        {!readOnly && (
-          <button className="btn-primary small" onClick={() => onUploadList(supplier.id)}>
-            {data.total > 0 ? "⇪ Upload new list" : "⇪ Upload price list"}
-          </button>
-        )}
       </div>
 
       <div className="spl-tools">

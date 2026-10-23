@@ -156,6 +156,11 @@ export default function SupplierDeliveries({
             Archived
           </span>
         )}
+        {!readOnly && (
+          <button type="button" className="btn-primary small sup-upload" onClick={() => onUploadList(supplier.id)}>
+            ⇪ Upload price list
+          </button>
+        )}
       </div>
       <p className="muted detail-sub">
         {supplier.delivery_day !== null ? `Delivers every ${DAY_NAMES[supplier.delivery_day]}` : "No regular delivery day set"}

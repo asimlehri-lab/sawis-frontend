@@ -79,7 +79,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         q: "How do I add a new item?",
         a: "Go to Items in the sidebar and click + New item, top right. Give it a name, a base unit (like kg or each), and a category, then save.",
-        fact: "💡 If you've already imported a supplier's catalogue (Items → ⇪ Import supplier list), open your new item's page afterward — SAWIS automatically checks it against every catalogue you've uploaded and suggests matching suppliers and prices under \"Other suppliers that may stock this.\"",
+        fact: "💡 If you've already imported a supplier's catalogue (Procurement → Suppliers → the supplier → ⇪ Upload price list), open your new item's page afterward — SAWIS automatically checks it against every catalogue you've uploaded and suggests matching suppliers and prices under \"Other suppliers that may stock this.\"",
       },
       {
         q: "What's a par level?",
@@ -259,7 +259,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     keywords: [
       "supplier", "suppliers", "archive", "contact", "delivery day",
       "min order", "minimum order", "catalogue", "catalog", "price list",
-      "import supplier list", "recommended", "suggested", "match", "matching",
+      "import supplier list", "upload price list", "recommended", "suggested", "match", "matching",
     ],
     questions: [
       {
@@ -267,13 +267,13 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "Suppliers isn't its own item in the sidebar — it lives inside Procurement. Click Procurement in the sidebar, then the Suppliers tab next to Orders. That opens a searchable list of every supplier you have, with their open orders and their price list: how much of an uploaded list is linked to your items, or how many prices have been remembered from your deliveries.",
       },
       {
-        q: "How do I import a supplier's product catalogue?",
-        a: "This one's on the Items page, not Suppliers — go to Items and click ⇪ Import supplier list at the top, then pick which supplier the file is from and upload their CSV or Excel product list. SAWIS stores the whole thing in the background; nothing on your items changes yet. It then matches each line in that catalogue against your existing item names. To see what it found, open any item's page and scroll to \"Other suppliers that may stock this\" — each match shows a confidence %, the supplier's own line text, and their price. Nothing is linked automatically: you review each suggestion and click Link yourself, which is also what records that supplier's price against the item.",
+        q: "How do I upload a supplier's price list?",
+        a: "Open Procurement, click the Suppliers tab, click the supplier, and press ⇪ Upload price list at the top right (it is there on every tab of the supplier). Choose their CSV or Excel product list, one product per row: name, unit, price. SAWIS stores every line on that supplier's Price list tab; nothing on your items changes yet, and you link each line to one of your items there. SAWIS also matches each line against your existing item names. To see what it found, open any item's page and scroll to \"Other suppliers that may stock this\" — each match shows a confidence %, the supplier's own line text, and their price. Nothing is linked automatically: you review each suggestion and click Link yourself, which is also what records that supplier's price against the item.",
         fact: "💡 This isn't a one-time match at upload — a catalogue you import today keeps working for items you add next month too, since the matching runs whenever you open an item's page, not just once at import time.",
       },
       {
         q: "Where can I see a supplier's uploaded price list and link its lines to my items?",
-        a: "Open the supplier (Procurement → Suppliers tab, or click the supplier name on a purchase order) and go to the Price list tab. It lists every line from their uploaded list with the list price in their own unit, the date that line was last updated (in orange when it has not been in an upload for over 60 days), the item of yours it is linked to, and what you were last invoiced for that item. A line with no item shows Not linked: click Link to item, pick your item, and if the supplier sells it in a carton or case, enter how many of your unit it holds (for example 1 ctn holds 100 ea). SAWIS shows the sum in plain words, then sets that item's cost from this supplier. Change moves a line to a different item and Unlink removes the link. The filters above the table show All, Linked, Not linked or Older than 60 days. Upload new list opens the same upload as Items → Import supplier list. On a purchase order, View price list opens this tab for that supplier. You do not need an uploaded list for this tab to be useful: every item you have received from the supplier appears with a From deliveries tag, showing the price you last paid (in the unit it was invoiced in) and the day that delivery was received. Those prices change only when you receive the next delivery, so correct a price on the delivery itself when you receive it. A supplier with no uploaded list simply shows these items.",
+        a: "Open the supplier (Procurement → Suppliers tab, or click the supplier name on a purchase order) and go to the Price list tab. It lists every line from their uploaded list with the list price in their own unit, the date that line was last updated (in orange when it has not been in an upload for over 60 days), the item of yours it is linked to, and what you were last invoiced for that item. A line with no item shows Not linked: click Link to item, pick your item, and if the supplier sells it in a carton or case, enter how many of your unit it holds (for example 1 ctn holds 100 ea). SAWIS shows the sum in plain words, then sets that item's cost from this supplier. Change moves a line to a different item and Unlink removes the link. The filters above the table show All, Linked, Not linked or Older than 60 days. The ⇪ Upload price list button at the top right of the supplier uploads a new list; lines already there are refreshed rather than duplicated. On a purchase order, View price list opens this tab for that supplier. You do not need an uploaded list for this tab to be useful: every item you have received from the supplier appears with a From deliveries tag, showing the price you last paid (in the unit it was invoiced in) and the day that delivery was received. Those prices change only when you receive the next delivery, so correct a price on the delivery itself when you receive it. A supplier with no uploaded list simply shows these items.",
         fact: "💡 An orange arrow beside Last invoiced means the delivery was charged at a different price from the list price, which is a quick way to spot a supplier whose invoices and price list disagree.",
       },
       {
@@ -632,7 +632,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "What's the difference between Import recipes & items and Import supplier list?",
-        a: "They're easy to mix up but do opposite things. Settings → Import recipes & items (this page) creates new Item or Recipe records for your own menu and stock list from a spreadsheet. Items page → ⇪ Import supplier list instead uploads one supplier's product catalogue so SAWIS can suggest which of your existing items they stock — it never creates new items on its own, only suggested links you confirm.",
+        a: "They're easy to mix up but do opposite things. Settings → Import recipes & items (this page) creates new Item or Recipe records for your own menu and stock list from a spreadsheet. Procurement → Suppliers → a supplier → ⇪ Upload price list instead uploads one supplier's product catalogue so SAWIS can suggest which of your existing items they stock — it never creates new items on its own, only suggested links you confirm.",
       },
       {
         q: "How do I add a new item category?",

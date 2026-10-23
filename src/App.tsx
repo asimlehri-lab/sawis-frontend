@@ -641,13 +641,6 @@ export default function App() {
     { created: number; updated: number; linkedSynced: string[] } | null
   >(null);
 
-  const [showNewSupplier, setShowNewSupplier] = useState(false);
-  const [newSupplierName, setNewSupplierName] = useState("");
-  const [newSupplierEmail, setNewSupplierEmail] = useState("");
-  const [newSupplierDay, setNewSupplierDay] = useState("");
-  const [newSupplierMin, setNewSupplierMin] = useState("");
-  const [savingSupplier, setSavingSupplier] = useState(false);
-  const [newSupplierError, setNewSupplierError] = useState<string | null>(null);
 
   const [recipeFilter, setRecipeFilter] = useState<"all" | "dish" | "sub">("all");
   // Client-side only, same pattern as recipeFilter/poFilter -- these lists
@@ -1287,37 +1280,6 @@ export default function App() {
     setImportFileName("");
     setImportError(null);
     setImportDone(null);
-    setShowNewSupplier(false);
-    setNewSupplierName("");
-    setNewSupplierEmail("");
-    setNewSupplierDay("");
-    setNewSupplierMin("");
-    setNewSupplierError(null);
-  }
-
-  async function handleCreateSupplier() {
-    if (!accessToken || !newSupplierName.trim()) return;
-    setSavingSupplier(true);
-    setNewSupplierError(null);
-    try {
-      const created = await createSupplier(accessToken, {
-        name: newSupplierName.trim(),
-        contact_email: newSupplierEmail.trim() || null,
-        delivery_day: newSupplierDay === "" ? null : Number(newSupplierDay),
-        min_order_value: newSupplierMin.trim() === "" ? null : Number(newSupplierMin).toFixed(2),
-      });
-      setSuppliers((prev) => [...prev, created]);
-      setImportSupplier(created.id);
-      setShowNewSupplier(false);
-      setNewSupplierName("");
-      setNewSupplierEmail("");
-      setNewSupplierDay("");
-      setNewSupplierMin("");
-    } catch (err) {
-      setNewSupplierError(err instanceof Error ? err.message : "Could not create supplier.");
-    } finally {
-      setSavingSupplier(false);
-    }
   }
 
   // Turns a sheet's raw rows (from either CSV or Excel) into the same
@@ -2414,9 +2376,6 @@ export default function App() {
                         {(items ?? []).filter((it) => !it.archived && it.allergen_needs_review).length > 0 &&
                           ` (${(items ?? []).filter((it) => !it.archived && it.allergen_needs_review).length})`}
                       </button>
-                      <button className="btn-ghost small" onClick={() => setShowImport(true)}>
-                        ⇪ Import supplier list
-                      </button>
                       <button className="btn-primary small" onClick={() => setShowNewItem(true)}>
                         + New item
                       </button>
@@ -3116,85 +3075,15 @@ export default function App() {
           }}
         >
           <div className="modal wide" onClick={(e) => e.stopPropagation()}>
-            <h2>Import a supplier's catalogue</h2>
+            <h2>Upload price list</h2>
             <p className="hint" style={{ marginTop: -8, marginBottom: 16 }}>
-              Suppliers usually send their full product list as a CSV or Excel spreadsheet. SAWIS
-              stores it in the background so it can suggest which suppliers stock the items you
-              already track.
+              Suppliers usually send their full product list as a CSV or Excel spreadsheet. Every line
+              goes on this supplier&rsquo;s Price list tab, where you link it to your items.
             </p>
 
             <div className="field" style={{ marginBottom: 12 }}>
               <label>Supplier</label>
-              <select value={importSupplier} onChange={(e) => setImportSupplier(e.target.value)}>
-                <option value="">Choose a supplier…</option>
-                {suppliers.filter((s) => !s.archived).map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-              {!showNewSupplier ? (
-                <button
-                  type="button"
-                  className="mini"
-                  style={{ marginTop: 8 }}
-                  onClick={() => setShowNewSupplier(true)}
-                >
-                  + New supplier
-                </button>
-              ) : (
-                <div className="new-sup">
-                  <input
-                    value={newSupplierName}
-                    onChange={(e) => setNewSupplierName(e.target.value)}
-                    placeholder="Supplier name"
-                  />
-                  <input
-                    value={newSupplierEmail}
-                    onChange={(e) => setNewSupplierEmail(e.target.value)}
-                    placeholder="Contact email (optional)"
-                  />
-                  <select value={newSupplierDay} onChange={(e) => setNewSupplierDay(e.target.value)}>
-                    <option value="">No fixed delivery day</option>
-                    {DAY_NAMES.map((name, i) => (
-                      <option key={i} value={i}>
-                        Delivers {name}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={newSupplierMin}
-                    onChange={(e) => setNewSupplierMin(e.target.value)}
-                    placeholder={`Minimum order value ${currencySymbol(orgCurrency)} (optional)`}
-                  />
-                  <div className="new-sup-row">
-                    <button
-                      type="button"
-                      className="btn-ghost"
-                      onClick={() => {
-                        setShowNewSupplier(false);
-                        setNewSupplierName("");
-                        setNewSupplierEmail("");
-                        setNewSupplierError(null);
-                      }}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      className="mini"
-                      onClick={handleCreateSupplier}
-                      disabled={savingSupplier || !newSupplierName.trim()}
-                    >
-                      {savingSupplier ? "Adding…" : "Add supplier"}
-                    </button>
-                  </div>
-                  {newSupplierError && <p className="error">{newSupplierError}</p>}
-                </div>
-              )}
+              <div className="im-supplier">{suppliers.find((x) => x.id === importSupplier)?.name ?? "—"}</div>
             </div>
 
             <div className="field" style={{ marginBottom: 12 }}>
@@ -3262,7 +3151,7 @@ export default function App() {
                 ✓ <b>
                   {importDone.created} new{importDone.updated > 0 ? `, ${importDone.updated} updated` : ""}.
                 </b>{" "}
-                Open items to see matching suggestions.
+                The lines are on this supplier&rsquo;s Price list tab, where you link them to your items.
                 {importDone.linkedSynced.length > 0 && (
                   <div style={{ marginTop: 6 }}>
                     Also refreshed the live price on {importDone.linkedSynced.length} already-linked{" "}
@@ -3293,6 +3182,18 @@ export default function App() {
                   onClick={handleImportSubmit}
                 >
                   {importSaving ? "Storing…" : `Store ${importRows.length || ""} products`}
+                </button>
+              )}
+              {importDone !== null && (
+                <button
+                  className="btn-primary"
+                  onClick={() => {
+                    setSupplierTab("prices");
+                    setShowImport(false);
+                    resetImport();
+                  }}
+                >
+                  View price list
                 </button>
               )}
             </div>
