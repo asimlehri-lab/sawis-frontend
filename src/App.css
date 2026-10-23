@@ -3650,3 +3650,41 @@ button.rp-gcard:hover { border-color: var(--muted); }
 .ns-sec .vhint { margin: 0 0 8px; }
 .ns-sec .im-note { margin: 8px 0 0; }
 .ns-modal .modal-actions { position: sticky; bottom: -22px; background: var(--surface); padding: 12px 0 2px; margin-top: 4px; border-top: 1px solid var(--border); z-index: 2; }
+
+/* ---- Square connection (Settings > Integrations, End of day source line) ---- */
+.eod-import-meta .eod-source.warn { color: var(--caution); font-weight: 600; }
+.sq-card { max-width: 860px; text-align: left; }
+.sq-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.sq-who { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.sq-logo { width: 38px; height: 38px; flex: none; border-radius: 10px; background: var(--ink); color: var(--surface); display: grid; place-items: center; font-weight: 700; font-size: 18px; }
+.sq-text { font-size: 13.5px; margin: 0 0 14px; max-width: 62ch; }
+.sq-btns { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.sq-pill { display: inline-block; border-radius: 100px; padding: 3px 11px; font-size: 12px; font-weight: 600; }
+.sq-pill.good { background: var(--good-soft); color: var(--good); }
+.sq-pill.warn { background: var(--caution-soft); color: var(--caution); }
+.sq-pill.test { background: var(--warn-soft); color: var(--warn); }
+.sq-notice { border-radius: 9px; padding: 9px 12px; font-size: 13px; margin: 0 0 12px; }
+.sq-notice.ok { background: var(--good-soft); color: var(--good); }
+.sq-notice.bad { background: var(--caution-soft); color: var(--caution); }
+.sq-confirm { font-size: 12.5px; color: var(--muted); }
+.sq-sec { border-top: 1px solid var(--border); margin-top: 18px; padding-top: 16px; }
+.sq-sec h3 { margin: 0 0 2px; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.sq-count { background: var(--caution-soft); color: var(--caution); border-radius: 100px; padding: 1px 8px; font-size: 11.5px; font-weight: 700; }
+.sq-table-wrap { overflow-x: auto; }
+.sq-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.sq-table th { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.sq-table td { padding: 9px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.sq-table select, .sq-table input { border: 1px solid var(--border); border-radius: 9px; padding: 7px 9px; font: inherit; font-size: 13px; background: var(--bg); color: var(--ink); max-width: 100%; }
+.sq-unmatched { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; }
+.sq-unmatched li { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.4fr) auto; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.sq-u-info { display: flex; flex-direction: column; gap: 2px; font-size: 13px; min-width: 0; }
+.sq-u-info span { font-size: 11.5px; color: var(--muted); }
+@media (max-width: 720px) {
+  .sq-table thead { display: none; }
+  .sq-table, .sq-table tbody, .sq-table tr, .sq-table td { display: block; width: 100%; }
+  .sq-table tr { padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .sq-table td { border: 0; padding: 4px 0; }
+  .sq-table td::before { content: attr(data-label); display: block; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+  .sq-table select, .sq-table input { width: 100%; }
+  .sq-unmatched li { grid-template-columns: 1fr; gap: 8px; }
+}

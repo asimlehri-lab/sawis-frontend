@@ -10,6 +10,7 @@ import { PickLocationPrompt } from "./AllLocationsParts";
 import EodTasks from "./EodTasks";
 import SearchSelect from "./SearchSelect";
 import ScanEodSales from "./ScanEodSales";
+import { fetchSquareStatus, fmtSquareDateTime, type SquareConnection } from "./squareApi";
 
 interface Props {
   accessToken: string;
@@ -194,9 +195,26 @@ export default function EndOfDay({
     isManagerOrAbove ? (initialTab ?? "overview") : "tasks"
   );
   const [location, setLocation] = useState(locations[0]?.id ?? "");
+  // Square connection (managers only; the endpoint is manager-gated). Stays
+  // null when Square is not connected or cannot be reached, which just keeps
+  // the "manual CSV upload" wording below.
+  const [square, setSquare] = useState<SquareConnection | null>(null);
+  useEffect(() => {
+    if (!isManagerOrAbove) return;
+    let cancelled = false;
+    fetchSquareStatus(accessToken)
+      .then((s) => {
+        if (!cancelled) setSquare(s.connection);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, isManagerOrAbove]);
   // "all" is the All tab: every location added up. Only the Sales tab can
   // show that; importing, Actions and Reorder belong to one location.
   const isAll = location === ALL_LOCATIONS;
+  const squareLink = square?.links.some((l) => l.location === location) ?? false;
   const showAllTab = isManagerOrAbove && canSeeAllLocations(me, locations);
   // locations loads asynchronously (App.tsx only fetches it once activePage
   // becomes "End of day" -- see the effect keyed on activePage there) -- if
@@ -687,10 +705,19 @@ export default function EndOfDay({
               : lastImportedAt
               ? `Last imported ${fmtImportedAt(lastImportedAt)}`
               : "No sales imported yet"}
-            {/* Manual-only for now — once a POS connects directly, this line
-                is where its name + a live/connected/disconnected traffic
-                light (green/amber/red) will replace "Manual CSV upload". */}
-            <span className="eod-source">Source: manual CSV upload</span>
+            {squareLink ? (
+              <span className={`eod-source ${square?.status === "needs_reconnect" ? "warn" : ""}`}>
+                {square?.status === "needs_reconnect"
+                  ? "Square needs reconnecting (Settings → Integrations)"
+                  : `Source: Square · last synced ${fmtSquareDateTime(square?.last_synced_at ?? null)} · sales up to yesterday`}
+                {square && square.status === "active" && square.unmatched_count > 0
+                  ? ` · ${square.unmatched_count} ${square.unmatched_count === 1 ? "line needs" : "lines need"} matching (Settings → Integrations)`
+                  : ""}
+                {" · a CSV upload still works"}
+              </span>
+            ) : (
+              <span className="eod-source">Source: manual CSV upload</span>
+            )}
           </div>
         </div>
       </div>

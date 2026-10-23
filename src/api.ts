@@ -4,7 +4,7 @@
 // cause a merge conflict every time staging is promoted. Falls back to the
 // production URL for local dev too, per the "frontend always talks to
 // production" convention documented in the project handoff.
-const API_URL = import.meta.env.VITE_API_URL || "https://sawis-backend-1.onrender.com";
+export const API_URL = import.meta.env.VITE_API_URL || "https://sawis-backend-1.onrender.com";
 
 // Currency is a per-Location display setting (Settings → Locations) — which
 // symbol/format a location's own prices and reports show, not a live

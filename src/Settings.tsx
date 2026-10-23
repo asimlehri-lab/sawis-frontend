@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
+import SquarePanel from "./SquarePanel";
+import type { SquareReturn } from "./squareApi";
 import {
   bulkImportRecipes,
   changePassword,
@@ -38,6 +40,8 @@ interface Props {
   recipes: Recipe[];
   allergens: Allergen[];
   locations: Location[];
+  // Set when Square has just sent the person back to the app (see squareApi).
+  squareReturn?: SquareReturn;
   // App.tsx caches `items`/`recipes` and only reloads them on demand — a
   // bulk import here changes them server-side (new items, new or
   // backfilled ItemHoldings, new recipes) without App.tsx knowing, so
@@ -151,16 +155,18 @@ function cleanNumeric(raw: string | null): string {
   return cleaned;
 }
 
-type SettingsTab = "locations" | "catalogue" | "import" | "account";
+type SettingsTab = "locations" | "catalogue" | "import" | "integrations" | "account";
 const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
   { key: "locations", label: "Locations" },
   { key: "catalogue", label: "Catalogue" },
   { key: "import", label: "Import" },
+  { key: "integrations", label: "Integrations" },
   { key: "account", label: "Account" },
 ];
 
-export default function Settings({ accessToken, items, recipes, allergens, locations, onItemsChanged, onRecipesChanged, onCategoriesChanged }: Props) {
-  const [tab, setTab] = useState<SettingsTab>("locations");
+export default function Settings({ accessToken, items, recipes, allergens, locations, squareReturn = null, onItemsChanged, onRecipesChanged, onCategoriesChanged }: Props) {
+  // Coming back from Square's sign-in page lands straight on Integrations.
+  const [tab, setTab] = useState<SettingsTab>(squareReturn ? "integrations" : "locations");
   // Every pane stays mounted and is only hidden when it is not the open tab,
   // so a half-filled form or an import in progress survives a tab switch.
   return (
@@ -218,6 +224,10 @@ export default function Settings({ accessToken, items, recipes, allergens, locat
             ⇩ Download supplier list template
           </button>
         </div>
+      </div>
+
+      <div hidden={tab !== "integrations"}>
+        <SquarePanel accessToken={accessToken} recipes={recipes} locations={locations} squareReturn={squareReturn} />
       </div>
 
       <div hidden={tab !== "account"}>

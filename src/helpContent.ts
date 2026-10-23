@@ -283,7 +283,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         q: "How do I add a new supplier?",
         a: "From the Suppliers list (Procurement → Suppliers tab), click + New supplier. Only the name is required — email, phone, delivery day, minimum order value and notes are all optional and can be filled in later.",
-        fact: "💡 Two shortcuts worth knowing: if you're logging a delivery invoice, Scan receipt has its own + New supplier right on the scan screen, so you never have to leave that flow. And if you'd rather not add suppliers one at a time at all, upload their whole product list instead via Items → ⇪ Import supplier list — SAWIS matches it against your items in the background.",
+        fact: "💡 Two shortcuts worth knowing: if you're logging a delivery invoice, Scan receipt has its own + New supplier right on the scan screen, so you never have to leave that flow. And if you'd rather not add suppliers one at a time at all, upload their whole product list instead: open the supplier and press ⇪ Upload price list — SAWIS matches it against your items in the background.",
       },
       {
         q: "Can I delete a supplier?",
@@ -611,12 +611,25 @@ export const HELP_TOPICS: HelpTopic[] = [
     title: "Settings",
     keywords: [
       "settings", "currency", "overhead", "import", "template", "category",
-      "import supplier list",
+      "import supplier list", "square", "pos", "integrations", "connect", "till",
     ],
     questions: [
       {
         q: "Where is everything in Settings?",
-        a: "Settings is for Admins and is split into four tabs along the top. Locations holds each location's currency, food and drink targets and monthly overhead, plus Delivery reminders & inventory checks. Catalogue holds Item categories and Names on your invoices. Import holds Import recipes & items. Account holds your Password. Settings opens on Locations, and anything you have typed in one tab is still there when you switch tabs.",
+        a: "Settings is for Admins and is split into five tabs along the top. Locations holds each location's currency, food and drink targets and monthly overhead, plus Delivery reminders & inventory checks. Catalogue holds Item categories and Names on your invoices. Import holds Import recipes & items and the supplier price list template. Integrations holds the Square connection. Account holds your Password. Settings opens on Locations, and anything you have typed in one tab is still there when you switch tabs.",
+      },
+      {
+        q: "How do I connect Square so my sales come in by themselves?",
+        a: "An Admin goes to Settings, opens the Integrations tab and presses Connect Square. You sign in to Square and allow SAWIS to read your orders, then Square sends you back here. Under Locations, choose which SAWIS location each Square location feeds, and press Sync now. SAWIS only reads sales — it never changes anything in Square — and it pulls finished days, so today's sales appear once the day is over. If you don't see a Connect Square button, Square isn't set up on your SAWIS server yet.",
+        fact: "💡 You can still upload a CSV on End of day at any time. A dish that already has sales for a day from a CSV is left alone, so nothing is counted twice.",
+      },
+      {
+        q: "What does Items to match mean under Square?",
+        a: "Square names items its own way. When a Square item doesn't match a dish in SAWIS, its sales are held back and listed under Settings → Integrations → Items to match. Choose the dish for it and press Match, and SAWIS remembers the choice and adds the held sales straight away. Press Not a dish for things that aren't on your menu, such as a gift card or a service charge, and they are skipped from then on.",
+      },
+      {
+        q: "Square says it needs reconnecting. What do I do?",
+        a: "An Admin goes to Settings → Integrations and presses Reconnect Square, then signs in to Square again. Sales are paused until you do, but nothing already pulled is lost, and the days missed are pulled the next time you sync.",
       },
       {
         q: "How do I change the currency for a location?",

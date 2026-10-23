@@ -88,6 +88,7 @@ import Inventory from "./Inventory";
 import Team from "./Team";
 import EndOfDay from "./EndOfDay";
 import Settings from "./Settings";
+import { readSquareReturn } from "./squareApi";
 import CategoryManagerModal from "./CategoryManagerModal";
 import Reports from "./Reports";
 import SearchSelect from "./SearchSelect";
@@ -154,6 +155,9 @@ const REFRESH_TOKEN_KEY = "sawis_refresh_token";
 // handleSubmit explicitly overrides this to "End of day" every time,
 // regardless of whatever page happened to be stored from before.
 const ACTIVE_PAGE_KEY = "sawis_active_page";
+// Square sends the person back with "?square=..." on the address. Read it
+// once, at load, (it also tidies the address) so Settings can show the result.
+const SQUARE_RETURN = readSquareReturn();
 // SAWIS defaults to light regardless of the device's OS setting -- dark is
 // an explicit opt-in via the sidebar's toggle (see the THEME_KEY effect
 // below), never auto-applied from prefers-color-scheme. See the token
@@ -542,7 +546,7 @@ export default function App() {
   // Lazily read from localStorage so a refresh lands back on whichever
   // page was open (see ACTIVE_PAGE_KEY above) -- the very first visit
   // (nothing stored yet) still starts on End of day.
-  const [activePage, setActivePage] = useState(() => localStorage.getItem(ACTIVE_PAGE_KEY) || "End of day");
+  const [activePage, setActivePage] = useState(() => (SQUARE_RETURN ? "Settings" : localStorage.getItem(ACTIVE_PAGE_KEY) || "End of day"));
   // Phone-width only -- the sidebar becomes a slide-in drawer below ~700px
   // (see .sidebar/.mobile-topbar in App.css). Desktop/tablet never sets
   // this since the hamburger button that toggles it is CSS-hidden there.
@@ -2812,6 +2816,7 @@ export default function App() {
                 recipes={recipes ?? []}
                 allergens={allergens}
                 locations={locations}
+                squareReturn={SQUARE_RETURN}
                 onItemsChanged={() => loadItems(accessToken)}
                 onRecipesChanged={() => loadRecipes(accessToken)}
                 onCategoriesChanged={() => fetchCategories(accessToken).then(setCategories).catch(() => {})}
