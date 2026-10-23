@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import * as XLSX from "xlsx";
 import {
   login,
   refreshAccessToken,
@@ -83,6 +82,7 @@ import SupplierDeliveries from "./SupplierDeliveries";
 import type { SupplierTab } from "./SupplierDeliveries";
 import SupplierList from "./SupplierList";
 import { downloadSupplierListTemplate } from "./supplierListTemplate";
+import { readSupplierListFile } from "./supplierListFile";
 import WasteLog from "./WasteLog";
 import Inventory from "./Inventory";
 import Team from "./Team";
@@ -810,6 +810,8 @@ export default function App() {
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
   // Tab the supplier screen opens on (the PO screen's "View price list" link asks for the Price list).
   const [supplierTab, setSupplierTab] = useState<SupplierTab | undefined>(undefined);
+  // Shown on the supplier screen right after something went wrong while creating it.
+  const [supplierNotice, setSupplierNotice] = useState<string | null>(null);
   // Procurement's two tabs, and the "+ New supplier" form the Suppliers tab opens.
   const [procTab, setProcTab] = useState<"orders" | "suppliers">("orders");
   const [showNewSupplierForm, setShowNewSupplierForm] = useState(false);
@@ -1210,6 +1212,7 @@ export default function App() {
     setSelectedPOId(null);
     setSelectedSupplierId(null);
     setSupplierTab(undefined);
+    setSupplierNotice(null);
     setProcTab("orders");
     setShowNewPO(false);
     // Every ordinary nav click lands End of day back on Overview -- only the
@@ -1283,71 +1286,23 @@ export default function App() {
     setImportDone(null);
   }
 
-  // Turns a sheet's raw rows (from either CSV or Excel) into the same
-  // {name, unit, price, base_qty_per_unit?} shape the bulk_import endpoint
-  // expects — the two file formats converge here so nothing downstream
-  // needs to know which one the supplier actually sent.
-  //
-  // The optional 4th column is how many of the eventually-linked item's
-  // base_unit one of this row's `unit` actually contains (e.g. "1000" on a
-  // row priced per kg when the item ends up costed in grams) — entirely
-  // backward compatible: a file with only 3 columns (the format this
-  // importer has always accepted) leaves it undefined, which the backend
-  // treats as "1", i.e. no conversion, exactly as before this existed.
-  function rowsFromCells(cellRows: unknown[][]) {
-    const rows: { name: string; unit: string; price: string; base_qty_per_unit?: string }[] = [];
-    cellRows.forEach((cells) => {
-      const parts = cells.map((c) => (c === null || c === undefined ? "" : String(c).trim()));
-      if (parts.length >= 3 && parts[0] && !isNaN(Number(parts[2]))) {
-        const packQty = parts[3] && !isNaN(Number(parts[3])) ? parts[3] : undefined;
-        rows.push({ name: parts[0], unit: parts[1], price: parts[2], base_qty_per_unit: packQty });
-      }
-    });
-    return rows;
-  }
-
   function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setImportFileName(file.name);
     setImportError(null);
     setImportDone(null);
-    const isSpreadsheet = /\.xlsx?$/i.test(file.name);
-    const reader = new FileReader();
-    reader.onload = () => {
-      let rows: { name: string; unit: string; price: string }[] = [];
-      try {
-        if (isSpreadsheet) {
-          // Supplier sent an Excel workbook — read the first sheet as a
-          // grid of cells rather than text, since prices/units in Excel
-          // are often typed as real numbers, not strings.
-          const data = new Uint8Array(reader.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: "array" });
-          const sheet = workbook.Sheets[workbook.SheetNames[0]];
-          const cellRows = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows: false }) as unknown[][];
-          rows = rowsFromCells(cellRows);
-        } else {
-          const text = String(reader.result || "");
-          const cellRows = text
-            .split(/\r?\n/)
-            .filter((line) => line.trim())
-            .map((line) => line.split(","));
-          rows = rowsFromCells(cellRows);
+    readSupplierListFile(file)
+      .then((rows) => {
+        setImportRows(rows);
+        if (rows.length === 0) {
+          setImportError('No valid rows found — each row should read name, unit, price, e.g. "Beef mince 5%, kg, 7.40".');
         }
-      } catch {
+      })
+      .catch(() => {
+        setImportRows([]);
         setImportError("Could not read that file — check it's a valid CSV or Excel spreadsheet.");
-        return;
-      }
-      setImportRows(rows);
-      if (rows.length === 0) {
-        setImportError('No valid rows found — each row should read name, unit, price, e.g. "Beef mince 5%, kg, 7.40".');
-      }
-    };
-    if (isSpreadsheet) {
-      reader.readAsArrayBuffer(file);
-    } else {
-      reader.readAsText(file);
-    }
+      });
   }
 
   async function handleImportSubmit() {
@@ -2345,7 +2300,9 @@ export default function App() {
             onBack={() => {
               setSelectedSupplierId(null);
               setSupplierTab(undefined);
+              setSupplierNotice(null);
             }}
+            notice={supplierNotice}
             backLabel={procTab === "suppliers" && canManage(me) ? "← All suppliers" : "← Procurement"}
             onOpenPO={(id) => setSelectedPOId(id)}
             onNewPO={openNewPOForSupplier}
@@ -2471,7 +2428,14 @@ export default function App() {
                 suppliers={suppliers}
                 locations={locations}
                 accessToken={accessToken}
-                onOpenSupplier={(id) => setSelectedSupplierId(id)}
+                onOpenSupplier={(id, opts) => {
+                  setSelectedSupplierId(id);
+                  if (opts?.tab) setSupplierTab(opts.tab);
+                  setSupplierNotice(opts?.notice ?? null);
+                }}
+                onListUploaded={() => {
+                  fetchSupplierItems(accessToken).then(setSupplierItems).catch(() => {});
+                }}
                 onSupplierCreated={(created) => setSuppliers((prev) => [...prev, created])}
                 showNew={showNewSupplierForm}
                 onShowNewChange={setShowNewSupplierForm}

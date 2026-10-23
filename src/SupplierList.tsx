@@ -1,13 +1,20 @@
 import { useState } from "react";
 import { DAY_NAMES } from "./App";
-import { formatMoney, defaultCurrency, currencySymbol, createSupplier } from "./api";
+import { formatMoney, defaultCurrency, currencySymbol, createSupplier, bulkImportSupplierItems } from "./api";
+import { downloadSupplierListTemplate } from "./supplierListTemplate";
+import { readSupplierListFile } from "./supplierListFile";
+import type { SupplierListRow } from "./supplierListFile";
+import type { SupplierTab } from "./SupplierDeliveries";
 import type { Supplier, Location, PriceListInfo } from "./api";
 
 interface Props {
   suppliers: Supplier[];
   locations: Location[];
   accessToken: string;
-  onOpenSupplier: (id: string) => void;
+  // `tab` opens the supplier on that tab; `notice` is shown on its page.
+  onOpenSupplier: (id: string, opts?: { tab?: SupplierTab; notice?: string }) => void;
+  // A price list was stored while creating a supplier: refresh what depends on it.
+  onListUploaded: () => void;
   onSupplierCreated: (created: Supplier) => void;
   // The "+ New supplier" button sits in the page header (Procurement), which
   // asks this list to open its form.
@@ -26,6 +33,7 @@ export default function SupplierList({
   locations,
   accessToken,
   onOpenSupplier,
+  onListUploaded,
   onSupplierCreated,
   showNew,
   onShowNewChange,
@@ -43,8 +51,34 @@ export default function SupplierList({
   const [newNotes, setNewNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  // An optional price list chosen in the pop-up, read before anything is created.
+  const [listFileName, setListFileName] = useState("");
+  const [listRows, setListRows] = useState<SupplierListRow[]>([]);
+  const [listError, setListError] = useState<string | null>(null);
+
+  function handleListFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    setListRows([]);
+    setListError(null);
+    if (!file) {
+      setListFileName("");
+      return;
+    }
+    setListFileName(file.name);
+    readSupplierListFile(file)
+      .then((rows) => {
+        setListRows(rows);
+        if (rows.length === 0) {
+          setListError('No valid rows found — each row should read name, unit, price, e.g. "Beef mince 5%, kg, 7.40".');
+        }
+      })
+      .catch(() => setListError("Could not read that file — check it's a valid CSV or Excel spreadsheet."));
+  }
 
   function resetNewSupplierForm() {
+    setListFileName("");
+    setListRows([]);
+    setListError(null);
     setNewName("");
     setNewEmail("");
     setNewPhone("");
@@ -69,12 +103,36 @@ export default function SupplierList({
         notes: newNotes.trim(),
       });
       onSupplierCreated(created);
+      // With a price list chosen, store it now and land on its Price list tab.
+      // If that fails the supplier still exists: open it with a message and
+      // the Upload price list button to try again.
+      let opts: { tab?: SupplierTab; notice?: string } | undefined;
+      if (listRows.length > 0) {
+        try {
+          await bulkImportSupplierItems(accessToken, {
+            supplier: created.id,
+            rows: listRows.map((r) => ({
+              name: r.name,
+              unit: r.unit,
+              price: r.price,
+              base_qty_per_unit: r.base_qty_per_unit,
+            })),
+          });
+          onListUploaded();
+          opts = { tab: "prices" };
+        } catch (err) {
+          const why = err instanceof Error ? err.message : "something went wrong";
+          opts = {
+            notice: `${created.name} was created, but the price list could not be uploaded (${why}). Press Upload price list to try again.`,
+          };
+        }
+      }
       onShowNewChange(false);
       resetNewSupplierForm();
       // Jump straight into the new supplier's own record -- there's more to
       // fill in (delivery day, notes, etc. if skipped here) than fits
       // comfortably in this quick-add modal.
-      onOpenSupplier(created.id);
+      onOpenSupplier(created.id, opts);
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : "Could not create supplier.");
     } finally {
@@ -245,6 +303,56 @@ export default function SupplierList({
                   rows={3}
                 />
               </label>
+              <div className="ns-sec">
+                <h4>
+                  Price list <span className="optional">optional</span>
+                </h4>
+                <p className="vhint">
+                  Did they send you a list? Add it now and it goes straight onto their Price list tab. One product per
+                  row: name, unit, price.{" "}
+                  <button type="button" className="mini" onClick={() => downloadSupplierListTemplate()}>
+                    ⇩ Download the template
+                  </button>
+                </p>
+                <input
+                  type="file"
+                  accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                  onChange={handleListFile}
+                />
+                {listFileName && !listError && listRows.length > 0 && (
+                  <>
+                    <div className="im-note">
+                      ✓ <b>{listRows.length} products</b> read from {listFileName}.
+                    </div>
+                    <div className="table-scroll">
+                      <table className="im-tbl">
+                        <thead>
+                          <tr>
+                            <th>Product line</th>
+                            <th>Unit</th>
+                            <th className="num">Price</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {listRows.slice(0, 5).map((r, i) => (
+                            <tr key={i}>
+                              <td>{r.name}</td>
+                              <td>{r.unit}</td>
+                              <td className="num">{formatMoney(Number(r.price), defaultCurrency(locations))}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {listRows.length > 5 && (
+                      <p className="muted" style={{ fontSize: 12 }}>
+                        …and {listRows.length - 5} more.
+                      </p>
+                    )}
+                  </>
+                )}
+                {listError && <p className="error">{listError}</p>}
+              </div>
               {createError && <p className="error">{createError}</p>}
               <div className="modal-actions">
                 <button
@@ -258,7 +366,13 @@ export default function SupplierList({
                   Cancel
                 </button>
                 <button className="btn-primary" type="submit" disabled={saving || !newName.trim()}>
-                  {saving ? "Creating…" : "Create supplier"}
+                  {saving
+                    ? listRows.length > 0
+                      ? "Creating and uploading…"
+                      : "Creating…"
+                    : listRows.length > 0
+                      ? "Create supplier and upload list"
+                      : "Create supplier"}
                 </button>
               </div>
             </form>

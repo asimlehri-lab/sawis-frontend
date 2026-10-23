@@ -26,6 +26,8 @@ interface Props {
   onUploadList: (supplierId: string) => void;
   onLinksChanged: () => void;
   onOpenItem?: (itemId: string) => void;
+  // A message to show on arrival, e.g. a price list that could not be uploaded.
+  notice?: string | null;
 }
 
 export type SupplierTab = "details" | "orders" | "prices";
@@ -46,6 +48,7 @@ export default function SupplierDeliveries({
   locations,
   onBack,
   backLabel = "← Procurement",
+  notice = null,
   onOpenPO,
   onNewPO,
   readOnly = false,
@@ -168,6 +171,7 @@ export default function SupplierDeliveries({
         {supplier.min_order_value ? ` · ${formatMoney(Number(supplier.min_order_value), defaultCurrency(locations), 0)} minimum order` : ""}
       </p>
 
+      {notice && <p className="error">{notice}</p>}
       {saveError && <p className="error">{saveError}</p>}
       {readOnly && <p className="ro-banner">View only — changes to suppliers need a manager or admin.</p>}
 
