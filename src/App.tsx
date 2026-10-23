@@ -82,6 +82,7 @@ import { canSeeAllLocations } from "./locationScope";
 import SupplierDeliveries from "./SupplierDeliveries";
 import type { SupplierTab } from "./SupplierDeliveries";
 import SupplierList from "./SupplierList";
+import { downloadSupplierListTemplate } from "./supplierListTemplate";
 import WasteLog from "./WasteLog";
 import Inventory from "./Inventory";
 import Team from "./Team";
@@ -3095,12 +3096,16 @@ export default function App() {
               />
               <div className="vhint">
                 CSV or Excel (.xlsx/.xls). One product per row: name, unit, price — e.g. "Beef mince
-                5%, kg, 7.40". No header row.
+                5%, kg, 7.40". A header row is fine.
                 <br />
                 Optional 4th column if this supplier's unit doesn't match how you'll use the item —
                 how many of your item's own unit one of theirs contains, e.g. "Syrup, kg, 12.00, 1000"
                 for a kg-priced syrup you'll use in grams. Leave it off (or blank) when the units
                 already match.
+                <br />
+                <button type="button" className="mini" style={{ marginTop: 6 }} onClick={() => downloadSupplierListTemplate()}>
+                  ⇩ Download the template
+                </button>
               </div>
             </div>
 

@@ -26,6 +26,7 @@ import type { ParsedMenuRow } from "./MenuListImportModal";
 import SearchSelect from "./SearchSelect";
 import { downloadRecipeImportTemplate, resolveUsualSupplierLink } from "./recipeImportTemplate";
 import PasswordConfirmModal from "./PasswordConfirmModal";
+import { downloadSupplierListTemplate } from "./supplierListTemplate";
 // DAY_NAMES is exported from App.tsx, which imports Settings back -- same
 // established circular-import pattern already used by SupplierDeliveries.tsx
 // (see its own DAY_NAMES import) rather than duplicating the array here.
@@ -205,6 +206,18 @@ export default function Settings({ accessToken, items, recipes, allergens, locat
           onItemsChanged={onItemsChanged}
           onRecipesChanged={onRecipesChanged}
         />
+        <div style={{ height: 20 }} />
+        <div className="card">
+          <h2 style={{ marginTop: 0 }}>Supplier price list template</h2>
+          <p className="hint">
+            A blank layout for a supplier&rsquo;s price list: product, unit, price and an optional pack size. A
+            supplier&rsquo;s own spreadsheet works too if it has those columns. To upload a list, open the supplier in
+            Procurement and press Upload price list.
+          </p>
+          <button type="button" className="btn-ghost small" onClick={() => downloadSupplierListTemplate()}>
+            ⇩ Download supplier list template
+          </button>
+        </div>
       </div>
 
       <div hidden={tab !== "account"}>

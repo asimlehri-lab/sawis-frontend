@@ -267,6 +267,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "Suppliers isn't its own item in the sidebar — it lives inside Procurement. Click Procurement in the sidebar, then the Suppliers tab next to Orders. That opens a searchable list of every supplier you have, with their open orders and their price list: how much of an uploaded list is linked to your items, or how many prices have been remembered from your deliveries.",
       },
       {
+        q: "Is there a template for a supplier's price list?",
+        a: "Yes. In the upload window press Download the template, or go to Settings → Import and use the Supplier price list template card. It is a blank Excel file with four columns: Product, Unit, Price and an optional Pack size, and a second sheet with examples. Fill in one product per row from row 2 and upload it from the supplier's page. A supplier's own spreadsheet works too, as long as the first three columns are name, unit and price in that order.",
+      },
+      {
         q: "How do I upload a supplier's price list?",
         a: "Open Procurement, click the Suppliers tab, click the supplier, and press ⇪ Upload price list at the top right (it is there on every tab of the supplier). Choose their CSV or Excel product list, one product per row: name, unit, price. SAWIS stores every line on that supplier's Price list tab; nothing on your items changes yet, and you link each line to one of your items there. SAWIS also matches each line against your existing item names. To see what it found, open any item's page and scroll to \"Other suppliers that may stock this\" — each match shows a confidence %, the supplier's own line text, and their price. Nothing is linked automatically: you review each suggestion and click Link yourself, which is also what records that supplier's price against the item.",
         fact: "💡 This isn't a one-time match at upload — a catalogue you import today keeps working for items you add next month too, since the matching runs whenever you open an item's page, not just once at import time.",
