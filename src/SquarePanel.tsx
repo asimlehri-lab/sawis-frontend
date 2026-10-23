@@ -10,6 +10,7 @@ import {
   fetchSquareUnmatched,
   linkSquareLocation,
   mapSquareItem,
+  setSquareSyncHour,
   squareReturnMessage,
   startSquareConnect,
   syncSquare,
@@ -44,6 +45,12 @@ async function loadSquare(accessToken: string) {
   const unmatched =
     status.connection && status.connection.unmatched_count > 0 ? await fetchSquareUnmatched(accessToken) : [];
   return { status, unmatched };
+}
+
+const HOURS = Array.from({ length: 24 }, (_, h) => h);
+
+function hourLabel(h: number): string {
+  return `${String(h).padStart(2, "0")}:00`;
 }
 
 function plural(n: number, one: string, many: string) {
@@ -133,6 +140,13 @@ export default function SquarePanel({ accessToken, recipes, locations, squareRet
       const conn: SquareConnection = await linkSquareLocation(accessToken, linkId, patch);
       setStatus((s) => (s ? { ...s, connection: conn } : s));
       setNotice(null);
+    });
+
+  const saveHour = (hour: number) =>
+    run("hour", async () => {
+      const c = await setSquareSyncHour(accessToken, hour);
+      setStatus((s) => (s ? { ...s, connection: c } : s));
+      setNotice({ kind: "ok", text: `Sales will be pulled from ${hourLabel(hour)} each day.` });
     });
 
   const match = (u: SquareUnmatched) =>
@@ -271,6 +285,27 @@ export default function SquarePanel({ accessToken, recipes, locations, squareRet
         ) : (
           <button type="button" className="btn-ghost small" onClick={() => setConfirmDisconnect(true)}>Disconnect</button>
         )}
+      </div>
+
+      <div className="sq-sec">
+        <h3>Daily sync</h3>
+        <p className="hint">
+          SAWIS pulls your finished days of sales once a day, from this time ({conn.sync_timezone.replace(/_/g, " ")} time).
+          Pulling later does not include today&rsquo;s sales: today is only pulled once it is over. Sync now works at any time.
+        </p>
+        <label className="sq-hour">
+          Pull sales from{" "}
+          <select
+            value={conn.sync_hour}
+            disabled={busy === "hour"}
+            onChange={(e) => saveHour(Number(e.target.value))}
+            aria-label="Hour of the day to pull sales"
+          >
+            {HOURS.map((h) => (
+              <option key={h} value={h}>{hourLabel(h)}</option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <div className="sq-sec">

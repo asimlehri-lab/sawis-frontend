@@ -3688,3 +3688,5 @@ button.rp-gcard:hover { border-color: var(--muted); }
   .sq-table select, .sq-table input { width: 100%; }
   .sq-unmatched li { grid-template-columns: 1fr; gap: 8px; }
 }
+.sq-hour { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; }
+.sq-hour select { border: 1px solid var(--border); border-radius: 9px; padding: 7px 9px; font: inherit; font-size: 13px; background: var(--bg); color: var(--ink); }

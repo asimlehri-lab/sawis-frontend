@@ -628,6 +628,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "Square names items its own way. When a Square item doesn't match a dish in SAWIS, its sales are held back and listed under Settings → Integrations → Items to match. Choose the dish for it and press Match, and SAWIS remembers the choice and adds the held sales straight away. Press Not a dish for things that aren't on your menu, such as a gift card or a service charge, and they are skipped from then on.",
       },
       {
+        q: "Can I choose what time Square sales are pulled?",
+        a: "Yes. An Admin goes to Settings → Integrations and, under Daily sync, picks the hour in Pull sales from. SAWIS pulls your finished days once a day from that hour, in the time zone of your location (shown there). A later hour does not add today's sales, because a day is only pulled once it is over. Sync now pulls everything up to yesterday at any time.",
+      },
+      {
         q: "Square says it needs reconnecting. What do I do?",
         a: "An Admin goes to Settings → Integrations and presses Reconnect Square, then signs in to Square again. Sales are paused until you do, but nothing already pulled is lost, and the days missed are pulled the next time you sync.",
       },

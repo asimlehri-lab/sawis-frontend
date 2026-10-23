@@ -20,6 +20,9 @@ export interface SquareConnection {
   status: "active" | "needs_reconnect";
   last_synced_at: string | null;
   last_error: string;
+  // Hour of the day (0-23) the nightly pull starts, in sync_timezone.
+  sync_hour: number;
+  sync_timezone: string;
   links: SquareLink[];
   unmatched_count: number;
 }
@@ -108,6 +111,10 @@ export function linkSquareLocation(
   patch: { location?: string | null; start_date?: string | null }
 ): Promise<SquareConnection> {
   return call(accessToken, "PATCH", `/links/${linkId}/`, patch, "Could not save that change.");
+}
+
+export function setSquareSyncHour(accessToken: string, hour: number): Promise<SquareConnection> {
+  return call(accessToken, "PATCH", "/settings/", { sync_hour: hour }, "Could not save the sync time.");
 }
 
 export function syncSquare(accessToken: string): Promise<SquareSyncResult> {
