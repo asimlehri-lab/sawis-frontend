@@ -10,6 +10,7 @@ import {
   fetchSquareUnmatched,
   linkSquareLocation,
   mapSquareItem,
+  seedSquareSandbox,
   setSquareSyncHour,
   squareReturnMessage,
   startSquareConnect,
@@ -124,6 +125,24 @@ export default function SquarePanel({ accessToken, recipes, locations, squareRet
       ];
       if (r.unmatched > 0) parts.push(`${plural(r.unmatched, "line", "lines")} need matching to a dish below.`);
       setNotice({ kind: "ok", text: parts.join(" ") });
+      await refresh();
+    });
+
+  const seedTest = () =>
+    run("seed", async () => {
+      const r = await seedSquareSandbox(accessToken);
+      setNotice({ kind: "ok", text: `Created ${r.orders} sample sales in the Square test account. Now press Pull today's sales.` });
+    });
+
+  const syncToday = () =>
+    run("today", async () => {
+      const r = await syncSquare(accessToken, true);
+      setNotice({
+        kind: "ok",
+        text: `Pulled today's test sales: ${plural(r.orders, "order", "orders")}, ${plural(r.matched, "dish line", "dish lines")} added${
+          r.unmatched > 0 ? `, ${plural(r.unmatched, "line", "lines")} need matching below` : ""
+        }.`,
+      });
       await refresh();
     });
 
@@ -286,6 +305,25 @@ export default function SquarePanel({ accessToken, recipes, locations, squareRet
           <button type="button" className="btn-ghost small" onClick={() => setConfirmDisconnect(true)}>Disconnect</button>
         )}
       </div>
+
+      {conn.environment === "sandbox" && (
+        <div className="sq-sec">
+          <h3>Test tools</h3>
+          <p className="hint">
+            Only shown in test mode. Create a few sample sales in the Square test account, named after your own dishes,
+            then pull today&rsquo;s sales to see them arrive in SAWIS. Link a location below first, and give a few dishes a
+            menu price.
+          </p>
+          <div className="sq-btns">
+            <button type="button" className="btn-ghost small" onClick={seedTest} disabled={busy === "seed"}>
+              {busy === "seed" ? "Creating…" : "Create sample sales"}
+            </button>
+            <button type="button" className="btn-ghost small" onClick={syncToday} disabled={busy === "today"}>
+              {busy === "today" ? "Pulling…" : "Pull today's sales"}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="sq-sec">
         <h3>Daily sync</h3>

@@ -117,8 +117,19 @@ export function setSquareSyncHour(accessToken: string, hour: number): Promise<Sq
   return call(accessToken, "PATCH", "/settings/", { sync_hour: hour }, "Could not save the sync time.");
 }
 
-export function syncSquare(accessToken: string): Promise<SquareSyncResult> {
-  return call(accessToken, "POST", "/sync/", {}, "Could not reach Square. Try again in a minute.");
+export function syncSquare(accessToken: string, today = false): Promise<SquareSyncResult> {
+  return call(
+    accessToken,
+    "POST",
+    "/sync/",
+    today ? { today: true } : {},
+    "Could not reach Square. Try again in a minute."
+  );
+}
+
+// Test mode only: creates a few paid sample orders in the Square test account.
+export function seedSquareSandbox(accessToken: string): Promise<{ orders: number }> {
+  return call(accessToken, "POST", "/sandbox-seed/", {}, "Could not create the sample sales.");
 }
 
 export function fetchSquareUnmatched(accessToken: string): Promise<SquareUnmatched[]> {
