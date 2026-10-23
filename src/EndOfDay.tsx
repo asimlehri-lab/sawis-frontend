@@ -10,7 +10,7 @@ import { PickLocationPrompt } from "./AllLocationsParts";
 import EodTasks from "./EodTasks";
 import SearchSelect from "./SearchSelect";
 import ScanEodSales from "./ScanEodSales";
-import { fetchSquareStatus, fmtSquareDateTime, type SquareConnection } from "./squareApi";
+import { fetchSquareStatus, fmtSquareDate, fmtSquareDateTime, type SquareConnection } from "./squareApi";
 
 interface Props {
   accessToken: string;
@@ -214,7 +214,8 @@ export default function EndOfDay({
   // "all" is the All tab: every location added up. Only the Sales tab can
   // show that; importing, Actions and Reorder belong to one location.
   const isAll = location === ALL_LOCATIONS;
-  const squareLink = square?.links.some((l) => l.location === location) ?? false;
+  const squareRow = square?.links.find((l) => l.location === location) ?? null;
+  const squareLink = squareRow !== null;
   const showAllTab = isManagerOrAbove && canSeeAllLocations(me, locations);
   // locations loads asynchronously (App.tsx only fetches it once activePage
   // becomes "End of day" -- see the effect keyed on activePage there) -- if
@@ -702,6 +703,10 @@ export default function EndOfDay({
               ? "No locations yet"
               : lastImportLoading
               ? "Checking last import…"
+              : squareLink
+              ? lastImportedAt
+                ? `Last CSV import ${fmtImportedAt(lastImportedAt)}`
+                : ""
               : lastImportedAt
               ? `Last imported ${fmtImportedAt(lastImportedAt)}`
               : "No sales imported yet"}
@@ -709,7 +714,7 @@ export default function EndOfDay({
               <span className={`eod-source ${square?.status === "needs_reconnect" ? "warn" : ""}`}>
                 {square?.status === "needs_reconnect"
                   ? "Square needs reconnecting (Settings → Integrations)"
-                  : `Source: Square · last synced ${fmtSquareDateTime(square?.last_synced_at ?? null)} · sales up to yesterday`}
+                  : `Source: Square · last synced ${fmtSquareDateTime(square?.last_synced_at ?? null)} · ${squareRow?.last_day_pulled ? `sales pulled up to ${fmtSquareDate(squareRow.last_day_pulled)}` : "no days pulled yet"}`}
                 {square && square.status === "active" && square.unmatched_count > 0
                   ? ` · ${square.unmatched_count} ${square.unmatched_count === 1 ? "line needs" : "lines need"} matching (Settings → Integrations)`
                   : ""}
