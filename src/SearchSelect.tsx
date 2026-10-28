@@ -59,7 +59,12 @@ export default function SearchSelect({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(0);
-  const [panelPos, setPanelPos] = useState({ top: 0, left: 0, width: 0 });
+  const [panelPos, setPanelPos] = useState<{ top?: number; bottom?: number; left: number; width: number; listMax: number }>({
+    top: 0,
+    left: 0,
+    width: 0,
+    listMax: 240,
+  });
   const rootRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -71,7 +76,23 @@ export default function SearchSelect({
     const el = toggleRef.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
-    setPanelPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 220) });
+    // Opens below the toggle, or above it when there is not enough room
+    // below (a row near the bottom of the screen), and caps the list
+    // height to the room that is left, so the panel is never cut off.
+    const gap = 4;
+    const chrome = 52; // search box + borders
+    const below = window.innerHeight - r.bottom - gap - 8;
+    const above = r.top - gap - 8;
+    const flip = below < 200 && above > below;
+    const room = (flip ? above : below) - chrome;
+    const listMax = Math.max(120, Math.min(240, room));
+    const width = Math.max(r.width, 220);
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
+    setPanelPos(
+      flip
+        ? { bottom: window.innerHeight - r.top + gap, left, width, listMax }
+        : { top: r.bottom + gap, left, width, listMax }
+    );
   }
 
   // Opens the panel -- resets the filter/highlight synchronously (as part
@@ -186,7 +207,13 @@ export default function SearchSelect({
           <div
             ref={panelRef}
             className="search-select-panel"
-            style={{ position: "fixed", top: panelPos.top, left: panelPos.left, width: panelPos.width }}
+            style={{
+              position: "fixed",
+              top: panelPos.top,
+              bottom: panelPos.bottom,
+              left: panelPos.left,
+              width: panelPos.width,
+            }}
           >
             <input
               ref={inputRef}
@@ -200,7 +227,7 @@ export default function SearchSelect({
               }}
               onKeyDown={handleListKeyDown}
             />
-            <div className="search-select-list">
+            <div className="search-select-list" style={{ maxHeight: panelPos.listMax }}>
               {pinnedOptions.map((o, idx) => (
                 <div
                   key={o.value}
