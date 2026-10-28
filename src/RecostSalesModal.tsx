@@ -103,8 +103,8 @@ export default function RecostSalesModal({ accessToken, location, locationName, 
 
   return (
     <div className="modal-backdrop" onClick={() => !busy && (done ? onApplied() : onClose())}>
-      <div className="modal wide recost" role="dialog" aria-label="Recalculate cost of sales" onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ marginTop: 0 }}>Recalculate cost of sales</h2>
+      <div className="modal wide recost" role="dialog" aria-label="Recalculate cost" onClick={(e) => e.stopPropagation()}>
+        <h2 style={{ marginTop: 0 }}>Recalculate cost</h2>
         <p className="muted recost-intro">
           Sales keep the ingredient prices they had on the day they were imported. If a price or unit was wrong then and is
           right now, this re-prices those sales at today’s prices for <strong>{locationName}</strong>. Stock amounts do not

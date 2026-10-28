@@ -2735,7 +2735,7 @@ export async function recostSales(
     try {
       const j = await res.json();
       if (typeof j?.detail === "string") msg = j.detail;
-      else if (res.status === 403) msg = "Only an admin or manager can recalculate the cost of sales.";
+      else if (res.status === 403) msg = "Only an admin can recalculate cost.";
     } catch {
       /* keep the generic message */
     }

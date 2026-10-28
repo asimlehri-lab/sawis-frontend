@@ -11,6 +11,8 @@ interface Props {
   locations: Location[];
   // The location (or "all") chosen on End of day's location tabs.
   location: string;
+  // Recalculate cost is admin-only (the backend enforces it too).
+  isAdmin?: boolean;
 }
 
 // One screenful: a single location, or one currency's worth of locations
@@ -66,7 +68,7 @@ function fmtAnchor(period: "today" | "week" | "month", anchorIso: string): strin
   return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
 }
 
-export default function EodReport({ accessToken, locations, location }: Props) {
+export default function EodReport({ accessToken, locations, location, isAdmin = false }: Props) {
   const isAll = location === ALL_LOCATIONS;
   const currency = locations.find((l) => l.id === location)?.currency;
   const [period, setPeriod] = useState<"today" | "week" | "month">("today");
@@ -217,7 +219,7 @@ export default function EodReport({ accessToken, locations, location }: Props) {
           <KpiHeader
             report={b.report}
             currency={b.currency}
-            onRecost={!isAll && b.report.current.food_cost_pct !== null ? () => setRecostOpen(true) : undefined}
+            onRecost={isAdmin && !isAll && b.report.current.food_cost_pct !== null ? () => setRecostOpen(true) : undefined}
           />
           {b.rows && <EodByLocation rows={b.rows} currency={b.currency ?? ""} locations={locations} />}
           <ComparisonCard
@@ -342,7 +344,7 @@ function KpiHeader({ report, currency, onRecost }: { report: EodReportData; curr
         {onRecost && (
           <div className="recost-link">
             <button type="button" className="link-btn" onClick={onRecost}>
-              Cost looks wrong? Recalculate cost of sales
+              Recalculate cost
             </button>
           </div>
         )}

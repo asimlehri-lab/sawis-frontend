@@ -945,7 +945,12 @@ export default function EndOfDay({
         )}
       </div>
 
-      {tab === "overview" && isManagerOrAbove && <EodReport accessToken={accessToken} locations={locations} location={location} />}
+      {tab === "overview" && isManagerOrAbove && <EodReport
+          accessToken={accessToken}
+          locations={locations}
+          location={location}
+          isAdmin={me.memberships.some((m) => m.role === "admin")}
+        />}
 
       {tab === "tasks" && isAll && (
         <PickLocationPrompt
