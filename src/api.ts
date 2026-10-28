@@ -4,6 +4,8 @@
 // cause a merge conflict every time staging is promoted. Falls back to the
 // production URL for local dev too, per the "frontend always talks to
 // production" convention documented in the project handoff.
+import { shrinkImage } from "./imageShrink";
+
 export const API_URL = import.meta.env.VITE_API_URL || "https://sawis-backend-1.onrender.com";
 
 // Currency is a per-Location display setting (Settings → Locations) — which
@@ -1964,7 +1966,7 @@ export async function uploadPOAttachment(
   source: POAttachmentRow["source"]
 ): Promise<POAttachmentRow> {
   const formData = new FormData();
-  formData.append("file", file);
+  formData.append("file", await shrinkImage(file));
   formData.append("source", source);
   const res = await fetch(`${API_URL}/api/procurement/purchase-orders/${poId}/attachments/`, {
     method: "POST",
@@ -2230,7 +2232,7 @@ export async function deleteOwnBusinessName(accessToken: string, id: string): Pr
 // sales CSV importer.
 export async function scanReceipt(accessToken: string, file: File): Promise<ScannedReceipt> {
   const formData = new FormData();
-  formData.append("image", file);
+  formData.append("image", await shrinkImage(file));
   // No Content-Type header here on purpose -- the browser sets the
   // multipart boundary itself when the body is a FormData; setting it
   // by hand breaks the upload.
@@ -3191,7 +3193,7 @@ export interface ScannedCountRow {
 // already used by Scan receipt and the supplier-catalogue import.
 export async function scanCountSheet(accessToken: string, file: File): Promise<{ rows: ScannedCountRow[] }> {
   const formData = new FormData();
-  formData.append("image", file);
+  formData.append("image", await shrinkImage(file));
   // No Content-Type header here on purpose -- the browser sets the
   // multipart boundary itself when the body is a FormData; setting it
   // by hand breaks the upload.
@@ -3245,7 +3247,7 @@ export interface ScannedEodSales {
 // line correctly.
 export async function scanEndOfDaySales(accessToken: string, file: File): Promise<ScannedEodSales> {
   const formData = new FormData();
-  formData.append("image", file);
+  formData.append("image", await shrinkImage(file));
   // No Content-Type header here on purpose -- the browser sets the
   // multipart boundary itself when the body is a FormData; setting it
   // by hand breaks the upload.

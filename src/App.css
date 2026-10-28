@@ -2307,6 +2307,12 @@ input[type="file"] {
 .print-only { display: none; }
 
 @media print {
+  /* Paper is always white with black text, whatever theme is on screen --
+     otherwise a printout made in dark mode comes out on a dark page. */
+  :root, :root[data-theme="dark"] { color-scheme: light; }
+  html, body, #root { background: #fff !important; color: #000 !important; }
+  .print-only, .print-only *, .allergen-print, .allergen-print * { background: transparent !important; color: #000 !important; }
+  .print-only th, .print-only td { border-color: #000 !important; }
   body * { visibility: hidden; }
   .print-only, .print-only * { visibility: visible; }
   .print-only {
