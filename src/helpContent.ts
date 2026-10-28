@@ -625,7 +625,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "What does Items to match mean under Square?",
-        a: "Square names items its own way. When a Square item doesn't match a dish in SAWIS, its sales are held back and listed under Settings → Integrations → Items to match. Choose the dish for it and press Match, and SAWIS remembers the choice and adds the held sales straight away. Press Not a dish for things that aren't on your menu, such as a gift card or a service charge, and they are skipped from then on.",
+        a: "Square names items its own way. When a Square item doesn't match a dish in SAWIS, its sales are held back and listed under Settings → Integrations → Items to match. Under each item SAWIS suggests the dishes with the most similar names (Did you mean). Tap one, or search for another dish yourself, then press Match. SAWIS never matches anything on its own, and it remembers the choice and adds the held sales straight away. Press Not a dish for things that aren't on your menu, such as a gift card or a service charge, and they are skipped from then on.",
       },
       {
         q: "Can I choose what time Square sales are pulled?",

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Location, Recipe } from "./api";
 import { defaultCurrency, formatMoney } from "./api";
 import SearchSelect from "./SearchSelect";
+import { suggestDishes } from "./squareSuggest";
 import {
   disconnectSquare,
   fetchSquareStatus,
@@ -72,6 +73,7 @@ export default function SquarePanel({ accessToken, recipes, locations, squareRet
 
   const currency = defaultCurrency(locations);
   const dishes = recipes.filter((r) => r.kind === "dish" && !r.archived);
+  const suggestionsFor = (name: string) => suggestDishes(name, dishes.map((d) => ({ id: d.id, name: d.name })));
 
   const apply = useCallback((r: { status: SquareStatus; unmatched: SquareUnmatched[] }) => {
     setStatus(r.status);
@@ -444,6 +446,22 @@ export default function SquarePanel({ accessToken, recipes, locations, squareRet
                       Not a dish
                     </button>
                   </div>
+                  {suggestionsFor(u.item_name).length > 0 && (
+                    <div className="sq-sugg">
+                      <span>Did you mean</span>
+                      {suggestionsFor(u.item_name).map((d) => (
+                        <button
+                          key={d.id}
+                          type="button"
+                          className={`sq-chip${picks[u.item_key] === d.id ? " on" : ""}`}
+                          aria-pressed={picks[u.item_key] === d.id}
+                          onClick={() => setPicks((p) => ({ ...p, [u.item_key]: d.id }))}
+                        >
+                          {d.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
