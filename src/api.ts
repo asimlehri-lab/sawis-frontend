@@ -2690,6 +2690,60 @@ export async function fetchEodReport(
   return authedFetch(`/api/ledger/sales/eod_report/?${params.toString()}`, accessToken);
 }
 
+// Recalculate the cost of sales: re-price the cost stored on the sales of one
+// location between two dates (inclusive) at each ingredient's price today.
+// Without `apply` it only previews; see recost_sales in apps/ledger/viewsets.py.
+export interface RecostChange {
+  id: string;
+  name: string;
+  unit: string;
+  qty: string | number;
+  movements: number;
+  old_unit_cost: string | number;
+  new_unit_cost: string | number;
+  old_cost: string | number;
+  new_cost: string | number;
+  effect: string | number;
+}
+
+export interface RecostResult {
+  currency: string;
+  net_sales: string | number;
+  cost_before: string | number;
+  cost_after: string | number;
+  food_cost_pct_before: number | null;
+  food_cost_pct_after: number | null;
+  changes: RecostChange[];
+  no_price: { id: string; name: string }[];
+  unchanged_count: number;
+  applied: boolean;
+  applied_items: number;
+  applied_movements: number;
+}
+
+export async function recostSales(
+  accessToken: string,
+  body: { location: string; date_from: string; date_to: string; item_ids?: string[]; apply?: boolean }
+): Promise<RecostResult> {
+  const res = await fetch(`${API_URL}/api/ledger/sales/recost_sales/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    let msg = "Could not recalculate the cost of sales.";
+    try {
+      const j = await res.json();
+      if (typeof j?.detail === "string") msg = j.detail;
+      else if (res.status === 403) msg = "Only an admin or manager can recalculate the cost of sales.";
+    } catch {
+      /* keep the generic message */
+    }
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
 // "All locations" -- the same report added up over every location the
 // manager can see, in one block per currency (amounts in different
 // currencies are never added together), with a row per location.

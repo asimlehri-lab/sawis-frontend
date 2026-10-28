@@ -3722,3 +3722,29 @@ button.rp-gcard:hover { border-color: var(--muted); }
 .eod-rv-view { display: flex; gap: 6px; margin-left: auto; }
 .eod-rv-guess { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); margin: 0 0 10px; }
 .eod-rv-matched { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+/* Recalculate cost of sales (RecostSalesModal) */
+.modal.recost { max-width: 680px; text-align: left; }
+.modal.recost h2 { text-align: left; }
+.recost-table th, .recost-table td { text-align: left; }
+.recost-intro { margin: 0 0 12px; font-size: 13.5px; line-height: 1.5; }
+.recost-summary { display: flex; align-items: flex-end; gap: 18px; flex-wrap: wrap; margin: 14px 0 10px; padding: 12px 14px; border: 1px solid var(--border, #e3e6ee); border-radius: 10px; }
+.recost-summary .kl { display: block; margin-bottom: 4px; }
+.recost-summary strong { font-size: 22px; font-variant-numeric: tabular-nums; }
+.recost-arrow { font-size: 20px; color: var(--muted); padding-bottom: 3px; }
+.recost-sales { margin-left: auto; text-align: right; }
+.recost-summary > div { text-align: left; }
+.recost-summary > div.recost-sales { text-align: right; }
+.recost-sales strong { font-size: 16px; }
+.recost-tools { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 12.5px; margin-bottom: 6px; }
+.recost-tools > span:last-child { white-space: nowrap; }
+.recost-table-wrap { max-height: 300px; overflow: auto; border: 1px solid var(--border, #e3e6ee); border-radius: 10px; }
+.recost-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.recost-table th { position: sticky; top: 0; background: var(--card, #fff); text-align: left; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); padding: 8px 10px; border-bottom: 1px solid var(--border, #e3e6ee); }
+.recost-table td { padding: 8px 10px; border-bottom: 1px solid var(--border, #eef0f5); font-variant-numeric: tabular-nums; }
+.recost-table th.num, .recost-table td.num { text-align: right; white-space: nowrap; }
+.recost-table tr.off td { opacity: 0.5; }
+.recost-table td.good { color: var(--good); font-weight: 600; }
+.recost-table td.bad { color: var(--caution); font-weight: 600; }
+.recost-note { font-size: 12.5px; margin: 10px 0 0; }
+.recost-link { margin-top: 8px; }

@@ -4,6 +4,7 @@ import type { EodChampionEntry, EodLocationRow, EodReport as EodReportData, EodR
 import { EodByLocation } from "./AllLocationsParts";
 import { ALL_LOCATIONS, currencyBlockTitle } from "./locationScope";
 import PeriodPicker from "./PeriodPicker";
+import RecostSalesModal from "./RecostSalesModal";
 
 interface Props {
   accessToken: string;
@@ -77,6 +78,9 @@ export default function EodReport({ accessToken, locations, location }: Props) {
   const [compareAll, setCompareAll] = useState<EodReportAll | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Recalculate cost of sales pop-up; reloadKey re-fetches the report after it.
+  const [recostOpen, setRecostOpen] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
 
   // The second, freely-chosen comparison period -- see ComparisonCard's
   // "specific" mode. Kept here (not inside ComparisonCard) since it needs
@@ -116,7 +120,7 @@ export default function EodReport({ accessToken, locations, location }: Props) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accessToken, location, period, anchorDate]);
+  }, [accessToken, location, period, anchorDate, reloadKey]);
 
   useEffect(() => {
     if (!location || !compareDate) {
@@ -210,7 +214,11 @@ export default function EodReport({ accessToken, locations, location }: Props) {
       {blocks.map((b) => (
         <div key={b.key} className="lblock">
           {b.title && <h2 className="lblock-h">{b.title}</h2>}
-          <KpiHeader report={b.report} currency={b.currency} />
+          <KpiHeader
+            report={b.report}
+            currency={b.currency}
+            onRecost={!isAll && b.report.current.food_cost_pct !== null ? () => setRecostOpen(true) : undefined}
+          />
           {b.rows && <EodByLocation rows={b.rows} currency={b.currency ?? ""} locations={locations} />}
           <ComparisonCard
             report={b.report}
@@ -240,6 +248,22 @@ export default function EodReport({ accessToken, locations, location }: Props) {
         />
       )}
 
+      {recostOpen && report && !isAll && (
+        <RecostSalesModal
+          accessToken={accessToken}
+          location={location}
+          locationName={locations.find((l) => l.id === location)?.name ?? "this location"}
+          currency={currency}
+          from={report.range.start}
+          to={report.range.end}
+          onClose={() => setRecostOpen(false)}
+          onApplied={() => {
+            setRecostOpen(false);
+            setReloadKey((k) => k + 1);
+          }}
+        />
+      )}
+
       {comparePickerOpen && (
         <PeriodPicker
           accessToken={accessToken}
@@ -258,7 +282,7 @@ export default function EodReport({ accessToken, locations, location }: Props) {
   );
 }
 
-function KpiHeader({ report, currency }: { report: EodReportData; currency?: string }) {
+function KpiHeader({ report, currency, onRecost }: { report: EodReportData; currency?: string; onRecost?: () => void }) {
   const c = report.current;
   const fc = c.food_cost_pct;
   // Note: 30 is hardcoded here, not the location's real target_food_cost_pct
@@ -313,6 +337,13 @@ function KpiHeader({ report, currency }: { report: EodReportData; currency?: str
             {zeroCostItems.length} ingredient{zeroCostItems.length === 1 ? "" : "s"} sold this period with no
             supplier price on file — food cost is likely understated. Link a supplier in Items to fix this:{" "}
             {zeroCostItems.join(", ")}.
+          </div>
+        )}
+        {onRecost && (
+          <div className="recost-link">
+            <button type="button" className="link-btn" onClick={onRecost}>
+              Cost looks wrong? Recalculate cost of sales
+            </button>
           </div>
         )}
       </section>
