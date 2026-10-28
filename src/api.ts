@@ -1662,6 +1662,40 @@ export interface BulkImportSupplierItemsResult {
 // POST per row — re-importing a supplier's catalogue with updated prices
 // now refreshes the existing lines rather than piling up duplicates. See
 // SupplierItemViewSet.bulk_import.
+// A supplier's PDF price list, read by the AI reader. Stores nothing: the rows
+// come back for the person to check, then go through bulkImportSupplierItems.
+export interface PdfPriceRow {
+  article_no: string;
+  name: string;
+  unit: string;
+  pack: string;
+  price: string;
+  vat_percent: number | null;
+  category: string;
+  // The unit as it goes in the price list, e.g. "case (6 x 3 kg)".
+  import_unit: string;
+}
+export interface PdfPriceList {
+  rows: PdfPriceRow[];
+  currency: string;
+  valid_from: string;
+  truncated: boolean;
+}
+export async function readPriceListPdf(accessToken: string, file: File): Promise<PdfPriceList> {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch(`${API_URL}/api/catalog/suppliers/read_price_list_pdf/`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body,
+  });
+  if (!res.ok) {
+    const j = await res.json().catch(() => null);
+    throw new Error((j && typeof j.detail === "string" && j.detail) || "Could not read that PDF.");
+  }
+  return res.json();
+}
+
 export async function bulkImportSupplierItems(
   accessToken: string,
   input: BulkImportSupplierItemsInput

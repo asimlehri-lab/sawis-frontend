@@ -17,6 +17,7 @@ import {
   type PriceListInfo,
   fetchSupplierItems,
   bulkImportSupplierItems,
+  readPriceListPdf,
   createSupplier,
   fetchPurchaseOrders,
   createPurchaseOrder,
@@ -83,6 +84,8 @@ import type { SupplierTab } from "./SupplierDeliveries";
 import SupplierList from "./SupplierList";
 import { downloadSupplierListTemplate } from "./supplierListTemplate";
 import { readSupplierListFile } from "./supplierListFile";
+import PdfPriceListReview from "./PdfPriceListReview";
+import type { PdfPriceList } from "./api";
 import WasteLog from "./WasteLog";
 import Inventory from "./Inventory";
 import Team from "./Team";
@@ -641,6 +644,9 @@ export default function App() {
     { name: string; unit: string; price: string; base_qty_per_unit?: string }[]
   >([]);
   const [importFileName, setImportFileName] = useState("");
+  // A PDF price list: read by the AI reader, then checked in PdfPriceListReview.
+  const [pdfReading, setPdfReading] = useState(false);
+  const [pdfReview, setPdfReview] = useState<{ fileName: string; data: PdfPriceList } | null>(null);
   const [importSaving, setImportSaving] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importDone, setImportDone] = useState<
@@ -1289,6 +1295,8 @@ export default function App() {
     setImportFileName("");
     setImportError(null);
     setImportDone(null);
+    setPdfReview(null);
+    setPdfReading(false);
   }
 
   function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -1297,6 +1305,19 @@ export default function App() {
     setImportFileName(file.name);
     setImportError(null);
     setImportDone(null);
+    if (/\.pdf$/i.test(file.name) || file.type === "application/pdf") {
+      if (!accessToken) return;
+      setImportRows([]);
+      setPdfReading(true);
+      readPriceListPdf(accessToken, file)
+        .then((data) => {
+          if (data.rows.length === 0) setImportError("No products with a price were found in that PDF.");
+          else setPdfReview({ fileName: file.name, data });
+        })
+        .catch((err) => setImportError(err instanceof Error ? err.message : "Could not read that PDF."))
+        .finally(() => setPdfReading(false));
+      return;
+    }
     readSupplierListFile(file)
       .then((rows) => {
         setImportRows(rows);
@@ -3113,10 +3134,13 @@ export default function App() {
               <label>Supplier list file</label>
               <input
                 type="file"
-                accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                accept=".csv,text/csv,.xlsx,.xls,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                 onChange={handleImportFile}
               />
+              {pdfReading && <p className="hint">Reading the PDF with AI. This can take up to a minute.</p>}
               <div className="vhint">
+                A PDF price list also works: it is read by AI and you check the result before it is stored.
+                <br />
                 CSV or Excel (.xlsx/.xls). One product per row: name, unit, price — e.g. "Beef mince
                 5%, kg, 7.40". A header row is fine.
                 <br />
@@ -3130,6 +3154,22 @@ export default function App() {
                 </button>
               </div>
             </div>
+
+            {pdfReview && (
+              <PdfPriceListReview
+                fileName={pdfReview.fileName}
+                data={pdfReview.data}
+                currency={orgCurrency}
+                onUse={(rows) => {
+                  setImportRows(rows);
+                  setPdfReview(null);
+                }}
+                onCancel={() => {
+                  setPdfReview(null);
+                  setImportFileName("");
+                }}
+              />
+            )}
 
             {importFileName && !importError && importRows.length > 0 && importDone === null && (
               <div className="im-note">

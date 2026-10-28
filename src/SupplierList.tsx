@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { DAY_NAMES } from "./App";
-import { formatMoney, defaultCurrency, currencySymbol, createSupplier, bulkImportSupplierItems } from "./api";
+import { formatMoney, defaultCurrency, currencySymbol, createSupplier, bulkImportSupplierItems, readPriceListPdf } from "./api";
+import type { PdfPriceList } from "./api";
+import PdfPriceListReview from "./PdfPriceListReview";
 import { downloadSupplierListTemplate } from "./supplierListTemplate";
 import { readSupplierListFile } from "./supplierListFile";
 import type { SupplierListRow } from "./supplierListFile";
@@ -54,6 +56,8 @@ export default function SupplierList({
   // An optional price list chosen in the pop-up, read before anything is created.
   const [listFileName, setListFileName] = useState("");
   const [listRows, setListRows] = useState<SupplierListRow[]>([]);
+  const [pdfReading, setPdfReading] = useState(false);
+  const [pdfReview, setPdfReview] = useState<{ fileName: string; data: PdfPriceList } | null>(null);
   const [listError, setListError] = useState<string | null>(null);
 
   function handleListFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -65,6 +69,17 @@ export default function SupplierList({
       return;
     }
     setListFileName(file.name);
+    if (/\.pdf$/i.test(file.name) || file.type === "application/pdf") {
+      setPdfReading(true);
+      readPriceListPdf(accessToken, file)
+        .then((data) => {
+          if (data.rows.length === 0) setListError("No products with a price were found in that PDF.");
+          else setPdfReview({ fileName: file.name, data });
+        })
+        .catch((err) => setListError(err instanceof Error ? err.message : "Could not read that PDF."))
+        .finally(() => setPdfReading(false));
+      return;
+    }
     readSupplierListFile(file)
       .then((rows) => {
         setListRows(rows);
@@ -76,6 +91,8 @@ export default function SupplierList({
   }
 
   function resetNewSupplierForm() {
+    setPdfReview(null);
+    setPdfReading(false);
     setListFileName("");
     setListRows([]);
     setListError(null);
@@ -316,12 +333,28 @@ export default function SupplierList({
                     ⇩ Template
                   </button>
                 </div>
-                <p className="vhint">Did they send you a list? Add it now: name, unit, price. It goes onto their Price list tab.</p>
+                <p className="vhint">Did they send you a list? Add it now: name, unit, price, as Excel, CSV or a PDF that AI reads for you to check. It goes onto their Price list tab.</p>
                 <input
                   type="file"
-                  accept=".csv,text/csv,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                  accept=".csv,text/csv,.xlsx,.xls,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                   onChange={handleListFile}
                 />
+                {pdfReading && <p className="hint">Reading the PDF with AI. This can take up to a minute.</p>}
+                {pdfReview && (
+                  <PdfPriceListReview
+                    fileName={pdfReview.fileName}
+                    data={pdfReview.data}
+                    currency={defaultCurrency(locations)}
+                    onUse={(rows) => {
+                      setListRows(rows);
+                      setPdfReview(null);
+                    }}
+                    onCancel={() => {
+                      setPdfReview(null);
+                      setListFileName("");
+                    }}
+                  />
+                )}
                 {listFileName && !listError && listRows.length > 0 && (
                   <div className="im-note">
                     ✓ <b>{listRows.length} products</b> read from {listFileName}. They are stored when you create the supplier.
