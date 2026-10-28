@@ -236,6 +236,8 @@ export default function ProcurementDetail({
   const [deletingAttachmentId, setDeletingAttachmentId] = useState<string | null>(null);
 
   const [showSend, setShowSend] = useState(false);
+  // Warn-mode suppliers: the user has seen "below the minimum" and chosen to send anyway.
+  const [belowAck, setBelowAck] = useState(false);
   const [sending, setSending] = useState(false);
 
   const [showIssue, setShowIssue] = useState(false);
@@ -352,6 +354,7 @@ export default function ProcurementDetail({
     const next = STATUS_FLOW[idx + 1];
     if (!next) return;
     if (next === "sent") {
+      setBelowAck(false);
       setShowSend(true);
       return;
     }
@@ -955,6 +958,9 @@ export default function ProcurementDetail({
   const supplier = suppliers.find((s) => s.id === po.supplier);
   const belowMin =
     po.status === "draft" && supplier?.min_order_value && Number(po.total) < Number(supplier.min_order_value);
+  // Supplier setting: sending is blocked below the minimum. Otherwise it is only a warning.
+  const blocked = !!belowMin && !!supplier?.block_below_min;
+  const askBelow = !!belowMin && !blocked && !belowAck;
 
   return (
     <div>
@@ -1031,8 +1037,9 @@ export default function ProcurementDetail({
               Below {po.supplier_name}'s {formatMoney(Number(supplier.min_order_value), currency, 0)} minimum order.
             </b>{" "}
             This PO is {formatMoney(Number(po.total), currency)} — short by{" "}
-            {formatMoney(Number(supplier.min_order_value) - Number(po.total), currency)}. {po.supplier_name} won't
-            accept it as is.
+            {formatMoney(Number(supplier.min_order_value) - Number(po.total), currency)}. {blocked
+              ? `You can't send it until it reaches the minimum.`
+              : `You can still send it if you want to.`}
           </div>
           <button className="minwarn-btn" onClick={handleSuggestItems} disabled={suggesting}>
             {suggesting ? "Finding items…" : "Suggest items"}
@@ -1098,7 +1105,7 @@ export default function ProcurementDetail({
         </div>
         {nextStatus && (!readOnly || nextStatus === "received") && (
           <button className="btn-primary small" onClick={handleAdvance} disabled={advancing}>
-            {advancing ? "Saving…" : `Mark as ${STATUS_LABEL[nextStatus]}`}
+            {advancing ? "Saving…" : nextStatus === "received" ? "Receive delivery" : `Mark as ${STATUS_LABEL[nextStatus]}`}
           </button>
         )}
         {po.status === "sent" && !readOnly && (
@@ -1522,8 +1529,9 @@ export default function ProcurementDetail({
       </fieldset>
 
       {showReceive && (
-        <div className="card">
-          <h2>Receiving delivery</h2>
+        <div className="modal-backdrop">
+          <div className="modal wide xwide" role="dialog" aria-label="Receive delivery" onClick={(e) => e.stopPropagation()}>
+          <h2>Receive delivery{po.po_number ? ` · ${po.po_number}` : ""}</h2>
           <p className="hint">
             Confirm what actually arrived. Any changes here post as real stock movements and update
             this supplier's price for next time — the ordered amounts above stay on record either way.
@@ -1677,17 +1685,56 @@ export default function ProcurementDetail({
               {receiving ? "Posting to stock…" : "Confirm receipt"}
             </button>
           </div>
+          </div>
         </div>
       )}
 
       {showSend && (
         <div className="modal-backdrop" onClick={() => setShowSend(false)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
+            {askBelow && supplier?.min_order_value ? (
+              <>
+                <h2>Below the minimum order</h2>
+                <div className="minwarn" style={{ marginBottom: 14 }}>
+                  <div>
+                    <b>
+                      {formatMoney(Number(supplier.min_order_value) - Number(po.total), currency)} under{" "}
+                      {po.supplier_name}'s {formatMoney(Number(supplier.min_order_value), currency, 0)} minimum.
+                    </b>{" "}
+                    This order is {formatMoney(Number(po.total), currency)}. {po.supplier_name} may refuse it or add a
+                    delivery fee.
+                  </div>
+                </div>
+                <div className="seg">
+                  <button
+                    type="button"
+                    className="seg-btn"
+                    onClick={() => {
+                      setShowSend(false);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                  >
+                    <b>Add items</b>
+                    <small>go back and top it up</small>
+                  </button>
+                  <button type="button" className="seg-btn sub" onClick={() => setBelowAck(true)}>
+                    <b>Send anyway</b>
+                    <small>continue to email or print</small>
+                  </button>
+                </div>
+                <div className="modal-actions">
+                  <button type="button" className="btn-ghost" onClick={() => setShowSend(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
             <h2>Send this order</h2>
             <p className="hint" style={{ marginTop: -8, marginBottom: 16 }}>
               How does {po.supplier_name} usually take orders?
             </p>
-            {belowMin && (
+            {blocked && (
               <div className="minwarn" style={{ marginBottom: 14 }}>
                 <div>Still below the minimum order — top it up before sending.</div>
               </div>
@@ -1696,7 +1743,7 @@ export default function ProcurementDetail({
               <button
                 type="button"
                 className="seg-btn"
-                disabled={!suppliers.find((s) => s.id === po.supplier)?.contact_email || sending || !!belowMin}
+                disabled={!suppliers.find((s) => s.id === po.supplier)?.contact_email || sending || blocked}
                 onClick={() => handleSendChoice("email")}
               >
                 <b>Email PO</b>
@@ -1709,7 +1756,7 @@ export default function ProcurementDetail({
               <button
                 type="button"
                 className="seg-btn sub"
-                disabled={sending || !!belowMin}
+                disabled={sending || blocked}
                 onClick={() => handleSendChoice("print")}
               >
                 <b>Print PO</b>
@@ -1721,6 +1768,8 @@ export default function ProcurementDetail({
                 Cancel
               </button>
             </div>
+              </>
+            )}
           </div>
         </div>
       )}

@@ -298,6 +298,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "If you set one, it shows as a marker on the delivery calendar every week on that weekday, as a reminder — it doesn't create or link to any specific order.",
       },
       {
+        q: "What happens if an order is below the supplier's minimum?",
+        a: "Set the supplier's Minimum order value on the supplier's Contact & terms card. When a draft order is under it, a yellow note shows how far short it is, with a Suggest items button. By default you can still send it: pressing Mark as Sent asks Add items or Send anyway. If you turn on Don't allow sending an order below the minimum for that supplier, the order can't be sent until it reaches the minimum.",
+      },
+      {
         q: "Where do I update a supplier's phone number or notes?",
         a: "Open the supplier from the Suppliers list (Procurement → Suppliers tab) and edit the Contact & terms card directly — phone, email, delivery day, minimum order value and notes are all there, and changes save as you go (no separate Save button).",
       },
@@ -329,7 +333,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I mark a PO as received?",
-        a: "Open the PO from Procurement and click Mark as Received (it needs to already be Sent first — the button label follows the PO's status, so it reads Mark as Sent until then). Receiving opens a Receiving delivery panel where you can set the date it arrived (Received on, today unless you change it, never a future date) and type the supplier's invoice number, check the delivery against a photo (see Scan delivery below), and amend what actually arrived. Confirming records the stock coming in and, if a price differs from what's on file, updates that supplier's price for the item.",
+        a: "Open the PO from Procurement and click Receive delivery (it needs to already be Sent first — until then the button reads Mark as Sent). A Receive delivery pop-up opens where you can set the date it arrived (Received on, today unless you change it, never a future date) and type the supplier's invoice number, check the delivery against a photo (see Scan delivery below), and amend what actually arrived. Confirming records the stock coming in and, if a price differs from what's on file, updates that supplier's price for the item.",
       },
       {
         q: "Can I delete a purchase order?",
@@ -362,7 +366,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I check a delivery against the order using a photo?",
-        a: "Open the sent PO and click Mark as Received to open the Receiving delivery panel. Under Scan delivery (optional) tap 📷 Take photo or 🖼 Choose photo. SAWIS compares the photo with this order's lines only and flags each one: ✓ matches, ⚠ differs (the received fields are tinted so the difference stands out) or not in photo. Anything on the photo that isn't on the order is listed in a banner. It only pre-fills and flags — you amend by hand and confirm as usual.",
+        a: "Open the sent PO and click Receive delivery to open the pop-up. Under Scan delivery (optional) tap 📷 Take photo or 🖼 Choose photo. SAWIS compares the photo with this order's lines only and flags each one: ✓ matches, ⚠ differs (the received fields are tinted so the difference stands out) or not in photo. Anything on the photo that isn't on the order is listed in a banner. It only pre-fills and flags — you amend by hand and confirm as usual.",
       },
       {
         q: "Where are receipt photos and invoices kept?",

@@ -1510,6 +1510,9 @@ export interface Supplier {
   vat_number: string;
   delivery_day: number | null;
   min_order_value: string | null;
+  // On: an order below min_order_value cannot be sent. Off (default): the
+  // user is warned and may send anyway.
+  block_below_min: boolean;
   notes: string;
   archived: boolean;
 }
@@ -1579,6 +1582,7 @@ export async function updateSupplier(
     vat_number?: string;
     delivery_day?: number | null;
     min_order_value?: string | null;
+    block_below_min?: boolean;
     notes?: string;
     archived?: boolean;
   }
