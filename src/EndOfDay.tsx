@@ -160,6 +160,14 @@ function readFileSmart(file: File): Promise<string> {
   });
 }
 
+// "2026-07-01" -> "1 Jul 2026" (used by the monthly-summary pop-up).
+function fmtSummaryDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+}
+
 // "Today, 14:32" / "15 Aug, 09:10" — a compact at-a-glance answer to "when
 // did someone last actually run an import," not a full timestamp.
 function fmtImportedAt(iso: string): string {
@@ -251,6 +259,17 @@ export default function EndOfDay({
   const [rawLineCount, setRawLineCount] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [showScanTest, setShowScanTest] = useState(false);
+  // Set when the chosen file is the till's monthly item report
+  // ("Artikelbericht"): one total per dish for the whole month, with no
+  // sales per day, so there is nothing to record on a date. We tell the user
+  // in a pop-up instead of showing the generic "unrecognised file" error.
+  const [monthlySummary, setMonthlySummary] = useState<{
+    fileName: string;
+    from: string;
+    to: string;
+    dishes: number;
+    units: number;
+  } | null>(null);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [result, setResult] = useState<{
@@ -469,6 +488,37 @@ export default function EndOfDay({
     });
   }
 
+  // The till's monthly item report ("Artikelbericht"): first cell says so,
+  // then "Kategorie;Titel;Anzahl;Betrag;SUMME" and one total per dish for
+  // the whole month. Returns a short description of it, or null if the file
+  // is anything else. Never imports anything.
+  function describeMonthlySummary(table: PosCell[][], name: string) {
+    const first = table[0]?.map((c) => cellToText(c).replace(/^\uFEFF/, "").toLowerCase()) ?? [];
+    if (first[0] !== "artikelbericht") return null;
+    // Blank rows are dropped by both readers, so find the header row by its text.
+    const headAt = table.findIndex((r) => cellToText(r[0]).toLowerCase() === "kategorie" && cellToText(r[1]).toLowerCase() === "titel");
+    if (headAt === -1) return null;
+    const days: string[] = [];
+    let section = "";
+    let dishes = 0;
+    let units = 0;
+    for (const r of table.slice(headAt + 1)) {
+      const a = cellToText(r[0]);
+      const b = cellToText(r[1]);
+      if (["ARTIKELGRUPPEN", "TAGE", "UMSATZSTEUER", "SERVICE/USER", "GESAMTSUMME"].includes(a)) {
+        section = a;
+        if (a === "GESAMTSUMME") units = Math.round(cellToNumber(r[2]));
+        continue;
+      }
+      if (section === "TAGE") {
+        if (b) days.push(b.replace(/\./g, "-"));
+      } else if (section === "ARTIKELGRUPPEN" && a === "" && b !== "" && cellToText(r[2]) !== "") {
+        dishes++;
+      }
+    }
+    return { fileName: name, from: days[0] ?? "", to: days[days.length - 1] ?? "", dishes, units };
+  }
+
   // Applies a parse result (or a null "didn't recognise this") the same
   // way regardless of which of the three formats/readers produced it —
   // shared by processFile's text branch (Formats 1/2) and its .xlsx
@@ -500,6 +550,7 @@ export default function EndOfDay({
 
   function processFile(file: File) {
     setFileName(file.name);
+    setMonthlySummary(null);
     setParseError(null);
     setImportError(null);
     setResult(null);
@@ -508,6 +559,13 @@ export default function EndOfDay({
     if (isExcel) {
       parsePosExcelTable(file)
         .then((table) => {
+          const summary = describeMonthlySummary(table, file.name);
+          if (summary) {
+            setMonthlySummary(summary);
+            setRows([]);
+            setSourceFormat(null);
+            return;
+          }
           const parsed = aggregatePosRows(table);
           applyParseResult(parsed, parsed !== null ? "excel" : null);
         })
@@ -521,6 +579,13 @@ export default function EndOfDay({
 
     readFileSmart(file)
       .then((text) => {
+        const summary = describeMonthlySummary(parseCsv(text, ";"), file.name);
+        if (summary) {
+          setMonthlySummary(summary);
+          setRows([]);
+          setSourceFormat(null);
+          return;
+        }
         const simple = parseSimpleCsv(text);
         const parsed = simple !== null ? simple : parsePosExport(text);
         const format: "simple" | "pos" | null = simple !== null ? "simple" : parsed !== null ? "pos" : null;
@@ -676,6 +741,9 @@ export default function EndOfDay({
                   <code>Artikelbezeichnung</code>, <code>Menge</code>, <code>Gesamt</code>). Its many rows per sale
                   are added up automatically into one line per dish per day. Matches by the recipe's POS ID first,
                   then by name.
+                  <br />
+                  <br />
+                  The till&rsquo;s monthly item report (&ldquo;Artikelbericht&rdquo;) has no sales per day, so it cannot be imported.
                 </span>
               </span>
             </div>
@@ -802,6 +870,36 @@ export default function EndOfDay({
           location={location}
           itemSupplierLinks={itemSupplierLinks}
         />
+      )}
+
+      {monthlySummary && (
+        <div className="modal-backdrop" onClick={() => setMonthlySummary(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginTop: 0 }}>This file is a monthly summary</h2>
+            <p>
+              <b>{monthlySummary.fileName}</b> only has the total sold for each dish over the whole month
+              {monthlySummary.from && monthlySummary.to
+                ? ` (${fmtSummaryDate(monthlySummary.from)} to ${fmtSummaryDate(monthlySummary.to)})`
+                : ""}
+              {monthlySummary.dishes > 0 ? `: ${monthlySummary.dishes} items` : ""}
+              {monthlySummary.units > 0 ? `, ${monthlySummary.units.toLocaleString("en-GB")} sold` : ""}.
+            </p>
+            <p>
+              There are no sales recorded per day in it, so SAWIS cannot add them to End of day, and nothing has been
+              imported.
+            </p>
+            <p>
+              To import sales, use the till&rsquo;s export with one line per sale (columns{" "}
+              <code>Datum/Uhrzeit</code>, <code>Artikelbezeichnung</code>, <code>Menge</code>, <code>Gesamt</code>), or the
+              simple template with <code>date,dish,qty,revenue</code>.
+            </p>
+            <div className="modal-actions">
+              <button type="button" className="btn-primary" onClick={() => setMonthlySummary(null)}>
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showImportModal && (
