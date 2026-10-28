@@ -128,7 +128,7 @@ export function syncSquare(accessToken: string, today = false): Promise<SquareSy
 }
 
 // Test mode only: creates a few paid sample orders in the Square test account.
-export function seedSquareSandbox(accessToken: string): Promise<{ orders: number }> {
+export function seedSquareSandbox(accessToken: string): Promise<{ orders: number; dishes: string[] }> {
   return call(accessToken, "POST", "/sandbox-seed/", {}, "Could not create the sample sales.");
 }
 

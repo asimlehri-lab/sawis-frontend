@@ -131,7 +131,7 @@ export default function SquarePanel({ accessToken, recipes, locations, squareRet
   const seedTest = () =>
     run("seed", async () => {
       const r = await seedSquareSandbox(accessToken);
-      setNotice({ kind: "ok", text: `Created ${r.orders} sample sales in the Square test account. Now press Pull today's sales.` });
+      setNotice({ kind: "ok", text: `Created ${r.orders} sample sales in the Square test account using: ${r.dishes.join(", ")}. Now press Pull today's sales.` });
     });
 
   const syncToday = () =>
