@@ -2358,6 +2358,10 @@ export interface POLinePatch {
   unit_price?: string;
   department?: "kitchen" | "bar" | "foh";
   vat_rate?: string | null;
+  // As-invoiced unit and quantity; "" and null clear them (the line is in the
+  // item's own unit).
+  supplier_unit?: string;
+  supplier_qty?: string | null;
 }
 export async function updatePOLine(accessToken: string, id: string, patch: POLinePatch): Promise<POLineRow> {
   const res = await fetch(`${API_URL}/api/procurement/po-lines/${id}/`, {

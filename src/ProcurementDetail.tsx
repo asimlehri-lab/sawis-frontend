@@ -27,6 +27,8 @@ import SupplierUnitPicker from "./SupplierUnitPicker";
 import type { UnitChoice } from "./SupplierUnitPicker";
 import Loader from "./Loader";
 import { dishScore } from "./dishMatch";
+import POLineEditModal from "./POLineEditModal";
+import type { POLineRow } from "./api";
 
 interface Props {
   poId: string;
@@ -977,6 +979,8 @@ export default function ProcurementDetail({
   }
 
   const [savingLineId, setSavingLineId] = useState<string | null>(null);
+  // The draft line being corrected in the Edit pop-up.
+  const [editingLine, setEditingLine] = useState<POLineRow | null>(null);
 
   async function handleUpdateLineQty(lineId: string, currentQty: string, rawValue: string) {
     const next = Number(rawValue);
@@ -1227,7 +1231,7 @@ export default function ProcurementDetail({
             )}
           </div>
         )}
-        {po.status === "received" && isAdmin && (
+        {po.status === "received" && !readOnly && (
           <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px dashed var(--border)" }}>
             {!showReopenConfirm ? (
               <button className="btn-ghost" onClick={() => setShowReopenConfirm(true)}>
@@ -1408,7 +1412,7 @@ export default function ProcurementDetail({
                 <tr key={l.id}>
                   <td className="dispname">{l.item_name}</td>
                   <td className="num">
-                    {editable ? (
+                    {editable && !(l.supplier_unit && l.supplier_qty != null) ? (
                       <input
                         type="number"
                         step="0.01"
@@ -1465,9 +1469,14 @@ export default function ProcurementDetail({
                   <td className="num">{formatMoney(Number(l.line_total), currency)}</td>
                   <td>
                     {editable && (
-                      <button className="rm" onClick={() => handleRemoveLine(l.id)}>
-                        ×
-                      </button>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", justifyContent: "flex-end" }}>
+                        <button type="button" className="btn-ghost small" onClick={() => setEditingLine(l)}>
+                          Edit
+                        </button>
+                        <button className="rm" onClick={() => handleRemoveLine(l.id)}>
+                          ×
+                        </button>
+                      </div>
                     )}
                   </td>
                 </tr>
@@ -1602,10 +1611,27 @@ export default function ProcurementDetail({
         ) : (
           <p className="hint" style={{ marginTop: 12 }}>
             Lines lock once a PO is sent, so the record matches what was actually ordered.
+            {po.status === "received" && !readOnly ? " Something wrong? Reopen it to Draft, fix the lines with Edit, and receive it again." : ""}
           </p>
         )}
       </div>
       </fieldset>
+
+      {editingLine && (
+        <POLineEditModal
+          line={editingLine}
+          item={items.find((it) => it.id === editingLine.item)}
+          currency={currency}
+          accessToken={accessToken}
+          onClose={() => setEditingLine(null)}
+          onSaved={() => {
+            setEditingLine(null);
+            reload();
+            onChanged();
+          }}
+          onItemsChanged={onItemsChanged}
+        />
+      )}
 
       {showReceive && (
         <div className="modal-backdrop">
