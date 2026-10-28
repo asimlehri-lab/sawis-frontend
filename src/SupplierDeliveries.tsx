@@ -270,18 +270,16 @@ export default function SupplierDeliveries({
               </div>
             </div>
             {supplier.min_order_value && (
-              <div style={{ marginTop: 14 }}>
-                <label className="check-row">
-                  <input
-                    type="checkbox"
-                    checked={supplier.block_below_min}
-                    onChange={(e) => handleSaveField({ block_below_min: e.target.checked })}
-                  />
-                  Don't allow sending an order below the minimum
-                </label>
-                <p className="hint" style={{ margin: "2px 0 0 26px" }}>
-                  Off: users get a warning and can still send. On: sending is blocked until the order reaches the minimum.
-                </p>
+              <div className="switch-row" style={{ marginTop: 14 }}>
+                <button
+                  type="button"
+                  role="switch"
+                  className="switch"
+                  aria-checked={supplier.block_below_min}
+                  aria-label="Don't allow sending an order below the minimum"
+                  onClick={() => handleSaveField({ block_below_min: !supplier.block_below_min })}
+                />
+                <span>Don't allow sending an order below the minimum</span>
               </div>
             )}
             <div className="field" style={{ marginTop: 16 }}>

@@ -21,7 +21,7 @@ import {
   deletePOAttachment,
   fetchSupplierPriceList,
 } from "./api";
-import type { PurchaseOrder, CatalogItem, Supplier, ItemSupplierRow, Location } from "./api";
+import type { PurchaseOrder, CatalogItem, Supplier, ItemSupplierRow, Location, ReceiveLineOverride } from "./api";
 import SearchSelect from "./SearchSelect";
 import SupplierUnitPicker from "./SupplierUnitPicker";
 import type { UnitChoice } from "./SupplierUnitPicker";
@@ -77,6 +77,18 @@ const DEPARTMENTS = [
 // POLine/ItemSupplier keep more internally for accurate costing.
 function formatQty(n: number): string {
   return parseFloat(n.toFixed(2)).toString();
+}
+
+// Receiving: figures are shown in the unit the person picked, so numbers are
+// kept as exact as they need to be but never show float noise (0.1 + 0.2).
+function trimNum(n: number): string {
+  return Number.isFinite(n) ? String(Number(n.toPrecision(8))) : "";
+}
+function priceText(n: number): string {
+  if (!Number.isFinite(n)) return "";
+  const t = Number(n.toPrecision(8));
+  const decimals = (String(t).split(".")[1] ?? "").length;
+  return decimals <= 2 ? t.toFixed(2) : String(t);
 }
 
 // What a PO line looks like on paper or in an email: the quantity in the unit
@@ -207,7 +219,11 @@ export default function ProcurementDetail({
   const [lineError, setLineError] = useState<string | null>(null);
 
   const [showReceive, setShowReceive] = useState(false);
+  // Qty and price here are in the unit chosen in receiveUnits for that line
+  // (the unit it was ordered in to begin with), converted to the item's own
+  // unit only when the delivery is confirmed.
   const [receiveLines, setReceiveLines] = useState<Record<string, { qty: string; price: string }>>({});
+  const [receiveUnits, setReceiveUnits] = useState<Record<string, UnitChoice>>({});
   const [receiving, setReceiving] = useState(false);
   const [receiveError, setReceiveError] = useState<string | null>(null);
   const [invoiceNumberInput, setInvoiceNumberInput] = useState("");
@@ -360,10 +376,21 @@ export default function ProcurementDetail({
     }
     if (next === "received") {
       const initial: Record<string, { qty: string; price: string }> = {};
+      const initialUnits: Record<string, UnitChoice> = {};
       po.lines.forEach((l) => {
-        initial[l.id] = { qty: l.qty, price: l.unit_price };
+        const item = items.find((it) => it.id === l.item);
+        let choice: UnitChoice = { unit: "", packQty: "1" };
+        // Default to the unit it was ordered in (L, carton...), when the line has one.
+        if (item && l.supplier_unit && l.supplier_qty != null && l.supplier_unit.toLowerCase() !== item.base_unit.toLowerCase()) {
+          const size = Number(l.qty) / Number(l.supplier_qty);
+          if (Number.isFinite(size) && size > 0) choice = { unit: l.supplier_unit, packQty: String(size) };
+        }
+        const f = (item && unitFactor(item, choice.unit, choice.packQty)) || 1;
+        initial[l.id] = { qty: trimNum(Number(l.qty) / f), price: priceText(Number(l.unit_price) * f) };
+        initialUnits[l.id] = choice;
       });
       setReceiveLines(initial);
+      setReceiveUnits(initialUnits);
       setReceiveError(null);
       setInvoiceNumberInput(po.invoice_number ?? "");
       setReceivedDateInput(todayIso());
@@ -531,7 +558,11 @@ export default function ProcurementDetail({
           }
         }
 
-        nextReceiveLines[l.id] = { qty: formatQty(qty), price: price.toFixed(2) };
+        // The scan is worked out per item unit; show it in the unit chosen for this line.
+        const shownUnit = receiveUnits[l.id] ?? { unit: "", packQty: "1" };
+        const shownItem = items.find((it) => it.id === l.item);
+        const sf = (shownItem && unitFactor(shownItem, shownUnit.unit, shownUnit.packQty)) || 1;
+        nextReceiveLines[l.id] = { qty: trimNum(qty / sf), price: priceText(price * sf) };
         const qtyDiffers = Math.abs(qty - Number(l.qty)) > 0.01;
         const priceDiffers = Math.abs(price - Number(l.unit_price)) > 0.01;
         lineStatus[l.id] = qtyDiffers || priceDiffers ? "diff" : "match";
@@ -605,16 +636,61 @@ export default function ProcurementDetail({
     }
   }
 
+  // Changing the unit re-expresses the same delivery in the new unit
+  // (4 L becomes 4000 ml, EUR 6 per L becomes EUR 0.006 per ml), so only a
+  // real difference from what was ordered needs typing.
+  function handleReceiveUnitChange(lineId: string, item: CatalogItem | undefined, choice: UnitChoice) {
+    const before = receiveUnits[lineId] ?? { unit: "", packQty: "1" };
+    const fOld = (item && unitFactor(item, before.unit, before.packQty)) || 1;
+    const fNew = (item && unitFactor(item, choice.unit, choice.packQty)) || 1;
+    setReceiveUnits((prev) => ({ ...prev, [lineId]: choice }));
+    setReceiveLines((prev) => {
+      const cur = prev[lineId];
+      if (!cur) return prev;
+      const q = Number(cur.qty);
+      const p = Number(cur.price);
+      return {
+        ...prev,
+        [lineId]: {
+          qty: cur.qty.trim() === "" || !Number.isFinite(q) ? cur.qty : trimNum((q * fOld) / fNew),
+          price: cur.price.trim() === "" || !Number.isFinite(p) ? cur.price : priceText((p * fNew) / fOld),
+        },
+      };
+    });
+  }
+
   async function handleConfirmReceive() {
     if (!po) return;
     setReceiving(true);
     setReceiveError(null);
     try {
-      const overrides = po.lines.map((l) => ({
-        id: l.id,
-        received_qty: receiveLines[l.id]?.qty ?? l.qty,
-        received_unit_price: receiveLines[l.id]?.price ?? l.unit_price,
-      }));
+      const overrides: ReceiveLineOverride[] = [];
+      for (const l of po.lines) {
+        const item = items.find((it) => it.id === l.item);
+        const choice = receiveUnits[l.id] ?? { unit: "", packQty: "1" };
+        const f = item ? unitFactor(item, choice.unit, choice.packQty) : 1;
+        if (!f) {
+          setReceiveError(`Check the unit for ${l.item_name}: how much does one ${choice.unit} hold?`);
+          setReceiving(false);
+          return;
+        }
+        const qtyIn = Number(receiveLines[l.id]?.qty ?? l.qty);
+        const priceIn = Number(receiveLines[l.id]?.price ?? l.unit_price);
+        const row: ReceiveLineOverride = {
+          id: l.id,
+          received_qty: String(Number((qtyIn * f).toFixed(3))),
+          received_unit_price: String(Number((priceIn / f).toFixed(4))),
+        };
+        // Remember the unit the delivery was received in, but leave plain
+        // item-unit lines alone.
+        if (choice.unit) {
+          row.supplier_unit = choice.unit;
+          row.supplier_qty = trimNum(qtyIn);
+        } else if (l.supplier_unit) {
+          row.supplier_unit = "";
+        }
+        overrides.push(row);
+      }
       const updated = await receivePurchaseOrder(accessToken, po.id, overrides, invoiceNumberInput.trim() || null, receivedDateInput || null);
       setPo(updated);
       setShowReceive(false);
@@ -1620,13 +1696,17 @@ export default function ProcurementDetail({
                 <tr>
                   <th>Item</th>
                   <th className="num">Ordered</th>
+                  <th>Received in</th>
                   <th className="num">Received qty</th>
-                  <th className="num">Received price</th>
+                  <th className="num">Price per unit</th>
                 </tr>
               </thead>
               <tbody>
                 {po.lines.map((l) => {
                   const status = deliveryScan?.lineStatus[l.id];
+                  const lineItem = items.find((it) => it.id === l.item);
+                  const ordered = poLineFigures(l, lineItem?.base_unit ?? "");
+                  const choice = receiveUnits[l.id] ?? { unit: "", packQty: "1" };
                   return (
                     <tr key={l.id}>
                       <td className="dispname">
@@ -1636,7 +1716,19 @@ export default function ProcurementDetail({
                         {status === "missing" && <span className="badge" style={{ marginLeft: 6 }}>not in photo</span>}
                       </td>
                       <td className="num muted">
-                        {Number(l.qty).toFixed(2)} @ {formatMoney(Number(l.unit_price), currency)}
+                        {ordered.qty} {ordered.unit} @ {formatMoney(ordered.unitPrice, currency, ordered.unitPrice < 0.1 ? 4 : 2)}
+                      </td>
+                      <td className="recv-unit">
+                        <SupplierUnitPicker
+                          key={`${l.id}-${lineItem ? 1 : 0}`}
+                          item={lineItem}
+                          unit={choice.unit}
+                          packQty={choice.packQty}
+                          accessToken={accessToken}
+                          label="Received in"
+                          onChange={(c) => handleReceiveUnitChange(l.id, lineItem, c)}
+                          onUnitAdded={onItemsChanged}
+                        />
                       </td>
                       <td className="num">
                         <input
@@ -1659,7 +1751,7 @@ export default function ProcurementDetail({
                           className="par-in"
                           type="number"
                           min="0"
-                          step="0.01"
+                          step="any"
                           style={status === "diff" ? { background: "var(--caution-soft)" } : undefined}
                           value={receiveLines[l.id]?.price ?? l.unit_price}
                           onChange={(e) =>

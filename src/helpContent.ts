@@ -333,7 +333,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I mark a PO as received?",
-        a: "Open the PO from Procurement and click Receive delivery (it needs to already be Sent first — until then the button reads Mark as Sent). A Receive delivery pop-up opens where you can set the date it arrived (Received on, today unless you change it, never a future date) and type the supplier's invoice number, check the delivery against a photo (see Scan delivery below), and amend what actually arrived. Confirming records the stock coming in and, if a price differs from what's on file, updates that supplier's price for the item.",
+        a: "Open the PO from Procurement and click Receive delivery (it needs to already be Sent first — until then the button reads Mark as Sent). A Receive delivery pop-up opens where each line shows the unit you ordered in (for example L) under Received in; if the supplier delivered it in another unit, such as ml or a carton, pick that unit and SAWIS converts the quantity and price for you. You can also set the date it arrived (Received on, today unless you change it, never a future date) and type the supplier's invoice number, check the delivery against a photo (see Scan delivery below), and amend what actually arrived. Confirming records the stock coming in and, if a price differs from what's on file, updates that supplier's price for the item.",
       },
       {
         q: "Can I delete a purchase order?",
