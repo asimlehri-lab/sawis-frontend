@@ -314,7 +314,7 @@ export default function SquarePanel({ accessToken, recipes, locations, squareRet
           <p className="hint">
             Only shown in test mode. Create a few sample sales in the Square test account, named after your own dishes,
             then pull today&rsquo;s sales to see them arrive in SAWIS. Link a location below first, and give a few dishes a
-            menu price.
+            menu price. Pulling today again replaces the sales and stock usage from the last time you pulled today, so you can repeat the test.
           </p>
           <div className="sq-btns">
             <button type="button" className="btn-ghost small" onClick={seedTest} disabled={busy === "seed"}>
