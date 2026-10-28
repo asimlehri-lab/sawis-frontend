@@ -26,6 +26,7 @@ import SearchSelect from "./SearchSelect";
 import SupplierUnitPicker from "./SupplierUnitPicker";
 import type { UnitChoice } from "./SupplierUnitPicker";
 import Loader from "./Loader";
+import { dishScore } from "./dishMatch";
 
 interface Props {
   poId: string;
@@ -521,7 +522,9 @@ export default function ProcurementDetail({
         let bestScore = 0;
         result.line_items.forEach((li, idx) => {
           if (claimed.has(idx)) return;
-          const score = matchScore(l.item_name, li.description);
+          // Word overlap, or a close spelling ("Tea0.7", a typo) of the same name.
+          const close = dishScore(li.description, l.item_name);
+          const score = Math.max(matchScore(l.item_name, li.description), close >= 0.6 ? close : 0);
           if (score > bestScore) {
             bestScore = score;
             bestIdx = idx;

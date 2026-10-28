@@ -3713,3 +3713,12 @@ button.rp-gcard:hover { border-color: var(--muted); }
 .recv-unit { min-width: 150px; }
 .recv-unit .field { margin: 0; }
 .recv-unit .field > label { display: none; }
+
+/* End of day: import review bar (find, category, by dish / by day) */
+.eod-rv-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0; }
+.eod-rv-search, .eod-rv-cat { font-family: inherit; font-size: 13px; color: var(--ink); background: var(--surface); border: 1px solid var(--border); border-radius: 9px; padding: 8px 12px; }
+.eod-rv-search { flex: 1 1 180px; min-width: 150px; width: auto; }
+.eod-rv-cat { flex: 0 1 190px; width: auto; }
+.eod-rv-view { display: flex; gap: 6px; margin-left: auto; }
+.eod-rv-guess { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); margin: 0 0 10px; }
+.eod-rv-matched { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }

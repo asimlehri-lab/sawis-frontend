@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
-import { fetchLastImportDate, importSales } from "./api";
+import { fetchLastImportDate, formatMoney, importSales } from "./api";
 import type { CatalogItem, ItemSupplierRow, Location, Me, Recipe, StockMovementRow } from "./api";
 import Reorder from "./Reorder";
 import EodReport from "./EodReport";
@@ -9,6 +9,7 @@ import { ALL_LOCATIONS, canSeeAllLocations } from "./locationScope";
 import { PickLocationPrompt } from "./AllLocationsParts";
 import EodTasks from "./EodTasks";
 import SearchSelect from "./SearchSelect";
+import { confidentGuess, rankNames } from "./dishMatch";
 import ScanEodSales from "./ScanEodSales";
 import { fetchSquareStatus, fmtSquareDate, fmtSquareDateTime, type SquareConnection } from "./squareApi";
 
@@ -259,6 +260,16 @@ export default function EndOfDay({
   const [rawLineCount, setRawLineCount] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [showScanTest, setShowScanTest] = useState(false);
+  // How the import review is laid out: one line per dish (match it once and
+  // it applies to every day) or one line per dish per day, with a filter,
+  // a search box and a menu-category filter on top of either.
+  const [importView, setImportView] = useState<"dish" | "day">("dish");
+  const [importFilter, setImportFilter] = useState<"all" | "needs" | "matched" | "skipped">("all");
+  const [importSearch, setImportSearch] = useState("");
+  const [importCategory, setImportCategory] = useState("");
+  // Dishes whose match came from "Use best guesses", so they stay marked
+  // "Suggested" until the person changes or confirms them.
+  const [guessedKeys, setGuessedKeys] = useState<Set<string>>(new Set());
   // Set when the chosen file is the till's monthly item report
   // ("Artikelbericht"): one total per dish for the whole month, with no
   // sales per day, so there is nothing to record on a date. We tell the user
@@ -550,6 +561,7 @@ export default function EndOfDay({
 
   function processFile(file: File) {
     setFileName(file.name);
+    resetReviewControls();
     setMonthlySummary(null);
     setParseError(null);
     setImportError(null);
@@ -611,7 +623,16 @@ export default function EndOfDay({
     if (file) processFile(file);
   }
 
+  function resetReviewControls() {
+    setImportView("dish");
+    setImportFilter("all");
+    setImportSearch("");
+    setImportCategory("");
+    setGuessedKeys(new Set());
+  }
+
   function closeImportModal() {
+    resetReviewControls();
     setShowImportModal(false);
     setRows([]);
     setFileName("");
@@ -626,7 +647,108 @@ export default function EndOfDay({
     setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
   }
 
-  const unmatchedCount = rows.filter((r) => !r.skip && !r.matchedRecipeId).length;
+  const dishKey = (name: string) => name.trim().toLowerCase();
+  const currency = locations.find((l) => l.id === location)?.currency;
+  const money = (n: number) => formatMoney(n, currency);
+
+  // One entry per dish name in the file, however many days it appears on.
+  interface DishGroup {
+    key: string;
+    name: string;
+    days: number;
+    qty: number;
+    revenue: number;
+    status: "needs" | "matched" | "skipped";
+    matchedId: string | null;
+    mixed: boolean;
+  }
+  const groups: DishGroup[] = (() => {
+    const map = new Map<string, { name: string; idx: number[]; dates: Set<string>; qty: number; revenue: number }>();
+    rows.forEach((r, i) => {
+      const key = dishKey(r.dishRaw);
+      const g = map.get(key) ?? { name: r.dishRaw.trim(), idx: [], dates: new Set<string>(), qty: 0, revenue: 0 };
+      g.idx.push(i);
+      g.dates.add(r.date);
+      g.qty += r.qty;
+      g.revenue += Number(r.revenue) || 0;
+      map.set(key, g);
+    });
+    const out: DishGroup[] = [];
+    map.forEach((g, key) => {
+      const active = g.idx.map((i) => rows[i]).filter((r) => !r.skip);
+      const ids = new Set(active.map((r) => r.matchedRecipeId).filter(Boolean) as string[]);
+      const status = active.length === 0 ? "skipped" : active.some((r) => !r.matchedRecipeId) ? "needs" : "matched";
+      out.push({
+        key,
+        name: g.name,
+        days: g.dates.size,
+        qty: g.qty,
+        revenue: g.revenue,
+        status,
+        matchedId: ids.size ? Array.from(ids)[0] : null,
+        mixed: ids.size > 1,
+      });
+    });
+    const order = { needs: 0, matched: 1, skipped: 2 };
+    return out.sort((a, b) => order[a.status] - order[b.status] || a.name.localeCompare(b.name));
+  })();
+  const recipeById = (id: string | null) => (id ? dishRecipes.find((d) => d.id === id) : undefined);
+  const importCategories = Array.from(
+    new Set(dishRecipes.map((d) => (d.menu_category || "").trim()).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+  const searchQ = importSearch.trim().toLowerCase();
+  function passesReview(raw: string, status: "needs" | "matched" | "skipped", matchedId: string | null): boolean {
+    if (importFilter !== "all" && importFilter !== status) return false;
+    const rec = recipeById(matchedId);
+    if (searchQ && !raw.toLowerCase().includes(searchQ) && !(rec && rec.name.toLowerCase().includes(searchQ))) return false;
+    if (importCategory && (!rec || (rec.menu_category || "").trim() !== importCategory)) return false;
+    return true;
+  }
+  const visibleGroups = groups.filter((g) => passesReview(g.name, g.status, g.matchedId));
+  const rowStatus = (r: ParsedRow): "needs" | "matched" | "skipped" =>
+    r.skip ? "skipped" : r.matchedRecipeId ? "matched" : "needs";
+  const visibleRowIdx = rows
+    .map((_, i) => i)
+    .filter((i) => passesReview(rows[i].dishRaw, rowStatus(rows[i]), rows[i].matchedRecipeId));
+  const groupCounts = {
+    all: groups.length,
+    needs: groups.filter((g) => g.status === "needs").length,
+    matched: groups.filter((g) => g.status === "matched").length,
+    skipped: groups.filter((g) => g.status === "skipped").length,
+  };
+  const dayCount = new Set(rows.map((r) => r.date)).size;
+  const guessable = groups.filter((g) => g.status === "needs" && confidentGuess(g.name, dishRecipes)).length;
+
+  function setGroupMatch(key: string, recipeId: string | null, guessed = false) {
+    setRows((rs) => rs.map((r) => (dishKey(r.dishRaw) === key ? { ...r, matchedRecipeId: recipeId } : r)));
+    setGuessedKeys((prev) => {
+      const next = new Set(prev);
+      if (guessed) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  }
+  function setGroupSkip(key: string, skip: boolean) {
+    setRows((rs) => rs.map((r) => (dishKey(r.dishRaw) === key ? { ...r, skip } : r)));
+  }
+  // Fills in every dish that has one clear best match. Nothing is imported
+  // by this; the dishes stay marked "Suggested" so they can be checked.
+  function useBestGuesses() {
+    const picks = new Map<string, string>();
+    for (const g of groups) {
+      if (g.status !== "needs") continue;
+      const c = confidentGuess(g.name, dishRecipes);
+      if (c) picks.set(g.key, c.id);
+    }
+    setRows((rs) =>
+      rs.map((r) => {
+        const id = picks.get(dishKey(r.dishRaw));
+        return id && !r.skip && !r.matchedRecipeId ? { ...r, matchedRecipeId: id } : r;
+      })
+    );
+    setGuessedKeys((prev) => new Set([...prev, ...picks.keys()]));
+  }
+
   const importableRows = rows.filter((r) => !r.skip && r.matchedRecipeId);
 
   async function handleImport() {
@@ -801,6 +923,7 @@ export default function EndOfDay({
           accessToken={accessToken}
           location={location}
           dishRecipes={dishRecipes}
+          currency={locations.find((l) => l.id === location)?.currency}
           onImported={() => refreshLastImport(location)}
           onClose={() => setShowScanTest(false)}
         />
@@ -915,63 +1038,206 @@ export default function EndOfDay({
                   <div className="im-note">
                     ✓{" "}
                     <b>
-                      {rows.length} {sourceFormat === "pos" || sourceFormat === "excel" ? "dishes" : "rows"}
+                      {groups.length} dish{groups.length === 1 ? "" : "es"}
                     </b>{" "}
+                    on {dayCount} day{dayCount === 1 ? "" : "s"} ({rows.length} lines){" "}
                     {sourceFormat === "pos" || sourceFormat === "excel"
                       ? `added up from ${rawLineCount} transaction line${rawLineCount === 1 ? "" : "s"} in ${fileName}.`
                       : `read from ${fileName}.`}
-                    {unmatchedCount > 0 && ` ${unmatchedCount} need matching below before they can be imported.`}
+                    {groupCounts.needs > 0 &&
+                      ` ${groupCounts.needs} dish${groupCounts.needs === 1 ? " needs" : "es need"} matching before ${groupCounts.needs === 1 ? "it" : "they"} can be imported. Match a dish once and it applies to every day.`}
                   </div>
                 )}
-                <div className="table-scroll">
-                  <table className="tbl" style={{ marginTop: 10 }}>
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Dish (from CSV)</th>
-                        <th>Matched recipe</th>
-                        <th className="num">Qty</th>
-                        <th className="num">Revenue</th>
-                        <th></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((r, i) => (
-                        <tr key={i} style={r.skip ? { opacity: 0.45 } : undefined}>
-                          <td className="muted">{r.date}</td>
-                          <td>{r.dishRaw}</td>
-                          <td>
-                            {r.matchedRecipeId ? (
-                              <span className="badge b-ok">
-                                {dishRecipes.find((d) => d.id === r.matchedRecipeId)?.name}
-                              </span>
-                            ) : (
-                              <SearchSelect
-                                value=""
-                                onChange={(val) => updateRow(i, { matchedRecipeId: val || null })}
-                                disabled={r.skip}
-                                placeholder="Pick a recipe…"
-                                aria-label="Matched recipe"
-                                options={dishRecipes.map((d) => ({ value: d.id, label: d.name }))}
-                              />
-                            )}
-                          </td>
-                          <td className="num">{r.qty}</td>
-                          <td className="num">£{(Number(r.revenue) || 0).toFixed(2)}</td>
-                          <td>
-                            <button
-                              type="button"
-                              className="btn-ghost small"
-                              onClick={() => updateRow(i, { skip: !r.skip })}
-                            >
-                              {r.skip ? "Include" : "Skip"}
-                            </button>
-                          </td>
-                        </tr>
+                <div className="eod-rv-bar">
+                  <input
+                    type="search"
+                    className="eod-rv-search"
+                    placeholder="Find a dish…"
+                    value={importSearch}
+                    onChange={(e) => setImportSearch(e.target.value)}
+                    aria-label="Find a dish"
+                  />
+                  {importCategories.length > 0 && (
+                    <select
+                      className="eod-rv-cat"
+                      value={importCategory}
+                      onChange={(e) => setImportCategory(e.target.value)}
+                      aria-label="Menu category"
+                    >
+                      <option value="">All categories</option>
+                      {importCategories.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
                       ))}
-                    </tbody>
-                  </table>
+                    </select>
+                  )}
+                  <div className="eod-rv-view" role="group" aria-label="Layout">
+                    <button type="button" className={`chip ${importView === "dish" ? "active" : ""}`} onClick={() => setImportView("dish")}>
+                      By dish
+                    </button>
+                    <button type="button" className={`chip ${importView === "day" ? "active" : ""}`} onClick={() => setImportView("day")}>
+                      By day
+                    </button>
+                  </div>
                 </div>
+
+                <div className="chip-row">
+                  {(
+                    [
+                      { key: "all", label: `All (${groupCounts.all})` },
+                      { key: "needs", label: `Needs matching (${groupCounts.needs})` },
+                      { key: "matched", label: `Matched (${groupCounts.matched})` },
+                      { key: "skipped", label: `Skipped (${groupCounts.skipped})` },
+                    ] as { key: "all" | "needs" | "matched" | "skipped"; label: string }[]
+                  ).map((f) => (
+                    <button
+                      key={f.key}
+                      type="button"
+                      className={`chip ${importFilter === f.key ? "active" : ""}`}
+                      onClick={() => setImportFilter(f.key)}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+
+                {guessable > 0 && (
+                  <div className="eod-rv-guess">
+                    <span>
+                      {guessable} unmatched dish{guessable === 1 ? " has" : "es have"} one clear best match (same name, same size).
+                    </span>
+                    <button type="button" className="btn-ghost small" onClick={useBestGuesses}>
+                      Use best guesses ({guessable})
+                    </button>
+                  </div>
+                )}
+
+                {importView === "dish" ? (
+                  <div className="table-scroll">
+                    <table className="tbl" style={{ marginTop: 4 }}>
+                      <thead>
+                        <tr>
+                          <th>Dish (from file)</th>
+                          <th className="num">Qty</th>
+                          <th className="num">Revenue</th>
+                          <th>Matched recipe</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleGroups.map((g) => {
+                          const guesses = g.status === "needs" ? rankNames(g.name, dishRecipes, 3, 0.45) : [];
+                          return (
+                            <tr key={g.key} style={g.status === "skipped" ? { opacity: 0.45 } : undefined}>
+                              <td>
+                                {g.name}
+                                <div className="muted" style={{ fontSize: 11.5 }}>
+                                  {g.days} day{g.days === 1 ? "" : "s"}
+                                </div>
+                              </td>
+                              <td className="num">{g.qty}</td>
+                              <td className="num">{money(g.revenue)}</td>
+                              <td>
+                                {g.status === "matched" ? (
+                                  <div className="eod-rv-matched">
+                                    <span className="badge b-ok">
+                                      {g.mixed ? "Several recipes" : recipeById(g.matchedId)?.name}
+                                    </span>
+                                    {guessedKeys.has(g.key) && <span className="badge warn">Suggested</span>}
+                                    <button type="button" className="btn-ghost small" onClick={() => setGroupMatch(g.key, null)}>
+                                      Change
+                                    </button>
+                                  </div>
+                                ) : g.status === "needs" ? (
+                                  <>
+                                    <SearchSelect
+                                      value=""
+                                      onChange={(val) => val && setGroupMatch(g.key, val)}
+                                      placeholder="Pick a recipe…"
+                                      aria-label="Matched recipe"
+                                      options={dishRecipes.map((d) => ({ value: d.id, label: d.name }))}
+                                    />
+                                    {guesses.length > 0 && (
+                                      <div className="sq-sugg">
+                                        <span>Did you mean</span>
+                                        {guesses.map((s) => (
+                                          <button key={s.id} type="button" className="sq-chip" onClick={() => setGroupMatch(g.key, s.id)}>
+                                            {s.name}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </>
+                                ) : (
+                                  <span className="muted">Skipped</span>
+                                )}
+                              </td>
+                              <td>
+                                <button
+                                  type="button"
+                                  className="btn-ghost small"
+                                  onClick={() => setGroupSkip(g.key, g.status !== "skipped")}
+                                >
+                                  {g.status === "skipped" ? "Include" : "Skip"}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    {visibleGroups.length === 0 && <p className="muted">No dishes match these filters.</p>}
+                  </div>
+                ) : (
+                  <div className="table-scroll">
+                    <table className="tbl" style={{ marginTop: 4 }}>
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Dish (from file)</th>
+                          <th>Matched recipe</th>
+                          <th className="num">Qty</th>
+                          <th className="num">Revenue</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleRowIdx.map((i) => {
+                          const r = rows[i];
+                          return (
+                            <tr key={i} style={r.skip ? { opacity: 0.45 } : undefined}>
+                              <td className="muted">{r.date}</td>
+                              <td>{r.dishRaw}</td>
+                              <td>
+                                {r.matchedRecipeId ? (
+                                  <span className="badge b-ok">{recipeById(r.matchedRecipeId)?.name}</span>
+                                ) : (
+                                  <SearchSelect
+                                    value=""
+                                    onChange={(val) => updateRow(i, { matchedRecipeId: val || null })}
+                                    disabled={r.skip}
+                                    placeholder="Pick a recipe…"
+                                    aria-label="Matched recipe"
+                                    options={dishRecipes.map((d) => ({ value: d.id, label: d.name }))}
+                                  />
+                                )}
+                              </td>
+                              <td className="num">{r.qty}</td>
+                              <td className="num">{money(Number(r.revenue) || 0)}</td>
+                              <td>
+                                <button type="button" className="btn-ghost small" onClick={() => updateRow(i, { skip: !r.skip })}>
+                                  {r.skip ? "Include" : "Skip"}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    {visibleRowIdx.length === 0 && <p className="muted">No lines match these filters.</p>}
+                  </div>
+                )}
               </>
             )}
 
@@ -980,7 +1246,7 @@ export default function EndOfDay({
                 ✓ <b>
                   {result.sales} sale{result.sales === 1 ? "" : "s"}
                 </b>{" "}
-                imported — {result.dishes} dishes, £{result.revenue.toFixed(2)} revenue.
+                imported — {result.dishes} dishes, {money(result.revenue)} revenue.
                 {result.skipped > 0 && ` ${result.skipped} row${result.skipped === 1 ? "" : "s"} skipped.`}
                 {result.alreadyRecorded > 0 &&
                   ` ${result.alreadyRecorded} row${result.alreadyRecorded === 1 ? " was" : "s were"} already recorded for that date and left as they were.`}{" "}

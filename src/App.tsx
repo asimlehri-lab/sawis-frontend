@@ -92,6 +92,7 @@ import { readSquareReturn } from "./squareApi";
 import CategoryManagerModal from "./CategoryManagerModal";
 import Reports from "./Reports";
 import SearchSelect from "./SearchSelect";
+import { confidentGuess, rankNames } from "./dishMatch";
 import NotificationBell from "./NotificationBell";
 import FilterBar from "./FilterBar";
 import type { FilterFacet, FilterValues } from "./FilterBar";
@@ -1615,6 +1616,10 @@ export default function App() {
             .map((it) => ({ it, score: matchScore(it.name, li.description) }))
             .sort((a, b) => b.score - a.score);
           best = ranked[0] && ranked[0].score >= 0.5 ? ranked[0].it.id : "";
+          // Names written a little differently from ours ("Tea0.7", a typo)
+          // are caught by the name-and-size comparison, which only picks one
+          // when a single item is clearly the best.
+          if (!best) best = confidentGuess(li.description, items ?? [])?.id ?? "";
         }
         const bestItem = (items ?? []).find((it) => it.id === best);
         const known = findKnownSupplierUnit(
@@ -1689,6 +1694,54 @@ export default function App() {
       setScanError(err instanceof Error ? err.message : "Could not scan that receipt.");
     } finally {
       setScanning(false);
+    }
+  }
+
+  function pickScanItem(i: number, row: ScanRow, val: string) {
+    if (val === "__new__") {
+      // No confident match on the receipt line -- offer to
+      // create the Item right here instead of sending the
+      // user off to the Items page and back.
+      setScanNewItemRow(i);
+      setScanNewItemName(row.description);
+      setScanNewItemUnit(BASE_UNITS[1]);
+      setScanNewItemError(null);
+    } else {
+      const newItem = (items ?? []).find((it) => it.id === val);
+      const known = findKnownSupplierUnit(
+        itemSupplierLinks,
+        val,
+        scanSupplierId,
+        newItem,
+        Number(row.unitPrice) || undefined
+      );
+      const printed = known ? null : unitFromPrinted(newItem, row.printedUnit);
+      // Rebuild from the invoice's own figures, so a carton row
+      // follows the new item (or goes back to pieces).
+      const knownPiece = known && !["ctn", "carton"].includes(known.supplierUnit.toLowerCase()) ? known : null;
+      const cv = cartonView(newItem, {
+        qty: Number(row.src.qty),
+        read: Number(row.src.read),
+        price: Number(row.src.price),
+        printedUnit: row.printedUnit,
+        piece: knownPiece ? { unit: knownPiece.supplierUnit, packQty: knownPiece.packQty } : unitFromPrinted(newItem, row.printedUnit),
+      });
+      updateScanRow(i, {
+        matchedItemId: val,
+        supplierUnit: cv ? cv.supplierUnit : known?.supplierUnit ?? printed?.unit ?? "",
+        packQty: cv ? cv.packQty : known?.packQty ?? printed?.packQty ?? "1",
+        vatPct: vatPctFromSupplierLink(itemSupplierLinks, val, scanSupplierId) || vatPctFromItem(newItem),
+        ...(cv
+          ? {
+              qty: cv.qty,
+              unitPrice: cv.unitPrice,
+              qtyNote: "",
+              carton: { cartons: cv.cartons, perCarton: cv.perCarton, pieceLabel: cv.pieceLabel, alt: cv.alt },
+            }
+          : row.carton
+          ? { qty: row.src.qty, unitPrice: row.src.price, carton: undefined }
+          : {}),
+      });
     }
   }
 
@@ -3561,54 +3614,21 @@ export default function App() {
                                 // option that doesn't require finding a match at all.
                                 pinnedOptions={[{ value: "__new__", label: "+ Add new item…" }]}
                                 options={(items ?? []).map((it) => ({ value: it.id, label: it.name }))}
-                                onChange={(val) => {
-                                  if (val === "__new__") {
-                                    // No confident match on the receipt line -- offer to
-                                    // create the Item right here instead of sending the
-                                    // user off to the Items page and back.
-                                    setScanNewItemRow(i);
-                                    setScanNewItemName(row.description);
-                                    setScanNewItemUnit(BASE_UNITS[1]);
-                                    setScanNewItemError(null);
-                                  } else {
-                                    const newItem = (items ?? []).find((it) => it.id === val);
-                                    const known = findKnownSupplierUnit(
-                                      itemSupplierLinks,
-                                      val,
-                                      scanSupplierId,
-                                      newItem,
-                                      Number(row.unitPrice) || undefined
-                                    );
-                                    const printed = known ? null : unitFromPrinted(newItem, row.printedUnit);
-                                    // Rebuild from the invoice's own figures, so a carton row
-                                    // follows the new item (or goes back to pieces).
-                                    const knownPiece = known && !["ctn", "carton"].includes(known.supplierUnit.toLowerCase()) ? known : null;
-                                    const cv = cartonView(newItem, {
-                                      qty: Number(row.src.qty),
-                                      read: Number(row.src.read),
-                                      price: Number(row.src.price),
-                                      printedUnit: row.printedUnit,
-                                      piece: knownPiece ? { unit: knownPiece.supplierUnit, packQty: knownPiece.packQty } : unitFromPrinted(newItem, row.printedUnit),
-                                    });
-                                    updateScanRow(i, {
-                                      matchedItemId: val,
-                                      supplierUnit: cv ? cv.supplierUnit : known?.supplierUnit ?? printed?.unit ?? "",
-                                      packQty: cv ? cv.packQty : known?.packQty ?? printed?.packQty ?? "1",
-                                      vatPct: vatPctFromSupplierLink(itemSupplierLinks, val, scanSupplierId) || vatPctFromItem(newItem),
-                                      ...(cv
-                                        ? {
-                                            qty: cv.qty,
-                                            unitPrice: cv.unitPrice,
-                                            qtyNote: "",
-                                            carton: { cartons: cv.cartons, perCarton: cv.perCarton, pieceLabel: cv.pieceLabel, alt: cv.alt },
-                                          }
-                                        : row.carton
-                                        ? { qty: row.src.qty, unitPrice: row.src.price, carton: undefined }
-                                        : {}),
-                                    });
-                                  }
-                                }}
+                                onChange={(val) => pickScanItem(i, row, val)}
                               />
+                              {!row.skip && !row.matchedItemId && (() => {
+                                const guesses = rankNames(row.description, items ?? [], 3, 0.5);
+                                return guesses.length > 0 ? (
+                                  <div className="sq-sugg" style={{ marginTop: 6 }}>
+                                    <span>Did you mean</span>
+                                    {guesses.map((g) => (
+                                      <button key={g.id} type="button" className="sq-chip" onClick={() => pickScanItem(i, row, g.id)}>
+                                        {g.name}
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : null;
+                              })()}
                               {scanNewItemRow === i && (
                                 <div className="scan-new-item">
                                   <input

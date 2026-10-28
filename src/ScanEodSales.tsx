@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { fetchAlreadyImportedRecipes, importSales, scanEndOfDaySales } from "./api";
+import { fetchAlreadyImportedRecipes, formatMoney, importSales, scanEndOfDaySales } from "./api";
 import type { Recipe } from "./api";
 import SearchSelect from "./SearchSelect";
 import Loader from "./Loader";
+import { confidentGuess, rankNames } from "./dishMatch";
 
 interface Props {
   accessToken: string;
@@ -11,6 +12,8 @@ interface Props {
   // CSV/Excel importer matches against, so a recipe found by either path
   // is found by both.
   dishRecipes: Recipe[];
+  // This location's currency code, so imported revenue shows the right symbol.
+  currency?: string;
   // Lets EndOfDay refresh its "Last imported" line after a successful
   // import here, same as its own handleImport does.
   onImported: () => void;
@@ -192,7 +195,7 @@ function normalizeReceiptDate(raw: string | null): string {
   return today;
 }
 
-export default function ScanEodSales({ accessToken, location, dishRecipes, onImported, onClose }: Props) {
+export default function ScanEodSales({ accessToken, location, dishRecipes, currency, onImported, onClose }: Props) {
   const [scanning, setScanning] = useState(false);
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -321,6 +324,11 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
             })
             .sort((a, b) => b.score - a.score);
           best = ranked[0] && ranked[0].score >= 0.5 ? ranked[0].id : "";
+          // The word-overlap guess above misses names written a little
+          // differently ("Tea0.7", "0,5" for "(0.5L)", a typo). The name and
+          // size comparison catches those, and only pre-selects when one
+          // dish is clearly the best.
+          if (!best) best = confidentGuess(description, dishRecipes)?.id ?? "";
         }
         built.push({
           description,
@@ -508,6 +516,23 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
             style={{ width: "100%" }}
             options={dishRecipes.map((d) => ({ value: d.id, label: d.name }))}
           />
+          {!row.skip && !row.matchedRecipeId && (
+            <div className="sq-sugg" style={{ marginTop: 6 }}>
+              {(() => {
+                const guesses = rankNames(row.description, dishRecipes, 3, 0.45);
+                return guesses.length > 0 ? (
+                  <>
+                    <span>Did you mean</span>
+                    {guesses.map((s) => (
+                      <button key={s.id} type="button" className="sq-chip" onClick={() => updateRow(i, { matchedRecipeId: s.id })}>
+                        {s.name}
+                      </button>
+                    ))}
+                  </>
+                ) : null;
+              })()}
+            </div>
+          )}
         </div>
 
         <div className="scan-row-nums">
@@ -713,7 +738,7 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, onImp
 
         {result && (
           <div className="im-note">
-            ✓ Imported — {result.dishes} dish{result.dishes === 1 ? "" : "es"}, £{result.revenue.toFixed(2)}{" "}
+            ✓ Imported — {result.dishes} dish{result.dishes === 1 ? "" : "es"}, {formatMoney(result.revenue, currency)}{" "}
             revenue.
             {result.skipped > 0 && ` ${result.skipped} row${result.skipped === 1 ? "" : "s"} skipped.`}{" "}
             {result.duplicateRecipes.length > 0 &&
