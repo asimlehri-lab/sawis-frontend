@@ -828,6 +828,18 @@ function LiveStockTab({
   // rtabs toggle above, same as Recipes' Dish/Sub-recipe split stays
   // outside its own FilterBar.
   const [liveStockFilters, setLiveStockFilters] = useState<FilterValues>({});
+  // Click a column heading to sort by it: first click puts the most useful end first
+  // (A to Z for text, biggest first for numbers), second click reverses, third clears.
+  type SortKey = "item" | "dept" | "onhand" | "par" | "status" | "value";
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" } | null>(null);
+  function clickSort(key: SortKey) {
+    setSort((cur) => {
+      const textual = key === "item" || key === "dept";
+      if (!cur || cur.key !== key) return { key, dir: textual ? "asc" : "desc" };
+      const first = textual ? "asc" : "desc";
+      return cur.dir === first ? { key, dir: first === "asc" ? "desc" : "asc" } : null;
+    });
+  }
   // Reason given on each count line, so a count shortfall tagged spoilage etc. can be shown as waste.
   const countReasonByLine: Record<string, string | null> = {};
   stockCounts.forEach((c) => c.lines.forEach((l) => (countReasonByLine[l.id] = l.reason)));
@@ -873,6 +885,35 @@ function LiveStockTab({
     if (categorySel !== null && !categorySel.includes(h.category ?? "")) return false;
     return true;
   });
+
+  const valueOf = (h: FlatHolding) => (onHand[h.id] ?? 0) * (cheapestPrice(h.itemId) ?? 0);
+  const shown = !sort
+    ? filtered
+    : [...filtered].sort((a, b) => {
+        let c: number;
+        if (sort.key === "item") c = a.itemName.localeCompare(b.itemName);
+        else if (sort.key === "dept") c = deptLabel(a.department).localeCompare(deptLabel(b.department));
+        else if (sort.key === "onhand") c = (onHand[a.id] ?? 0) - (onHand[b.id] ?? 0);
+        else if (sort.key === "par") c = a.parLevel - b.parLevel;
+        else if (sort.key === "status")
+          c = Number((onHand[a.id] ?? 0) < a.parLevel) - Number((onHand[b.id] ?? 0) < b.parLevel);
+        else c = valueOf(a) - valueOf(b);
+        if (c === 0) c = a.itemName.localeCompare(b.itemName);
+        return sort.dir === "asc" ? c : -c;
+      });
+  const sortTh = (key: SortKey, label: string, cls?: string) => (
+    <th
+      className={`sortable ${cls ?? ""}`}
+      aria-sort={sort?.key === key ? (sort.dir === "asc" ? "ascending" : "descending") : "none"}
+    >
+      <button type="button" className="th-sort" onClick={() => clickSort(key)}>
+        {label}
+        <span className="th-arrow" aria-hidden="true">
+          {sort?.key === key ? (sort.dir === "asc" ? "▲" : "▼") : ""}
+        </span>
+      </button>
+    </th>
+  );
 
   return (
     <>
@@ -938,20 +979,20 @@ function LiveStockTab({
         {holdings.length === 0 && <p className="muted">Nothing stocked at this location yet.</p>}
         {holdings.length > 0 && filtered.length === 0 && <p className="muted">No items match.</p>}
         {filtered.length > 0 && (
-          <div className="table-scroll">
-            <table className="tbl">
+          <div className="table-scroll sticky-head">
+            <table className="tbl sticky-head">
               <thead>
                 <tr>
-                  <th>Item</th>
-                  <th>Department</th>
-                  <th className="num">On hand</th>
-                  <th className="num">Par</th>
-                  <th>Status</th>
-                  <th className="num">Value</th>
+                  {sortTh("item", "Item")}
+                  {sortTh("dept", "Department")}
+                  {sortTh("onhand", "On hand", "num")}
+                  {sortTh("par", "Par", "num")}
+                  {sortTh("status", "Status")}
+                  {sortTh("value", "Value", "num")}
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((h) => {
+                {shown.map((h) => {
                   const oh = onHand[h.id];
                   const low = oh !== undefined && oh < h.parLevel;
                   const expanded = expandedId === h.id;
