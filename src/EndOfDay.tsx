@@ -538,9 +538,8 @@ export default function EndOfDay({
   function applyParseResult(parsed: ParsedRow[] | null, format: "simple" | "pos" | "excel" | null) {
     if (parsed === null) {
       setParseError(
-        'Unrecognised file — expected either "date,dish,qty,revenue" columns, a POS export with ' +
-          '"Datum/Uhrzeit;ArtikelID;Artikelbezeichnung;Menge;Gesamt" columns, or that same POS export as ' +
-          "an Excel file."
+        'Unrecognised file — expected either the simple "date,dish,qty,revenue" template, or a sales export ' +
+          "from your till with one line per sale (as a CSV or Excel file)."
       );
       setRows([]);
       setSourceFormat(null);
@@ -858,14 +857,15 @@ export default function EndOfDay({
                   same value on every row for that date.
                   <br />
                   <br />
-                  <b>Raw POS export</b> — the till's own semicolon-separated report, as a CSV or as an Excel file
-                  (columns include <code>Datum/Uhrzeit</code>, <code>ArtikelID</code>,{" "}
-                  <code>Artikelbezeichnung</code>, <code>Menge</code>, <code>Gesamt</code>). Its many rows per sale
+                  <b>Raw POS export</b> — the till's own sales report with one line per sale, as a CSV or as an Excel
+                  file (it needs the date and time, the item name, the quantity and the total, and usually has an item
+                  ID too). Its many rows per sale
                   are added up automatically into one line per dish per day. Matches by the recipe's POS ID first,
                   then by name.
                   <br />
                   <br />
-                  The till&rsquo;s monthly item report (&ldquo;Artikelbericht&rdquo;) has no sales per day, so it cannot be imported.
+                  A monthly item report (one total per dish for the whole month) has no sales per day, so it cannot be
+                  imported.
                 </span>
               </span>
             </div>
@@ -1017,9 +1017,9 @@ export default function EndOfDay({
               imported.
             </p>
             <p>
-              To import sales, use the till&rsquo;s export with one line per sale (columns{" "}
-              <code>Datum/Uhrzeit</code>, <code>Artikelbezeichnung</code>, <code>Menge</code>, <code>Gesamt</code>), or the
-              simple template with <code>date,dish,qty,revenue</code>.
+              To import sales, use a sales export from your till with one line per sale, showing the date, the dish
+              name, the quantity and the amount. Or use the simple template, with one row per dish per day:{" "}
+              <code>date,dish,qty,revenue</code>.
             </p>
             <div className="modal-actions">
               <button type="button" className="btn-primary" onClick={() => setMonthlySummary(null)}>
