@@ -137,6 +137,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "Open the recipe and click Duplicate at the top, beside its name (managers and admins). A copy opens straight away, named like Brown Sugar Latte 2, with the name selected so you can type a new one. It has the same ingredients, sub-recipes, yield, menu price, group, category and cost target, so you only change what differs: edit quantities, add or remove ingredients. The original is not touched. The POS ID and the sales history stay with the original, so add the till code to the copy yourself if it has its own.",
       },
       {
+        q: "How do I sell something I buy in as it is, like a lollypop or a can of cola?",
+        a: "Open the item and click Sell as a dish (managers and admins). Check the name (use the name your till prints, so End of day sales match it), say how much one sale uses (1 for items counted in each; for items kept in g or ml, type the amount, for example 330 ml), then set the price. You can type the menu price, or a margin % (profit as a share of the price), or a mark-up % (profit as a share of the cost). The pop-up shows the food cost and profit as you type, and one tap uses the price that hits your food cost target, rounded up to the nearest 5p. SAWIS creates a dish with that item as its only ingredient, so stock comes off when it sells, the cost follows the supplier price and allergens carry over. Once an item is sold as a dish the button becomes Open dish. To do many at once, tick items in the Items list (or use the Sold as a dish filter, Not yet) and click Sell as dishes: you get one table with a price per item and an Apply to all that prices them at your target. Recipes → New recipe has the same thing as its third choice.",
+      },
+      {
         q: "Where do I set my food and drink cost targets?",
         a: "An Admin goes to Settings, opens the Locations tab and finds the Locations card — each location has a Food target and a Drink target (%) next to its currency. Change them, save, and the colours and Cost breaching target list follow. They start at 30%. One dish can have its own target instead: open the recipe, go to Cost & margin and type it in Cost target %.",
       },
@@ -218,7 +222,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "What can I filter by?",
-        a: "Items: Category, Supplier, Allergens, Allergen status, Status (Active or Archived — archived items show by default with an Archived badge; pick Active to hide them), Allergen review and Used in recipes (pick “Not used in any recipe” to find leftover or duplicate items). Recipes: Category, Item used, Food or drink, Status (Active or Archived), Cost vs target (On target, Over target, Well over target), Allergens and Allergen status. Live stock: Status (Below par or OK) and Category. Procurement: Supplier, Location and Item. Dish vs Sub-recipe, Department and PO status keep their own tabs above the list.",
+        a: "Items: Category, Supplier, Allergens, Allergen status, Status (Active or Archived — archived items show by default with an Archived badge; pick Active to hide them), Allergen review and Used in recipes (pick “Not used in any recipe” to find leftover or duplicate items) and Sold as a dish (pick “Not yet” to find bought-in items that still need a menu price). Recipes: Category, Item used, Food or drink, Status (Active or Archived), Cost vs target (On target, Over target, Well over target), Allergens and Allergen status. Live stock: Status (Below par or OK) and Category. Procurement: Supplier, Location and Item. Dish vs Sub-recipe, Department and PO status keep their own tabs above the list.",
       },
       {
         q: "How do several filters combine?",

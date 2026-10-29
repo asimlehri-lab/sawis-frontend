@@ -70,6 +70,7 @@ import type {
 } from "./api";
 import RecipeDetail from "./RecipeDetail";
 import ItemDetail from "./ItemDetail";
+import SellAsDishModal from "./SellAsDishModal";
 import type { ItemTab, RecipeTab } from "./itemTabs";
 import AllergenIcon from "./AllergenIcon";
 import AllergenPrintSheet from "./AllergenPrintSheet";
@@ -586,6 +587,14 @@ export default function App() {
   const [recipes, setRecipes] = useState<Recipe[] | null>(null);
   const [recipesError, setRecipesError] = useState<string | null>(null);
   const [showNewRecipe, setShowNewRecipe] = useState(false);
+  // "Sell as a dish": the items being turned into dishes (pop-up open when
+  // set), the ticked rows on the Items list, the "dish created" message, and
+  // the third choice in the New recipe box ("a bought-in item, sold as it is").
+  const [sellIds, setSellIds] = useState<string[] | null>(null);
+  const [pickedItems, setPickedItems] = useState<string[]>([]);
+  const [dishNotice, setDishNotice] = useState<{ id: string; text: string } | null>(null);
+  const [newRecipeSell, setNewRecipeSell] = useState(false);
+  const [sellSearch, setSellSearch] = useState("");
   // Set when a sub-recipe is created from inside another recipe's "+ New
   // sub-recipe": where to return to, and which sub-recipe to have ready there.
   const [subReturn, setSubReturn] = useState<{ id: string; name: string } | null>(null);
@@ -679,6 +688,15 @@ export default function App() {
   const itemIdsUsedInRecipes = new Set<string>();
   liveRecipes.forEach((r) => r.lines.forEach((l) => l.item && itemIdsUsedInRecipes.add(l.item)));
 
+  // Items that are the only ingredient of a live dish: they are already sold
+  // as they are ("Sell as a dish"), so they do not need doing again.
+  const itemIdsSoldAsDish = new Set<string>();
+  liveRecipes.forEach((r) => {
+    if (r.kind === "dish" && r.lines.length === 1 && r.lines[0].line_type === "item" && r.lines[0].item) {
+      itemIdsSoldAsDish.add(r.lines[0].item);
+    }
+  });
+
   const itemFacets: FilterFacet[] = [
     {
       key: "category",
@@ -713,6 +731,18 @@ export default function App() {
     ...(recipes
       ? [
           {
+            key: "sold",
+            label: "Sold as a dish",
+            options: [
+              { value: "no", label: "Not yet" },
+              { value: "yes", label: "Already a dish" },
+            ],
+          },
+        ]
+      : []),
+    ...(recipes
+      ? [
+          {
             key: "usage",
             label: "Used in recipes",
             options: [
@@ -723,6 +753,61 @@ export default function App() {
         ]
       : []),
   ];
+
+  const shownItems = (items ?? [])
+        .filter(
+          (it) => (itemFilters.category ?? null) === null || itemFilters.category!.includes(it.category ?? "")
+        )
+        .filter(
+          (it) =>
+            (itemFilters.supplier ?? null) === null ||
+            itemFilters.supplier!.some(
+              (sId) => it.default_supplier === sId || it.supplier_links.some((sl) => sl.supplier === sId)
+            )
+        )
+        .filter(
+          (it) =>
+            (itemFilters.allergens ?? null) === null ||
+            itemFilters.allergens!.some((aId) => it.allergens.includes(aId))
+        )
+        .filter(
+          (it) =>
+            (itemFilters.astatus ?? null) === null ||
+            itemFilters.astatus!.includes(allergenStatusOfItem(it))
+        )
+        .filter(
+          (it) =>
+            (itemFilters.review ?? null) === null ||
+            itemFilters.review!.some((v) => (v === "needs" ? it.allergen_needs_review : !it.allergen_needs_review))
+        )
+        .filter(
+          (it) =>
+            (itemFilters.archived ?? null) === null ||
+            itemFilters.archived!.includes(it.archived ? "archived" : "active")
+        )
+        .filter(
+          (it) =>
+            !recipes ||
+            (itemFilters.usage ?? null) === null ||
+            itemFilters.usage!.some((v) =>
+              v === "used" ? itemIdsUsedInRecipes.has(it.id) : !itemIdsUsedInRecipes.has(it.id)
+            )
+        )
+        .filter(
+          (it) =>
+            !recipes ||
+            (itemFilters.sold ?? null) === null ||
+            itemFilters.sold!.some((v) => (v === "yes" ? itemIdsSoldAsDish.has(it.id) : !itemIdsSoldAsDish.has(it.id)))
+        )
+        .filter((it) => {
+          const q = itemSearch.trim().toLowerCase();
+          if (!q) return true;
+          return (
+            it.name.toLowerCase().includes(q) ||
+            (it.sku ?? "").toLowerCase().includes(q) ||
+            it.supplier_links.some((link) => link.supplier_sku.toLowerCase().includes(q))
+          );
+        });
 
   // Recipes: menu_category (freeform string, not the Category model --
   // recipes aren't linked to Category at all, see CatalogItem vs Recipe in
@@ -1369,6 +1454,8 @@ export default function App() {
 
   function resetNewRecipeForm() {
     setNewRecipeKind("dish");
+    setNewRecipeSell(false);
+    setSellSearch("");
     setNewRecipeName("");
     setNewYieldQty("1");
     setNewYieldUnit(YIELD_UNITS[0]);
@@ -2314,6 +2401,7 @@ export default function App() {
               goToNav("Recipes");
               setSelectedRecipeId(id);
             }}
+            onRecipesChanged={() => loadRecipes(accessToken)}
           />
         ) : activePage === "Procurement" && selectedPOId && accessToken ? (
           <ProcurementDetail
@@ -2532,11 +2620,58 @@ export default function App() {
                 {itemsError && <p className="error">{itemsError}</p>}
                 {!itemsError && !items && <p className="muted">Loading items…</p>}
                 {items && items.length === 0 && <p className="muted">No items yet.</p>}
+                {dishNotice && (
+                  <div className="sad-toast" role="status">
+                    <span>{dishNotice.text}</span>
+                    <button
+                      type="button"
+                      className="open-link"
+                      onClick={() => {
+                        goToNav("Recipes");
+                        setSelectedRecipeId(dishNotice.id);
+                        setDishNotice(null);
+                      }}
+                    >
+                      Open dish
+                    </button>
+                    <button type="button" className="sad-x" aria-label="Dismiss" onClick={() => setDishNotice(null)}>
+                      ×
+                    </button>
+                  </div>
+                )}
+                {canManage(me) && pickedItems.length > 0 && (
+                  <div className="sad-bar">
+                    <span>
+                      <b>{pickedItems.length} {pickedItems.length === 1 ? "item" : "items"} selected</b>
+                    </span>
+                    <button type="button" className="btn-primary small" onClick={() => setSellIds(pickedItems)}>
+                      Sell as {pickedItems.length === 1 ? "a dish" : "dishes"}
+                    </button>
+                    <button type="button" className="btn-ghost small" onClick={() => setPickedItems([])}>
+                      Clear
+                    </button>
+                  </div>
+                )}
                 {items && items.length > 0 && (
                   <div className="table-scroll">
                     <table className="tbl">
                       <thead>
                         <tr>
+                          {canManage(me) && (
+                            <th className="sad-pick">
+                              <input
+                                type="checkbox"
+                                aria-label="Select all items shown"
+                                checked={
+                                  shownItems.filter((it) => !it.archived).length > 0 &&
+                                  shownItems.filter((it) => !it.archived).every((it) => pickedItems.includes(it.id))
+                                }
+                                onChange={(e) =>
+                                  setPickedItems(e.target.checked ? shownItems.filter((it) => !it.archived).map((it) => it.id) : [])
+                                }
+                              />
+                            </th>
+                          )}
                           <th>Name</th>
                           <th>Category</th>
                           <th>Unit</th>
@@ -2545,58 +2680,27 @@ export default function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {items
-                          .filter(
-                            (it) => (itemFilters.category ?? null) === null || itemFilters.category!.includes(it.category ?? "")
-                          )
-                          .filter(
-                            (it) =>
-                              (itemFilters.supplier ?? null) === null ||
-                              itemFilters.supplier!.some(
-                                (sId) => it.default_supplier === sId || it.supplier_links.some((sl) => sl.supplier === sId)
-                              )
-                          )
-                          .filter(
-                            (it) =>
-                              (itemFilters.allergens ?? null) === null ||
-                              itemFilters.allergens!.some((aId) => it.allergens.includes(aId))
-                          )
-                          .filter(
-                            (it) =>
-                              (itemFilters.astatus ?? null) === null ||
-                              itemFilters.astatus!.includes(allergenStatusOfItem(it))
-                          )
-                          .filter(
-                            (it) =>
-                              (itemFilters.review ?? null) === null ||
-                              itemFilters.review!.some((v) => (v === "needs" ? it.allergen_needs_review : !it.allergen_needs_review))
-                          )
-                          .filter(
-                            (it) =>
-                              (itemFilters.archived ?? null) === null ||
-                              itemFilters.archived!.includes(it.archived ? "archived" : "active")
-                          )
-                          .filter(
-                            (it) =>
-                              !recipes ||
-                              (itemFilters.usage ?? null) === null ||
-                              itemFilters.usage!.some((v) =>
-                                v === "used" ? itemIdsUsedInRecipes.has(it.id) : !itemIdsUsedInRecipes.has(it.id)
-                              )
-                          )
-                          .filter((it) => {
-                            const q = itemSearch.trim().toLowerCase();
-                            if (!q) return true;
-                            return (
-                              it.name.toLowerCase().includes(q) ||
-                              (it.sku ?? "").toLowerCase().includes(q) ||
-                              it.supplier_links.some((link) => link.supplier_sku.toLowerCase().includes(q))
-                            );
-                          })
+                        {shownItems
                           .map((it) => {
                             const itAllergens = allergens.filter((a) => it.allergens.includes(a.id));
                             return (
                             <tr key={it.id} className="clickable" onClick={() => setSelectedItemId(it.id)}>
+                              {canManage(me) && (
+                                <td className="sad-pick" onClick={(e) => e.stopPropagation()}>
+                                  {!it.archived && (
+                                    <input
+                                      type="checkbox"
+                                      aria-label={`Select ${it.name}`}
+                                      checked={pickedItems.includes(it.id)}
+                                      onChange={(e) =>
+                                        setPickedItems((prev) =>
+                                          e.target.checked ? [...prev, it.id] : prev.filter((x) => x !== it.id)
+                                        )
+                                      }
+                                    />
+                                  )}
+                                </td>
+                              )}
                               <td className="dish">
                                 {it.name}
                                 {itAllergens.length > 0 && (
@@ -3027,6 +3131,42 @@ export default function App() {
         />
       )}
 
+      {sellIds && accessToken && (
+        <SellAsDishModal
+          accessToken={accessToken}
+          itemIds={sellIds}
+          locations={locations}
+          onClose={() => setSellIds(null)}
+          onOpenDish={(id) => {
+            setSellIds(null);
+            goToNav("Recipes");
+            setSelectedRecipeId(id);
+          }}
+          onCreated={(created, openId) => {
+            setSellIds(null);
+            setPickedItems([]);
+            loadRecipes(accessToken);
+            if (openId) {
+              goToNav("Recipes");
+              setSelectedRecipeId(openId);
+              return;
+            }
+            if (created.length === 1) {
+              const d = created[0];
+              setDishNotice({
+                id: d.id,
+                text: `Dish created: ${d.name} at ${formatMoney(Number(d.menu_price ?? 0), defaultCurrency(locations))}${d.plate_food_cost_pct !== null ? ` (food cost ${d.plate_food_cost_pct.toFixed(1)}%)` : ""}.`,
+              });
+            } else if (created.length > 1) {
+              setDishNotice({
+                id: created[0].id,
+                text: `${created.length} dishes created. You will find them under Recipes.`,
+              });
+            }
+          }}
+        />
+      )}
+
       {showNewRecipe && (
         <div className="modal-backdrop" onClick={() => { setShowNewRecipe(false); setSubReturn(null); }}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -3034,22 +3174,88 @@ export default function App() {
             <div className="seg">
               <button
                 type="button"
-                className={`seg-btn ${newRecipeKind === "dish" ? "on" : ""}`}
-                onClick={() => setNewRecipeKind("dish")}
+                className={`seg-btn ${newRecipeKind === "dish" && !newRecipeSell ? "on" : ""}`}
+                onClick={() => {
+                  setNewRecipeKind("dish");
+                  setNewRecipeSell(false);
+                }}
               >
                 <b>A dish</b>
                 <small>sold on the menu · has a price</small>
               </button>
               <button
                 type="button"
-                className={`seg-btn sub ${newRecipeKind === "sub" ? "on" : ""}`}
-                onClick={() => setNewRecipeKind("sub")}
+                className={`seg-btn sub ${newRecipeKind === "sub" && !newRecipeSell ? "on" : ""}`}
+                onClick={() => {
+                  setNewRecipeKind("sub");
+                  setNewRecipeSell(false);
+                }}
               >
                 <b>A sub-recipe</b>
                 <small>in-house prep, used in other recipes</small>
               </button>
+              <button
+                type="button"
+                className={`seg-btn ${newRecipeSell ? "on" : ""}`}
+                onClick={() => setNewRecipeSell(true)}
+              >
+                <b>A bought-in item, sold as it is</b>
+                <small>pick an item you already have · set the price</small>
+              </button>
             </div>
-            <form onSubmit={handleCreateRecipe}>
+            {newRecipeSell && (
+              <div>
+                <label style={{ marginTop: 12 }}>
+                  Item
+                  <input
+                    autoFocus
+                    value={sellSearch}
+                    onChange={(e) => setSellSearch(e.target.value)}
+                    placeholder="Search items…"
+                  />
+                </label>
+                <p className="hint" style={{ margin: "-4px 0 8px" }}>
+                  Opens the same pop-up as the Sell as a dish button on an item.
+                </p>
+                <div className="sad-picklist">
+                  {(items ?? [])
+                    .filter((it) => !it.archived && !itemIdsSoldAsDish.has(it.id))
+                    .filter((it) => it.name.toLowerCase().includes(sellSearch.trim().toLowerCase()))
+                    .slice(0, 8)
+                    .map((it) => (
+                      <button
+                        key={it.id}
+                        type="button"
+                        className="sad-pickrow"
+                        onClick={() => {
+                          setShowNewRecipe(false);
+                          resetNewRecipeForm();
+                          setSellIds([it.id]);
+                        }}
+                      >
+                        {it.name} <span className="muted">· {it.base_unit}</span>
+                      </button>
+                    ))}
+                  {(items ?? []).filter((it) => !it.archived && !itemIdsSoldAsDish.has(it.id)).filter((it) => it.name.toLowerCase().includes(sellSearch.trim().toLowerCase())).length === 0 && (
+                    <p className="muted" style={{ margin: "6px 0" }}>No items to pick. Items that are already dishes are left out.</p>
+                  )}
+                </div>
+                <div className="modal-actions">
+                  <button
+                    type="button"
+                    className="btn-ghost"
+                    onClick={() => {
+                      setShowNewRecipe(false);
+                      resetNewRecipeForm();
+                      setSubReturn(null);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+            <form onSubmit={handleCreateRecipe} style={newRecipeSell ? { display: "none" } : undefined}>
               <label>
                 Name
                 <input value={newRecipeName} onChange={(e) => setNewRecipeName(e.target.value)} required />

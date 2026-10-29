@@ -41,6 +41,7 @@ import AllergenIcon from "./AllergenIcon";
 import ItemHistory from "./ItemHistory";
 import CategoryManagerModal from "./CategoryManagerModal";
 import NewPackBox from "./NewPackBox";
+import SellAsDishModal from "./SellAsDishModal";
 import { ITEM_TAB_LABELS } from "./itemTabs";
 import type { ItemTab } from "./itemTabs";
 
@@ -64,6 +65,8 @@ interface Props {
   onCategoriesChanged: () => void;
   onOpenSupplier?: (supplierId: string) => void;
   onOpenRecipe?: (recipeId: string) => void;
+  // A dish was created from this item ("Sell as a dish"): reload the recipes.
+  onRecipesChanged?: () => void;
   // Which tab to land on (Inventory sends "+ stock unit" to Stock).
   initialTab?: ItemTab;
 }
@@ -173,6 +176,7 @@ export default function ItemDetail({
   onCategoriesChanged,
   onOpenSupplier,
   onOpenRecipe,
+  onRecipesChanged,
   initialTab,
 }: Props) {
   const [item, setItem] = useState<CatalogItem | null>(null);
@@ -203,6 +207,18 @@ export default function ItemDetail({
     .filter((r) => r.lines.some((l) => l.line_type === "item" && l.item === itemId))
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name));
+  // The dish that sells this item as it is (a dish whose only ingredient is
+  // this item), if there is one -- "Sell as a dish" becomes "Open dish".
+  const soleDish =
+    recipes.find(
+      (r) =>
+        r.kind === "dish" &&
+        r.lines.length === 1 &&
+        r.lines[0].line_type === "item" &&
+        r.lines[0].item === itemId
+    ) ?? null;
+  const [sellOpen, setSellOpen] = useState(false);
+  const [sellNotice, setSellNotice] = useState<{ id: string; text: string } | null>(null);
   const USED_IN_CHIP_CAP = 12;
   const visibleUsedIn = showAllUsedIn ? usedInRecipes : usedInRecipes.slice(0, USED_IN_CHIP_CAP);
 
@@ -871,6 +887,22 @@ export default function ItemDetail({
           onChange={(e) => setItem({ ...item, name: e.target.value })}
           onBlur={(e) => saveField({ name: e.target.value })}
         />
+        {!readOnly && !item.archived && (
+          soleDish ? (
+            <button type="button" className="btn-ghost" style={{ marginLeft: "auto" }} onClick={() => onOpenRecipe?.(soleDish.id)}>
+              Open dish
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn-primary"
+              style={{ marginLeft: "auto", width: "auto", padding: "10px 18px" }}
+              onClick={() => setSellOpen(true)}
+            >
+              Sell as a dish
+            </button>
+          )
+        )}
       </div>
       <p className="muted detail-sub">
         One catalog record, shared across every department and branch.
@@ -1320,9 +1352,38 @@ export default function ItemDetail({
 
       <div className="card" hidden={tab !== "details"}>
         <h2>Used in recipes</h2>
+        {sellNotice && (
+          <div className="sad-toast" role="status">
+            <span>{sellNotice.text}</span>
+            <button type="button" className="open-link" onClick={() => onOpenRecipe?.(sellNotice.id)}>
+              Open dish
+            </button>
+            <button type="button" className="sad-x" aria-label="Dismiss" onClick={() => setSellNotice(null)}>
+              ×
+            </button>
+          </div>
+        )}
+        {soleDish && (
+          <div style={{ marginBottom: usedInRecipes.length > 1 ? 12 : 0 }}>
+            <p className="sad-kl" style={{ margin: "0 0 4px" }}>Sold as a dish</p>
+            <div className="metric">
+              <span className="ml">{soleDish.name}</span>
+              <span className="mv">{soleDish.menu_price !== null ? formatMoney(Number(soleDish.menu_price), currency) : "—"}</span>
+            </div>
+            <div className="metric">
+              <span className="ml">Food cost</span>
+              <span className="mv">
+                {soleDish.plate_food_cost_pct !== null ? `${soleDish.plate_food_cost_pct.toFixed(1)}%` : "—"}
+              </span>
+            </div>
+          </div>
+        )}
         {usedInRecipes.length === 0 ? (
-          <p className="muted">Not used in any recipe yet.</p>
-        ) : (
+          <p className="muted">
+            Not used in any recipe yet.
+            {!readOnly && !item.archived && " If you sell it as it is, Sell as a dish creates the dish for you."}
+          </p>
+        ) : usedInRecipes.length === 1 && soleDish ? null : (
           <>
             <div className="chip-row" style={{ marginBottom: usedInRecipes.length > USED_IN_CHIP_CAP ? 4 : 0 }}>
               {visibleUsedIn.map((r) => (
@@ -1808,6 +1869,35 @@ export default function ItemDetail({
       </div>
 
       </fieldset>
+
+      {sellOpen && (
+        <SellAsDishModal
+          accessToken={accessToken}
+          itemIds={[itemId]}
+          locations={locations}
+          onClose={() => setSellOpen(false)}
+          onOpenDish={(id) => {
+            setSellOpen(false);
+            onOpenRecipe?.(id);
+          }}
+          onCreated={(created, openId) => {
+            setSellOpen(false);
+            onRecipesChanged?.();
+            const d = created[0];
+            if (!d) return;
+            if (openId) {
+              onOpenRecipe?.(openId);
+              return;
+            }
+            const fc = d.plate_food_cost_pct;
+            setSellNotice({
+              id: d.id,
+              text: `Dish created: ${d.name} at ${formatMoney(Number(d.menu_price ?? 0), currency)}${fc !== null ? ` (food cost ${fc.toFixed(1)}%)` : ""}.`,
+            });
+            setTab("details");
+          }}
+        />
+      )}
 
       {showUnitModal && (
         <div className="modal-backdrop" onClick={() => setShowUnitModal(false)}>

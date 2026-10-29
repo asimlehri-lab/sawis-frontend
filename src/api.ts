@@ -756,6 +756,63 @@ export async function duplicateRecipe(accessToken: string, id: string): Promise<
   return res.json();
 }
 
+// --- Sell a bought-in item as a dish ---------------------------------------
+// A lollypop bought from a supplier and sold at the counter is a dish with
+// one ingredient line (the item). These two calls feed and drive the
+// "Sell as a dish" pop-up.
+
+export interface SellCandidate {
+  item: string;
+  name: string;
+  base_unit: string;
+  archived: boolean;
+  // Cost of one base unit, and where it came from: a supplier price, the
+  // item's own target cost, or nothing yet.
+  cost: string;
+  cost_source: "supplier" | "target" | "none";
+  // "1" for counted units (each, bottle...), null for g / ml / kg / L where
+  // the person has to say how much goes into one sale.
+  default_qty: string | null;
+  dish: { id: string; name: string } | null;
+}
+
+export interface SellDishInput {
+  item: string;
+  price: string;
+  qty?: string;
+  name?: string;
+  menu_group?: "food" | "drink";
+  menu_category?: string;
+}
+
+export interface SellItemsResult {
+  created: Recipe[];
+  skipped: { item: string; name: string; dish: { id: string; name: string } }[];
+}
+
+export async function fetchSellCandidates(accessToken: string, itemIds: string[]): Promise<SellCandidate[]> {
+  const res = await fetch(`${API_URL}/api/catalog/recipes/sell_candidates/?items=${encodeURIComponent(itemIds.join(","))}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("Could not check these items.");
+  return res.json();
+}
+
+export async function sellItemsAsDishes(accessToken: string, dishes: SellDishInput[]): Promise<SellItemsResult> {
+  const res = await fetch(`${API_URL}/api/catalog/recipes/sell_items/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ dishes }),
+  });
+  if (!res.ok) {
+    if (res.status === 403) throw new Error("Only a manager or admin can create dishes.");
+    const body = await res.json().catch(() => null);
+    const detail = body && typeof body === "object" ? body.detail ?? Object.values(body)[0] : null;
+    throw new Error((Array.isArray(detail) ? detail.join(" ") : detail) || "Could not create the dishes.");
+  }
+  return res.json();
+}
+
 export async function deleteRecipe(accessToken: string, id: string): Promise<void> {
   const res = await fetch(`${API_URL}/api/catalog/recipes/${id}/`, {
     method: "DELETE",

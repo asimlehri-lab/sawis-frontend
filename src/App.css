@@ -3753,3 +3753,48 @@ button.rp-gcard:hover { border-color: var(--muted); }
 .recost-table td.bad { color: var(--caution); font-weight: 600; }
 .recost-note { font-size: 12.5px; margin: 10px 0 0; }
 .recost-link { margin-top: 8px; }
+
+/* ---- Sell as a dish pop-up ---- */
+.modal.sad { text-align: left; max-width: 560px; }
+.modal.sad.wide { max-width: 940px; }
+.sad-lead { margin: 0 0 12px; font-size: 13px; }
+.sad-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: end; }
+@media (max-width: 560px) { .sad-row2 { grid-template-columns: 1fr; } }
+.sad-inline { display: flex; align-items: center; gap: 8px; }
+.sad-unit { font-size: 13.5px; color: var(--muted); }
+.sad-cost { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 9px 12px; display: flex; flex-direction: column; gap: 2px; margin-bottom: 2px; }
+.sad-cost b { font: 600 17px monospace; }
+.sad-cost small { color: var(--muted); font-size: 11.5px; }
+.sad-kl { font-size: 11px; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+.sad-warn { margin: 8px 0 0; }
+.modal.sad .sad-tabs { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.modal.sad .sad-tabs button { border: 0; background: none; padding: 8px 16px; font: 600 13px inherit; color: var(--muted); cursor: pointer; margin: 0; border-radius: 0; width: auto; }
+.modal.sad .sad-tabs button.on { background: var(--brand-soft); color: var(--brand); }
+.modal.sad .sad-tabs button:disabled { opacity: 0.45; cursor: not-allowed; }
+.sad-setrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0 10px; border-bottom: 1px solid var(--border); margin-top: 8px; }
+.sad-setrow .price-in { margin: 0; }
+.sad-l { font-size: 13px; font-weight: 600; margin: 0; }
+.modal.sad .sad-chip { display: inline-block; margin: 10px 0 0; border: 1px dashed var(--brand); background: var(--brand-soft); color: var(--brand); border-radius: 99px; padding: 7px 13px; font: 600 12.5px inherit; cursor: pointer; width: auto; }
+.sad-chip b { font-weight: 800; }
+.sad-prev { margin-top: 12px; border: 1px solid var(--border); border-radius: 12px; padding: 4px 14px 8px; background: var(--surface); }
+.sad-more { margin-top: 12px; font-size: 13px; }
+.sad-more summary { cursor: pointer; color: var(--brand); font-weight: 600; }
+.sad-bulkbar { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin: 0 0 12px; font-size: 13.5px; }
+.sad-tbl input, .sad-tbl select { margin: 0; }
+.sad-tbl input[type="number"] { width: 84px; text-align: right; font: 14px monospace; padding: 6px 8px; }
+.sad-tbl td.nm input { width: 100%; min-width: 160px; text-align: left; font: 14px inherit; padding: 6px 8px; }
+.sad-bar { display: flex; align-items: center; gap: 12px; background: var(--brand-soft); border: 1px solid var(--brand-soft-hover); border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; }
+.sad-toast { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #211f1b; color: #f1ede4; border-radius: 10px; padding: 11px 14px; font-size: 13px; margin-bottom: 10px; }
+.sad-toast .open-link { color: #97a9fa; font-weight: 700; }
+.sad-toast .sad-x { margin-left: auto; background: none; border: 0; color: #f1ede4; cursor: pointer; font-size: 16px; padding: 0 4px; }
+.tbl .sad-pick { width: 34px; }
+.sad-picklist { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; max-height: 280px; overflow-y: auto; }
+.modal .sad-pickrow { text-align: left; background: var(--surface); border: 0; border-bottom: 1px solid var(--border); border-radius: 0; margin: 0; padding: 10px 12px; font: inherit; color: inherit; cursor: pointer; width: 100%; }
+.modal .sad-pickrow:last-child { border-bottom: 0; }
+.modal .sad-pickrow:hover { background: var(--brand-soft); }
+.modal.sad .hint { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+.modal.sad .sad-bulkbar label { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; margin: 0; font-size: 13.5px; font-weight: 500; text-transform: none; letter-spacing: 0; color: inherit; }
+.modal.sad .sad-bulkbar input, .modal.sad .sad-bulkbar select { margin: 0; }
+.sad-tbl th { white-space: nowrap; }
+.sad-tbl td .sad-amt { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.sad-tbl select { width: auto; min-width: 84px; padding-right: 26px; }
