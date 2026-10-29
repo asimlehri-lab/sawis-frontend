@@ -3798,3 +3798,8 @@ button.rp-gcard:hover { border-color: var(--muted); }
 .sad-tbl th { white-space: nowrap; }
 .sad-tbl td .sad-amt { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .sad-tbl select { width: auto; min-width: 84px; padding-right: 26px; }
+.sad-new { text-align: left; }
+.sad-new .hint { font-size: 11.5px; color: var(--muted); line-height: 1.45; text-align: left; }
+.modal .sad-pickrow { font-size: 14px; }
+.modal .sad-pickrow .muted { font-size: 12px; }
+.modal .sad-picklist { margin-bottom: 4px; }

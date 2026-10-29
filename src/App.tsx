@@ -3199,12 +3199,12 @@ export default function App() {
                 className={`seg-btn ${newRecipeSell ? "on" : ""}`}
                 onClick={() => setNewRecipeSell(true)}
               >
-                <b>A bought-in item, sold as it is</b>
-                <small>pick an item you already have · set the price</small>
+                <b>A bought-in item</b>
+                <small>sold as it is · you set the price</small>
               </button>
             </div>
             {newRecipeSell && (
-              <div>
+              <div className="sad-new">
                 <label style={{ marginTop: 12 }}>
                   Item
                   <input
