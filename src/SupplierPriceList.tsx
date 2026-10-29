@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { autoFactor, deleteItemSupplier, fetchSupplierPriceList, formatMoney, linkPriceListLine } from "./api";
+import { autoFactor, UNIT_FAMILY, deleteItemSupplier, fetchSupplierPriceList, formatMoney, linkPriceListLine } from "./api";
 import type {
   CatalogItem,
   PriceListDelivery,
@@ -67,6 +67,41 @@ function similarity(itemName: string, raw: string): number {
   return hit / a.length;
 }
 
+// A list line can describe its pack by weight ("case (6 x 2.5 kg)") while the
+// item is kept by volume (ml), or the other way round. 1 kg is not 1,000 ml
+// (it depends on the product), so SAWIS never converts across the two: it
+// asks for the number instead. This reads the unit text to spot that case.
+const PACK_RE = /(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(kg|g|l|ml)\b/i;
+const TO_SMALL: Record<string, number> = { kg: 1000, g: 1, l: 1000, ml: 1 };
+
+type ListPack = { family: "weight" | "volume"; label: string; naive: number };
+
+function listPackOf(unit: string): ListPack | null {
+  const m = unit.match(PACK_RE);
+  if (m) {
+    const count = Number(m[1].replace(",", "."));
+    const size = Number(m[2].replace(",", "."));
+    const u = m[3].toLowerCase();
+    const family = u === "kg" || u === "g" ? "weight" : "volume";
+    const shown = u === "l" ? "L" : u;
+    return {
+      family,
+      label: `${m[1]} x ${m[2]} ${shown} = ${Math.round(count * size * 1000) / 1000} ${shown}`,
+      naive: count * size * TO_SMALL[u],
+    };
+  }
+  const fam = UNIT_FAMILY[unit];
+  if (fam === "weight" || fam === "volume") {
+    const u = unit.toLowerCase();
+    return { family: fam, label: `1 ${unit}`, naive: TO_SMALL[u] ?? 1 };
+  }
+  return null;
+}
+
+function fmtCount(n: number): string {
+  return n.toLocaleString("en-GB", { maximumFractionDigits: 3 });
+}
+
 function LinkPicker({
   line,
   items,
@@ -104,14 +139,34 @@ function LinkPicker({
   const saved = chosen
     ? chosen.stock_units.find((u) => u.name.toLowerCase() === line.unit.toLowerCase())
     : undefined;
+  // The list gives this pack by weight but the item is kept by volume (or the
+  // reverse): no automatic conversion, and a clear warning instead.
+  const listPack = listPackOf(line.unit);
+  const itemFamily = chosen ? UNIT_FAMILY[chosen.base_unit] : undefined;
+  const crossFamily =
+    !!chosen && !!listPack && (itemFamily === "weight" || itemFamily === "volume") && itemFamily !== listPack.family;
+  // A figure we can offer as a one-click choice, never filled in on its own.
+  // Same family (12 x 1 kg on an item kept in g) is exact. Across families it is
+  // only a rough guess that counts 1 kg as 1 L, so it is labelled as such.
+  const sameFamily =
+    !!chosen && !!listPack && auto === null && itemFamily === listPack.family;
+  const suggestion =
+    chosen && listPack && (crossFamily || sameFamily)
+      ? chosen.base_unit === "L" || chosen.base_unit === "kg"
+        ? listPack.naive / 1000
+        : listPack.naive
+      : null;
 
-  // Pick an item, pre-filling the pack size from what is already known: the
-  // item's own saved pack of that name, else what this line last used.
+  function crossesFamilies(item: CatalogItem): boolean {
+    const f = UNIT_FAMILY[item.base_unit];
+    return !!listPack && (f === "weight" || f === "volume") && f !== listPack.family;
+  }
+
   function choose(item: CatalogItem) {
     setItemId(item.id);
     const pack = item.stock_units.find((u) => u.name.toLowerCase() === line.unit.toLowerCase());
     if (pack) setQty(String(Number(pack.qty)));
-    else if (Number(line.base_qty_per_unit) > 1) setQty(String(Number(line.base_qty_per_unit)));
+    else if (Number(line.base_qty_per_unit) > 1 && !crossesFamilies(item)) setQty(String(Number(line.base_qty_per_unit)));
     else setQty("");
   }
 
@@ -169,6 +224,32 @@ function LinkPicker({
               </>
             ) : (
               <>
+                {crossFamily && listPack && chosen && (
+                  <div className="spl-warn" role="alert">
+                    <b>Check the size.</b> This list gives the pack by weight ({listPack.label}), but{" "}
+                    <b>{chosen.name}</b> is kept in {chosen.base_unit}. 1 {listPack.family === "weight" ? "kg" : "L"} is
+                    not {listPack.family === "weight" ? "1 L" : "1 kg"} (it depends on the product), so SAWIS does not
+                    convert it. Enter how many {chosen.base_unit} one {line.unit.split(" (")[0]} holds, and nothing is
+                    priced until you do.
+                    {suggestion !== null && (
+                      <>
+                        {" "}
+                        <button type="button" className="spl-suggest" onClick={() => setQty(String(suggestion))}>
+                          Use {fmtCount(suggestion)} {chosen.base_unit} (counts 1 {listPack.family === "weight" ? "kg" : "L"} as{" "}
+                          {listPack.family === "weight" ? "1 L" : "1 kg"})
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+                {sameFamily && !crossFamily && listPack && chosen && suggestion !== null && (
+                  <div className="spl-hint">
+                    The list says {listPack.label}.{" "}
+                    <button type="button" className="spl-suggest" onClick={() => setQty(String(suggestion))}>
+                      Use {fmtCount(suggestion)} {chosen.base_unit}
+                    </button>
+                  </div>
+                )}
                 <label className="spl-qty">
                   1 {line.unit} holds
                   <input

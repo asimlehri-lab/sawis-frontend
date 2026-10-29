@@ -3639,6 +3639,10 @@ button.rp-gcard:hover { border-color: var(--muted); }
 .spl-opt small { display: block; color: var(--muted); font-size: 11.5px; }
 .spl-best { font-size: 11px; font-weight: 700; color: var(--good); background: var(--good-soft); border-radius: 20px; padding: 2px 9px; white-space: nowrap; }
 .spl-calc { background: var(--bg); border-radius: 10px; padding: 10px 12px; font-size: 13px; margin: 12px 0; }
+.spl-warn { background: #FFF4E0; border: 1px solid #E8C37A; color: #6B4A00; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; line-height: 1.45; }
+.spl-suggest { margin-top: 6px; border: 1px solid #C99A3E; background: transparent; color: inherit; border-radius: 100px; padding: 3px 10px; font: inherit; cursor: pointer; }
+.spl-hint { margin-bottom: 8px; }
+.spl-suggest:hover { background: rgba(201,154,62,.18); }
 .spl-qty { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .spl-qty input { width: 90px; border: 1px solid var(--border); border-radius: 7px; padding: 5px 7px; font: inherit; background: var(--surface); color: var(--ink); }
 .po-list-strip { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px 14px; margin: 0 0 14px; font-size: 13px; }
