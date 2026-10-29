@@ -2004,10 +2004,35 @@ export default function ItemDetail({
               </div>
             )}
 
-            <div className="uinfo" style={{ marginTop: 12 }}>
-              Historical stock counts stay recorded in {item.base_unit} for audit — only new activity
-              uses the new unit.
-            </div>
+            {unitNew !== item.base_unit &&
+              (() => {
+                const auto = autoFactor(item.base_unit, unitNew);
+                const factor = auto !== null ? auto : unitMode === "convert" ? Number(unitFactor) || 1 : 1;
+                // Only the unit label, par levels and saved packs are restated. Counts, deliveries,
+                // sales and recipe amounts already saved keep their numbers, which are then read in
+                // the new unit. So a change that is not a 1:1 relabel makes them wrong by the factor.
+                const off =
+                  factor > 1
+                    ? `${parseFloat(factor.toFixed(4))} times too small`
+                    : factor < 1 && factor > 0
+                    ? `${parseFloat((1 / factor).toFixed(4))} times too big`
+                    : null;
+                return (
+                  <div className="uinfo warn" role="alert" style={{ marginTop: 12 }}>
+                    <b>Past records are not restated.</b> Counts, deliveries, sales and recipe amounts already
+                    saved for {item.name} keep their numbers, and from now on those numbers are read in{" "}
+                    {unitNew}. For example, a recipe that uses 30 {item.base_unit} will read as 30 {unitNew}.
+                    {off && (
+                      <>
+                        {" "}
+                        Anything saved in {item.base_unit} will be <b>{off}</b>.
+                      </>
+                    )}{" "}
+                    Only change the unit to correct a mistake made when the item was set up, and if this item is
+                    already in recipes or has counts or sales, check them afterwards.
+                  </div>
+                );
+              })()}
 
             {unitError && <p className="error">{unitError}</p>}
             <div className="modal-actions">
