@@ -660,7 +660,7 @@ export default function App() {
   const [importSaving, setImportSaving] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importDone, setImportDone] = useState<
-    { created: number; updated: number; linkedSynced: string[] } | null
+    { created: number; updated: number; linkedSynced: string[]; linkedSkipped: string[] } | null
   >(null);
 
 
@@ -1441,6 +1441,7 @@ export default function App() {
         created: result.created.length,
         updated: result.updated.length,
         linkedSynced: result.linked_prices_synced,
+        linkedSkipped: result.linked_prices_skipped ?? [],
       });
       fetchSupplierItems(accessToken).then(setSupplierItems).catch(() => {});
       // A refreshed price may have just changed what an already-linked
@@ -3447,6 +3448,13 @@ export default function App() {
                     Also refreshed the live price on {importDone.linkedSynced.length} already-linked{" "}
                     item{importDone.linkedSynced.length > 1 ? "s" : ""}:{" "}
                     {importDone.linkedSynced.join(", ")}.
+                  </div>
+                )}
+                {importDone.linkedSkipped.length > 0 && (
+                  <div style={{ marginTop: 6 }}>
+                    <b>Check these:</b> the unit changed on {importDone.linkedSkipped.length} already-linked item
+                    {importDone.linkedSkipped.length > 1 ? "s" : ""}, so their price was left as it was and needs
+                    linking again on the Price list tab: {importDone.linkedSkipped.join(", ")}.
                   </div>
                 )}
               </div>

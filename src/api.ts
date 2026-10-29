@@ -1820,6 +1820,9 @@ export interface BulkImportSupplierItemsResult {
   // a re-import only ever touched the background catalogue table, never
   // the price an already-linked item actually costs against.
   linked_prices_synced: string[];
+  // Names of linked Items whose price was NOT refreshed because the line's unit
+  // changed and the file gave no pack size: they need re-linking by a person.
+  linked_prices_skipped?: string[];
 }
 
 // Upserts by (supplier, raw_name) on the backend instead of one create-only
