@@ -1170,9 +1170,8 @@ export default function ProcurementDetail({
             </tbody>
           </table>
         </div>
-        <p>
+        <p className="po-totals">
           <b>Total (ex VAT): {formatMoney(Number(po.total), currency)}</b>
-          <br />
           <b>Total (incl. VAT): {formatMoney(Number(po.total_with_vat), currency)}</b>
         </p>
       </div>
@@ -1288,7 +1287,7 @@ export default function ProcurementDetail({
           </p>
         )}
         <fieldset className="ro-fieldset" disabled={readOnly}>
-        <div className="fgrid" style={{ marginTop: 16 }}>
+        <div className="fgrid fgrid-4" style={{ marginTop: 16 }}>
           <div className="field">
             <label>PO number</label>
             {editable ? (

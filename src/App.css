@@ -1703,6 +1703,11 @@ select:focus {
 .fgrid-2 { grid-template-columns: repeat(2, 1fr); }
 @media (max-width: 480px) { .fgrid-2 { grid-template-columns: 1fr; } }
 
+.fgrid-4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 620px) { .fgrid-4 { grid-template-columns: 1fr 1fr; } }
+
+.po-totals { display: flex; flex-wrap: wrap; gap: 4px 28px; }
+
 .field label {
   display: block;
   font-size: 10.5px;
