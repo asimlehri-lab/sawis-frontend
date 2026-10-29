@@ -3196,7 +3196,7 @@ export default function App() {
               </button>
               <button
                 type="button"
-                className={`seg-btn ${newRecipeSell ? "on" : ""}`}
+                className={`seg-btn sad-seg ${newRecipeSell ? "on" : ""}`}
                 onClick={() => setNewRecipeSell(true)}
               >
                 <b>A bought-in item</b>
@@ -3214,7 +3214,7 @@ export default function App() {
                     placeholder="Search items…"
                   />
                 </label>
-                <p className="hint" style={{ margin: "-4px 0 8px" }}>
+                <p className="hint" style={{ margin: "8px 0 10px" }}>
                   Opens the same pop-up as the Sell as a dish button on an item.
                 </p>
                 <div className="sad-picklist">

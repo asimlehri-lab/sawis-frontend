@@ -3803,3 +3803,5 @@ button.rp-gcard:hover { border-color: var(--muted); }
 .modal .sad-pickrow { font-size: 14px; }
 .modal .sad-pickrow .muted { font-size: 12px; }
 .modal .sad-picklist { margin-bottom: 4px; }
+.sad-seg b { display: block; padding-right: 22px; }
+.sad-new label input { margin-bottom: 0; }
