@@ -87,6 +87,8 @@ import SupplierList from "./SupplierList";
 import { downloadSupplierListTemplate } from "./supplierListTemplate";
 import { readSupplierListFile } from "./supplierListFile";
 import PdfPriceListReview from "./PdfPriceListReview";
+import { indexExisting, summarise } from "./priceListChanges";
+import type { ExistingLine } from "./priceListChanges";
 import type { PdfPriceList } from "./api";
 import WasteLog from "./WasteLog";
 import Inventory from "./Inventory";
@@ -662,6 +664,21 @@ export default function App() {
   const [importDone, setImportDone] = useState<
     { created: number; updated: number; linkedSynced: string[]; linkedSkipped: string[] } | null
   >(null);
+  // What the chosen supplier's Price list already holds (with the item each line is
+  // linked to), used to flag unit and price changes before importing.
+  const existingForImport: ExistingLine[] = importSupplier
+    ? supplierItems
+        .filter((si) => si.supplier === importSupplier)
+        .map((si) => {
+          const link = itemSupplierLinks.find((l) => l.matched_from === si.id);
+          return {
+            name: si.raw_name,
+            unit: si.unit,
+            price: Number(si.price),
+            linkedItem: link ? (items ?? []).find((i) => i.id === link.item)?.name ?? "an item" : null,
+          };
+        })
+    : [];
 
 
   const [recipeFilter, setRecipeFilter] = useState<"all" | "dish" | "sub">("all");
@@ -3384,6 +3401,7 @@ export default function App() {
                 fileName={pdfReview.fileName}
                 data={pdfReview.data}
                 currency={orgCurrency}
+                existing={existingForImport}
                 onUse={(rows) => {
                   setImportRows(rows);
                   setPdfReview(null);
@@ -3400,6 +3418,26 @@ export default function App() {
                 ✓ <b>{importRows.length} products</b> read from {importFileName}.
               </div>
             )}
+
+            {importRows.length > 0 && importDone === null && (() => {
+              const sm = summarise(importRows, indexExisting(existingForImport));
+              if (sm.unitLinked === 0 && sm.bigMoves === 0) return null;
+              return (
+                <div className="im-changes" role="status">
+                  {sm.unitLinked > 0 && (
+                    <div className="warn">
+                      <b>{sm.unitLinked}</b> line{sm.unitLinked > 1 ? "s" : ""} with a different unit on an item you have
+                      already linked. Importing leaves that item&rsquo;s price as it is; link the line again afterwards.
+                    </div>
+                  )}
+                  {sm.bigMoves > 0 && (
+                    <div className="warn">
+                      <b>{sm.bigMoves}</b> price{sm.bigMoves > 1 ? "s" : ""} moved by half or more. Check them in the file.
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {importRows.length > 0 && importDone === null && (
               <div className="table-scroll">
