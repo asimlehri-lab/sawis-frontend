@@ -71,6 +71,7 @@ import type {
 import RecipeDetail from "./RecipeDetail";
 import ItemDetail from "./ItemDetail";
 import SellAsDishModal from "./SellAsDishModal";
+import PurchasesReport from "./PurchasesReport";
 import type { ItemTab, RecipeTab } from "./itemTabs";
 import AllergenIcon from "./AllergenIcon";
 import AllergenPrintSheet from "./AllergenPrintSheet";
@@ -910,6 +911,8 @@ export default function App() {
   const [supplierNotice, setSupplierNotice] = useState<string | null>(null);
   // Procurement's two tabs, and the "+ New supplier" form the Suppliers tab opens.
   const [procTab, setProcTab] = useState<"orders" | "suppliers">("orders");
+  // Purchases report (received orders by period, for the accountant) is open.
+  const [showPurchases, setShowPurchases] = useState(false);
   const [showNewSupplierForm, setShowNewSupplierForm] = useState(false);
   // How much of each supplier's uploaded price list is linked (Suppliers tab).
   const [priceListInfo, setPriceListInfo] = useState<Record<string, PriceListInfo>>({});
@@ -1306,6 +1309,7 @@ export default function App() {
     setShowImport(false);
     setShowAllergenReview(false);
     setSelectedPOId(null);
+    setShowPurchases(false);
     setSelectedSupplierId(null);
     setSupplierTab(undefined);
     setSupplierNotice(null);
@@ -2403,6 +2407,16 @@ export default function App() {
             }}
             onRecipesChanged={() => loadRecipes(accessToken)}
           />
+        ) : activePage === "Procurement" && showPurchases && !selectedPOId && accessToken && canManage(me) ? (
+          <PurchasesReport
+            accessToken={accessToken}
+            businessName={me.org.name}
+            userName={me.name || me.email}
+            locations={locations}
+            suppliers={suppliers}
+            onBack={() => setShowPurchases(false)}
+            onOpenPO={(id) => setSelectedPOId(id)}
+          />
         ) : activePage === "Procurement" && selectedPOId && accessToken ? (
           <ProcurementDetail
             poId={selectedPOId}
@@ -2469,7 +2483,7 @@ export default function App() {
               setSupplierNotice(null);
             }}
             notice={supplierNotice}
-            backLabel={procTab === "suppliers" && canManage(me) ? "← All suppliers" : "← Procurement"}
+            backLabel={showPurchases ? "← Purchases report" : procTab === "suppliers" && canManage(me) ? "← All suppliers" : "← Procurement"}
             onOpenPO={(id) => setSelectedPOId(id)}
             onNewPO={openNewPOForSupplier}
             onSupplierUpdated={(updated) =>
@@ -2543,6 +2557,9 @@ export default function App() {
                   )}
                   {canManage(me) && procTab === "orders" && (
                     <>
+                      <button className="btn-ghost small" onClick={() => setShowPurchases(true)}>
+                        Purchases report
+                      </button>
                       <button className="btn-ghost small" onClick={() => setShowScanReceipt(true)}>
                         📷 Scan receipt
                       </button>

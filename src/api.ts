@@ -1222,6 +1222,108 @@ export async function changePassword(
   }
 }
 
+// --- Purchases report (for the accountant) ----------------------------------
+// Orders marked Received in a period, by received date, with totals ex VAT, VAT
+// and incl. VAT. One block per currency. See apps/procurement/purchases.py.
+
+export interface PurchasesOrder {
+  id: string;
+  po_number: string;
+  received_date: string;
+  invoice_number: string;
+  supplier: string;
+  supplier_id: string;
+  location: string;
+  location_id: string;
+  lines: number;
+  attachments: number;
+  net: string;
+  vat: string;
+  gross: string;
+  missing_vat_lines: number;
+}
+
+export interface PurchasesGroup {
+  currency: string;
+  locations: string[];
+  orders_count: number;
+  net: string;
+  vat: string;
+  gross: string;
+  by_rate: { rate: string; net: string; vat: string; gross: string }[];
+  by_supplier: { supplier: string; orders: number; net: string; vat: string; gross: string }[];
+  orders: PurchasesOrder[];
+}
+
+export interface PurchasesReportData {
+  date_from: string;
+  date_to: string;
+  orders_count: number;
+  groups: PurchasesGroup[];
+  checks: {
+    orders_without_invoice: number;
+    orders_without_invoice_ids: string[];
+    lines_without_vat: number;
+    orders_with_missing_vat: number;
+    orders_with_missing_vat_ids: string[];
+    orders_without_photo: number;
+  };
+  invoice_files: { count: number; bytes: number; parts: number };
+}
+
+export interface PurchasesQuery {
+  date_from: string;
+  date_to: string;
+  location: string; // "all" or a location id
+  supplier: string; // "all" or a supplier id
+}
+
+function purchasesParams(q: PurchasesQuery, extra: Record<string, string> = {}): string {
+  const p = new URLSearchParams({ date_from: q.date_from, date_to: q.date_to, ...extra });
+  if (q.location && q.location !== "all") p.set("location", q.location);
+  if (q.supplier && q.supplier !== "all") p.set("supplier", q.supplier);
+  return p.toString();
+}
+
+async function purchasesError(res: Response, fallback: string): Promise<Error> {
+  if (res.status === 403) return new Error("Only an admin, manager or finance user can open the purchases report.");
+  const body = await res.json().catch(() => null);
+  const detail = body && typeof body === "object" ? body.detail ?? Object.values(body)[0] : null;
+  return new Error((Array.isArray(detail) ? detail.join(" ") : detail) || fallback);
+}
+
+export async function fetchPurchasesReport(accessToken: string, q: PurchasesQuery): Promise<PurchasesReportData> {
+  const res = await fetch(`${API_URL}/api/procurement/purchase-orders/purchases_report/?${purchasesParams(q)}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw await purchasesError(res, "Could not load the purchases report.");
+  return res.json();
+}
+
+// Downloads a file the server builds (CSV, or a ZIP of invoice photos) and hands
+// it to the browser. The token goes in the header, so a plain link would not work.
+export async function downloadPurchasesFile(
+  accessToken: string,
+  kind: "csv" | "invoices",
+  q: PurchasesQuery,
+  extra: Record<string, string> = {}
+): Promise<void> {
+  const endpoint = kind === "csv" ? "purchases_csv" : "purchases_invoices";
+  const res = await fetch(`${API_URL}/api/procurement/purchase-orders/${endpoint}/?${purchasesParams(q, extra)}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw await purchasesError(res, "Could not download that file.");
+  const name = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") ?? "")?.[1] ?? (kind === "csv" ? "purchases.csv" : "invoices.zip");
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 10000);
+}
+
 export async function verifyPassword(accessToken: string, password: string): Promise<void> {
   const res = await fetch(`${API_URL}/api/tenancy/me/verify-password/`, {
     method: "POST",

@@ -3805,3 +3805,50 @@ button.rp-gcard:hover { border-color: var(--muted); }
 .modal .sad-picklist { margin-bottom: 4px; }
 .sad-seg b { display: block; padding-right: 22px; }
 .sad-new label input { margin-bottom: 0; }
+
+/* ---- Purchases report ---- */
+.pur { text-align: left; }
+.pur-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 6px 0 14px; }
+.pur-tools { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
+.pur-tools .btn-primary, .pur-tools .btn-ghost { width: auto; margin: 0; }
+.pur-ctl { margin-bottom: 14px; }
+.pur-ctl .rtabs { margin: 0 0 14px; max-width: 100%; overflow-x: auto; }
+.pur-ctl select { margin: 0; }
+.pur-warn { display: flex; gap: 10px; align-items: flex-start; background: var(--caution-soft); border-radius: 10px; padding: 10px 14px; font-size: 13px; margin-bottom: 14px; }
+.pur-warn b { color: var(--caution); }
+.pur-cur { margin: 18px 0 10px; font-size: 16px; }
+.pur-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
+@media (max-width: 760px) { .pur-kpis { grid-template-columns: 1fr 1fr; } }
+.pur-sum .kpi-value { font-family: monospace; font-size: 22px; }
+.pur-sum.hl { border-color: var(--brand); background: var(--brand-soft); }
+.pur-two { display: grid; grid-template-columns: 5fr 7fr; gap: 16px; align-items: start; }
+.pur-two > * { min-width: 0; }
+@media (max-width: 860px) { .pur-two { grid-template-columns: 1fr; } }
+.pur-tbl th.num, .pur-tbl td.num { text-align: right; white-space: nowrap; }
+.pur-tbl td.dish { white-space: nowrap; }
+.pur-tbl th, .pur-tbl td { padding: 10px 12px; }
+.pur-tbl tr.tot td { font-weight: 700; border-top: 2px solid var(--border); background: var(--bg); }
+.pur-radios { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 12px; }
+.modal .pur-radios label { display: block; flex-direction: row; font-size: 14px; font-weight: 600; text-transform: none; letter-spacing: 0; color: var(--ink); margin: 0; }
+.pur-radios small { display: block; margin: 2px 0 0 24px; font-weight: 400; color: var(--muted); font-size: 12px; }
+.pur-parts { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.pur-parts .btn-ghost { width: auto; margin: 0; }
+
+/* printed purchases report */
+.pp { font-family: Arial, Helvetica, sans-serif; }
+.pp-top { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 10px; }
+.pp-top h1 { margin: 0; font-size: 22px; }
+.pp-title { text-align: right; font-weight: 700; font-size: 16px; }
+.pp-title small { display: block; font-weight: 400; font-size: 11px; color: #444; }
+.pp-meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px 18px; margin: 0 0 12px; font-size: 11.5px; }
+.pp-meta b { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #444; }
+.pp-sum { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 8px 0 12px; }
+.pp-sum div { border: 1px solid #000; padding: 7px 10px; }
+.pp-sum b { display: block; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #444; }
+.pp-sum span { font-size: 17px; font-weight: 700; }
+.pp table .r, .pp table th.r { text-align: right; }
+.pp thead { display: table-header-group; }
+.pp tr { break-inside: avoid; }
+.pp .pp-total td { font-weight: 700; border-top: 2px solid #000; }
+.pp-group { margin-bottom: 18px; }
+.pp-foot { margin-top: 14px; font-size: 10px; color: #555; }
