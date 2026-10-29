@@ -517,6 +517,7 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
   const [currencyValues, setCurrencyValues] = useState<Record<string, CurrencyCode>>({});
   const [foodTargetValues, setFoodTargetValues] = useState<Record<string, string>>({});
   const [drinkTargetValues, setDrinkTargetValues] = useState<Record<string, string>>({});
+  const [vatValues, setVatValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -545,6 +546,9 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
   function drinkTargetFor(loc: Location) {
     return drinkTargetValues[loc.id] ?? loc.target_drink_cost_pct ?? "30";
   }
+  function vatFor(loc: Location) {
+    return vatValues[loc.id] ?? loc.vat_number ?? "";
+  }
 
   async function handleSave(loc: Location) {
     const foodRaw = foodTargetFor(loc).trim();
@@ -561,6 +565,7 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
         overhead_other: partFor(loc, "overhead_other").trim() || null,
         target_food_cost_pct: foodRaw === "" ? "30" : foodRaw,
         target_drink_cost_pct: drinkRaw === "" ? "30" : drinkRaw,
+        vat_number: vatFor(loc).trim(),
       });
       setSaved((s) => ({ ...s, [loc.id]: true }));
     } catch (e) {
@@ -578,7 +583,8 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
         conversion. Monthly overhead (rent, labour, utilities and other fixed costs, entered per month) feeds End of
         day's net margin estimate and the break-even on Reports; leave it blank to skip those. Recipe costs are
         ingredient costs only and never include overhead. Food/drink target % is what Reports and each recipe's own
-        page flag "over"/"under" against.
+        page flag "over"/"under" against. The VAT registration number is optional and only appears on the
+        Purchases report.
       </p>
       {!locations.length && <p className="muted">No locations yet.</p>}
       {locations.map((loc) => {
@@ -654,6 +660,21 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
                   {saving[loc.id] ? "Saving…" : "Save"}
                 </button>
               </div>
+            </div>
+            <div className="loc-vat">
+              <label htmlFor={`vat-${loc.id}`}>VAT registration number</label>
+              <input
+                id={`vat-${loc.id}`}
+                type="text"
+                maxLength={40}
+                placeholder="Optional, for example GB 123 4567 89"
+                value={vatFor(loc)}
+                onChange={(e) => {
+                  setVatValues((v) => ({ ...v, [loc.id]: e.target.value }));
+                  setSaved((s) => ({ ...s, [loc.id]: false }));
+                }}
+              />
+              <span className="muted">Printed on the Purchases report for the accountant. Not checked or used in any calculation.</span>
             </div>
             <div className="oh-box">
               <p className="oh-title">Monthly overhead (per month)</p>

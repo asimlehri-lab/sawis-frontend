@@ -325,7 +325,7 @@ function GroupBlock({
     <section className="pur-group">
       {showCurrency && (
         <h2 className="pur-cur">
-          {cur} <span className="muted">· {group.locations.join(", ")}</span>
+          {cur} <span className="muted">· {group.locations.join(", ")}{group.vat_numbers.length > 0 && ` · VAT no. ${group.vat_numbers.join(", ")}`}</span>
         </h2>
       )}
       <div className="pur-kpis">
@@ -649,12 +649,17 @@ function PrintSheet({
         <div><b>Orders</b>{data.orders_count}</div>
         <div><b>Prepared</b>{printed}</div>
         <div><b>Prepared by</b>{by}</div>
+        {data.groups.length === 1 && data.groups[0].vat_numbers.length > 0 && (
+          <div><b>VAT registration number</b>{data.groups[0].vat_numbers.join(", ")}</div>
+        )}
       </div>
       {data.groups.map((g) => {
         const cur = g.currency;
         return (
           <section key={cur} className="pp-group">
-            {data.groups.length > 1 && <h2>{cur} · {g.locations.join(", ")}</h2>}
+            {data.groups.length > 1 && (
+              <h2>{cur} · {g.locations.join(", ")}{g.vat_numbers.length > 0 && ` · VAT registration number ${g.vat_numbers.join(", ")}`}</h2>
+            )}
             <div className="pp-sum">
               <div><b>Total ex VAT</b><span>{formatMoney(num(g.net), cur)}</span></div>
               <div><b>VAT</b><span>{formatMoney(num(g.vat), cur)}</span></div>

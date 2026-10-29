@@ -978,6 +978,9 @@ export interface Location {
   // that was hardcoded everywhere before these fields existed.
   target_food_cost_pct: string;
   target_drink_cost_pct: string;
+  // The VAT registration number typed in Settings > Locations (free text,
+  // may be empty). Printed on the Purchases report; never used in a sum.
+  vat_number?: string;
 }
 
 export async function fetchLocations(accessToken: string): Promise<Location[]> {
@@ -997,6 +1000,7 @@ export async function updateLocation(
     delivery_reminder_lead_days?: number;
     target_food_cost_pct?: string;
     target_drink_cost_pct?: string;
+    vat_number?: string;
   }
 ): Promise<Location> {
   const res = await fetch(`${API_URL}/api/tenancy/locations/${id}/`, {
@@ -1246,6 +1250,7 @@ export interface PurchasesOrder {
 export interface PurchasesGroup {
   currency: string;
   locations: string[];
+  vat_numbers: string[];
   orders_count: number;
   net: string;
   vat: string;
