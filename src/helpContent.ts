@@ -485,7 +485,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How is a waste event's value worked out?",
-        a: "From the item's cheapest linked supplier price at the moment you log it — shown next to the item picker as soon as you choose one. If the item has no supplier price on file yet, it logs at £0 until one is linked; a price you link afterward doesn't retroactively update entries already logged.",
+        a: "From the item's cost at the moment you log it (its default supplier's price, or the cheapest linked price when there is no default) — shown next to the item picker as soon as you choose one. If the item has no supplier price on file yet, it logs at £0 until one is linked; a price you link afterward doesn't retroactively update entries already logged.",
       },
       {
         q: "What reasons can I pick when logging waste?",
@@ -500,8 +500,8 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "Three cards: total waste value and number of events logged over the last 7 days, and the costliest reason over that same period. Waste as a percentage of sales isn't tracked on this page — for an item's waste against a target, open the item and look at its Waste card.",
       },
       {
-        q: "How do I set a waste target for an item?",
-        a: "Go to Items, open the item and find the Waste card. Type your predicted spoilage in Target waste (%) and press Save. SAWIS then compares it with the item's actual waste — logged waste against sales usage over the last 90 days — and shows a gauge, a six-month trend and a tag: On track, Investigate (actual is at least two points over target), No target set or No data yet.",
+        q: "How do I enter a waste % (waste target) for an item?",
+        a: "Go to Items, open the item, open its Stock tab and find the Waste card. Type your predicted spoilage in Target waste (%) and press Save. SAWIS then compares it with the item's actual waste — logged waste against sales usage over the last 90 days — and shows a gauge, a six-month trend and a tag: On track, Investigate (actual is at least two points over target), No target set or No data yet.",
         fact: "💡 You can set targets in bulk with the waste_pct column on the Items tab of the Excel import template; change it on an existing row and re-upload to update that item. Actual waste needs some sales or waste logged before it shows a number.",
       },
       {

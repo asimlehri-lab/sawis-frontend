@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createStockMovement, createWasteEvent, formatMoney } from "./api";
 import type { CatalogItem, ItemSupplierRow, Location, StockMovementRow, WasteEventRow } from "./api";
 import SearchSelect from "./SearchSelect";
+import { effectiveCost } from "./costing";
 
 interface Props {
   accessToken: string;
@@ -93,9 +94,9 @@ export default function WasteLog({
   const selectedItemObj = activeItems.find((i) => i.id === selectedItem) ?? null;
 
   function cheapestPrice(itemId: string): number | null {
-    const prices = itemSupplierLinks.filter((l) => l.item === itemId).map((l) => Number(l.unit_price));
-    if (!prices.length) return null;
-    return Math.min(...prices);
+    // Same rule as costing everywhere else: the default supplier's price, else the cheapest.
+    const links = itemSupplierLinks.filter((l) => l.item === itemId);
+    return effectiveCost(links, items.find((i) => i.id === itemId)?.default_supplier)?.price ?? null;
   }
 
   const unitCost = selectedItem ? cheapestPrice(selectedItem) : null;

@@ -648,6 +648,21 @@ h1 {
 }
 .help-question-chip:hover { border-color: var(--brand); background: var(--bg); }
 
+.help-results { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.help-result { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.help-result.open { border-color: var(--brand); }
+.help-result-q {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px; width: 100%;
+  border: 0; background: none; padding: 10px 14px; font: inherit; font-size: 13.5px; font-weight: 600;
+  color: var(--ink); text-align: left; cursor: pointer;
+}
+.help-result-topic { font-size: 11px; font-weight: 500; color: var(--muted); white-space: nowrap; }
+.help-result-body { padding: 0 14px 12px; font-size: 13.5px; line-height: 1.55; color: var(--ink); }
+.help-result-body p { margin: 0 0 8px; }
+.help-result-fact { background: var(--bg); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; }
+.help-result-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.help-readall { margin: 4px 0 8px; }
+
 .help-transcript {
   display: flex;
   flex-direction: column;
@@ -1497,7 +1512,7 @@ nav {
   font-weight: 700;
 }
 .card .hint { font-size: 11.5px; color: var(--muted); margin: 0 0 14px; }
-.help-link { background: none; border: 0; padding: 0 0 0 4px; font: inherit; font-size: inherit; color: var(--accent, #2E54E8); text-decoration: underline; cursor: pointer; }
+.help-link { background: none; border: 0; padding: 0 0 0 4px; font: inherit; font-size: inherit; color: var(--brand, #2E54E8); text-decoration: underline; cursor: pointer; }
 .help-link:hover { text-decoration: none; }
 
 .ing-tbl { width: 100%; border-collapse: collapse; }
