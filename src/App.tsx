@@ -938,9 +938,12 @@ export default function App() {
   const [showHelp, setShowHelp] = useState(false);
   // Topic the Help window opens on when launched from a "More in Help" link.
   const [helpTopic, setHelpTopic] = useState<string | undefined>(undefined);
+  const [helpQuestion, setHelpQuestion] = useState<string | undefined>(undefined);
   useEffect(() => {
     const onOpen = (e: Event) => {
-      setHelpTopic((e as CustomEvent<{ topicId?: string }>).detail?.topicId);
+      const d = (e as CustomEvent<{ topicId?: string; questionId?: string }>).detail;
+      setHelpTopic(d?.topicId);
+      setHelpQuestion(d?.questionId);
       setShowHelp(true);
     };
     window.addEventListener(OPEN_HELP_EVENT, onOpen);
@@ -2327,11 +2330,13 @@ export default function App() {
         </div>
         {showHelp && (
           <HelpChat
-            key={helpTopic ?? "none"}
+            key={(helpTopic ?? "none") + (helpQuestion ?? "")}
             initialTopicId={helpTopic}
+            initialQuestionId={helpQuestion}
             onClose={() => {
               setShowHelp(false);
               setHelpTopic(undefined);
+              setHelpQuestion(undefined);
             }}
           />
         )}
@@ -3408,7 +3413,7 @@ export default function App() {
               {pdfReading && <p className="hint">Reading the PDF with AI. This can take up to a minute.</p>}
               <div className="vhint">
                 CSV, Excel or PDF. One product per row: name, unit, price, e.g. "Beef mince 5%, kg, 7.40".
-                <HelpLink topic="suppliers" />
+                <HelpLink topic="suppliers" ask="price-list-format" />
                 <br />
                 <button type="button" className="mini" style={{ marginTop: 6 }} onClick={() => downloadSupplierListTemplate()}>
                   ⇩ Download the template

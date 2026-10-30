@@ -1038,7 +1038,7 @@ export default function ItemDetail({
         <p className="hint">
           Tag what this item contains once; recipes using it pick it up. Press Confirm to save.
           {item.allergen_review_status !== "confirmed" && " Not confirmed yet, so no tags does not mean allergen-free."}
-          <HelpLink topic="allergens" />
+          <HelpLink topic="allergens" ask="item-allergens" />
         </p>
 
         {item.allergen_suggestions.length > 0 && (
@@ -1565,7 +1565,7 @@ export default function ItemDetail({
         <p className="hint">
           From your recorded purchase links — shared across all departments.
           {itemSuppliers.length > 1 && " Costs follow the default supplier, else the cheapest."}
-          {itemSuppliers.length > 1 && <HelpLink topic="items-recipes" />}
+          {itemSuppliers.length > 1 && <HelpLink topic="items-recipes" ask="default-supplier" />}
         </p>
         {(() => {
           const priced = itemSuppliers.filter((r) => Number(r.unit_price) > 0);

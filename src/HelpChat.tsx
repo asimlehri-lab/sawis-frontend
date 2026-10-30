@@ -2,11 +2,14 @@ import { useMemo, useState } from "react";
 import { HELP_TOPICS } from "./helpContent";
 import type { HelpTopic } from "./helpContent";
 import { searchHelp } from "./helpSearch";
+import type { HelpHit } from "./helpSearch";
 
 interface Props {
   onClose: () => void;
   // Open straight on this topic (used by the "More in Help" links).
   initialTopicId?: string;
+  // Open with this one answer already showing in full (a "More in Help" link).
+  initialQuestionId?: string;
 }
 
 interface TranscriptEntry {
@@ -34,9 +37,18 @@ interface TranscriptEntry {
 // the one concrete thing Phase A does specifically so Phase B (a real,
 // next-year AI-agent backend) can later swap what happens on a tap without
 // rewriting this component.
-export default function HelpChat({ onClose, initialTopicId }: Props) {
+export default function HelpChat({ onClose, initialTopicId, initialQuestionId }: Props) {
   const [query, setQuery] = useState("");
-  const [activeTopicId, setActiveTopicId] = useState<string | null>(initialTopicId ?? null);
+  // The answer a link pointed at; shown open above everything else.
+  const [focus, setFocus] = useState<HelpHit | null>(() => {
+    if (!initialQuestionId) return null;
+    for (const topic of HELP_TOPICS) {
+      const item = topic.questions.find((qa) => qa.id === initialQuestionId);
+      if (item) return { key: topic.id + "::" + item.q, topic, item, score: 0 };
+    }
+    return null;
+  });
+  const [activeTopicId, setActiveTopicId] = useState<string | null>(focus ? null : initialTopicId ?? null);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
 
   // Best answers for a typed sentence, across every topic.
@@ -51,19 +63,38 @@ export default function HelpChat({ onClose, initialTopicId }: Props) {
   }
 
   function openTopic(topic: HelpTopic) {
+    setFocus(null);
     setQuery("");
     setActiveTopicId(topic.id);
   }
 
   // Everything in a topic as one read, in order.
   function readAll(topic: HelpTopic) {
+    setFocus(null);
     setTranscript(topic.questions.map((qa) => ({ topicTitle: topic.title, q: qa.q, a: qa.a, fact: qa.fact })));
     setQuery("");
     setActiveTopicId(topic.id);
   }
 
+  function answerBody(h: HelpHit) {
+    return (
+      <div className="help-result-body">
+        <p>{h.item.a}</p>
+        {h.item.fact && <p className="help-result-fact">{h.item.fact}</p>}
+        <div className="help-result-actions">
+          <button type="button" className="btn-ghost small" onClick={() => openTopic(h.topic)}>
+            All {h.topic.title} questions
+          </button>
+          <button type="button" className="btn-ghost small" onClick={() => readAll(h.topic)}>
+            Read everything about {h.topic.title}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="modal-backdrop" onClick={onClose}>
+    <div className="modal-backdrop help-backdrop" onClick={onClose}>
       <div className="modal wide help-modal" onClick={(e) => e.stopPropagation()}>
         <div className="cal-head">
           <h2>Help</h2>
@@ -81,9 +112,22 @@ export default function HelpChat({ onClose, initialTopicId }: Props) {
             setQuery(e.target.value);
             setActiveTopicId(null);
             setOpenKey(null);
+            setFocus(null);
           }}
           autoFocus
         />
+
+        {!query.trim() && focus && (
+          <div className="help-results">
+            <div className="help-result open">
+              <div className="help-result-q">
+                <span>{focus.item.q}</span>
+                <span className="help-result-topic">{focus.topic.title}</span>
+              </div>
+              {answerBody(focus)}
+            </div>
+          </div>
+        )}
 
         {query.trim() ? (
           hits.length > 0 ? (
@@ -94,20 +138,7 @@ export default function HelpChat({ onClose, initialTopicId }: Props) {
                     <span>{h.item.q}</span>
                     <span className="help-result-topic">{h.topic.title}</span>
                   </button>
-                  {h.key === shownKey && (
-                    <div className="help-result-body">
-                      <p>{h.item.a}</p>
-                      {h.item.fact && <p className="help-result-fact">{h.item.fact}</p>}
-                      <div className="help-result-actions">
-                        <button type="button" className="btn-ghost small" onClick={() => openTopic(h.topic)}>
-                          All {h.topic.title} questions
-                        </button>
-                        <button type="button" className="btn-ghost small" onClick={() => readAll(h.topic)}>
-                          Read everything about {h.topic.title}
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  {h.key === shownKey && answerBody(h)}
                 </div>
               ))}
             </div>
@@ -163,7 +194,7 @@ export default function HelpChat({ onClose, initialTopicId }: Props) {
 
         <div className="help-transcript">
           {transcript.length === 0 ? (
-            !query.trim() && <p className="muted help-empty">Pick a topic above, then tap a question to see the answer here.</p>
+            !query.trim() && !focus && <p className="muted help-empty">Pick a topic above, then tap a question to see the answer here.</p>
           ) : (
             transcript.map((entry, i) => (
               <div key={i} className="help-exchange">

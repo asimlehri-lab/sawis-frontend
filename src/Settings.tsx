@@ -225,7 +225,7 @@ export default function Settings({ accessToken, items, recipes, allergens, locat
           <h2 style={{ marginTop: 0 }}>Supplier price list template</h2>
           <p className="hint">
             A blank price list layout. To upload a list, open the supplier in Procurement.
-            <HelpLink topic="settings" />
+            <HelpLink topic="settings" ask="price-list-template" />
           </p>
           <button type="button" className="btn-ghost small" onClick={() => downloadSupplierListTemplate()}>
             ⇩ Download supplier list template
@@ -468,7 +468,7 @@ function SupplierPricesPanel({
       <h2 style={{ marginTop: 0 }}>Supplier prices</h2>
       <p className="hint">
         Days without a delivery or price update before a supplier is left out of costing.
-        <HelpLink topic="settings" />
+        <HelpLink topic="settings" ask="supplier-prices-setting" />
       </p>
       <div className="tc-row">
         <span className="muted">Leave a supplier out after</span>
@@ -665,7 +665,7 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
       <h2 style={{ marginTop: 0 }}>Locations</h2>
       <p className="hint">
         Currency, monthly overhead, food and drink targets and VAT number for each location.
-        <HelpLink topic="settings" />
+        <HelpLink topic="settings" ask="locations-settings" />
       </p>
       {!locations.length && <p className="muted">No locations yet.</p>}
       {locations.map((loc) => {
