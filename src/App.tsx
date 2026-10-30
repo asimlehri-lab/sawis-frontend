@@ -3029,6 +3029,13 @@ export default function App() {
                 recipes={recipes ?? []}
                 allergens={allergens}
                 locations={locations}
+                org={me.org}
+                onFreshDaysChanged={(days) => {
+                  setMe((m) => (m ? { ...m, org: { ...m.org, supplier_price_fresh_days: days } } : m));
+                  // Which suppliers are "resting" depends on the setting, so reload what carries that.
+                  loadItems(accessToken);
+                  fetchItemSuppliers(accessToken).then(setItemSupplierLinks).catch(() => {});
+                }}
                 squareReturn={SQUARE_RETURN}
                 onItemsChanged={() => loadItems(accessToken)}
                 onRecipesChanged={() => loadRecipes(accessToken)}

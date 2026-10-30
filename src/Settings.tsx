@@ -20,6 +20,7 @@ import {
   CURRENCY_OPTIONS,
   currencySymbol,
   formatMoney,
+  updateSupplierFreshDays,
 } from "./api";
 import type { Allergen, BulkItemInput, CatalogItem, Category, CurrencyCode, InventoryCheckSchedule, Location, OwnBusinessName, Recipe } from "./api";
 import CategoryManagerModal from "./CategoryManagerModal";
@@ -40,6 +41,10 @@ interface Props {
   recipes: Recipe[];
   allergens: Allergen[];
   locations: Location[];
+  // The business: its id and how many days a supplier can go without a delivery or price update
+  // before it is left out of costing. onFreshDaysChanged refreshes what depends on it.
+  org: { id: string; supplier_price_fresh_days?: number };
+  onFreshDaysChanged: (days: number) => void;
   // Set when Square has just sent the person back to the app (see squareApi).
   squareReturn?: SquareReturn;
   // App.tsx caches `items`/`recipes` and only reloads them on demand — a
@@ -164,7 +169,7 @@ const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
   { key: "account", label: "Account" },
 ];
 
-export default function Settings({ accessToken, items, recipes, allergens, locations, squareReturn = null, onItemsChanged, onRecipesChanged, onCategoriesChanged }: Props) {
+export default function Settings({ accessToken, items, recipes, allergens, locations, org, onFreshDaysChanged, squareReturn = null, onItemsChanged, onRecipesChanged, onCategoriesChanged }: Props) {
   // Coming back from Square's sign-in page lands straight on Integrations.
   const [tab, setTab] = useState<SettingsTab>(squareReturn ? "integrations" : "locations");
   // Every pane stays mounted and is only hidden when it is not the open tab,
@@ -194,6 +199,8 @@ export default function Settings({ accessToken, items, recipes, allergens, locat
 
       <div hidden={tab !== "catalogue"}>
         <CategorySettingsPanel accessToken={accessToken} onCategoriesChanged={onCategoriesChanged} />
+        <div style={{ height: 20 }} />
+        <SupplierPricesPanel accessToken={accessToken} orgId={org.id} days={org.supplier_price_fresh_days ?? 90} onSaved={onFreshDaysChanged} />
         <div style={{ height: 20 }} />
         <OwnNamesPanel accessToken={accessToken} />
       </div>
@@ -419,6 +426,88 @@ function CategorySettingsPanel({
 // supplier by one of these names. Added from the Scan receipt screen with
 // "is our own business, not the supplier"; removed here.
 // ---------------------------------------------------------------------------
+
+// How long a supplier can go without a delivery or a price list update before it is left out of
+// costing (see apps/catalog/costing.py). Applies to the whole business.
+function SupplierPricesPanel({
+  accessToken,
+  orgId,
+  days,
+  onSaved,
+}: {
+  accessToken: string;
+  orgId: string;
+  days: number;
+  onSaved: (days: number) => void;
+}) {
+  const [value, setValue] = useState(String(days));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const n = Number(value);
+  const valid = Number.isInteger(n) && n >= 14 && n <= 730;
+  const dirty = n !== days;
+
+  async function save() {
+    if (!valid || !dirty) return;
+    setSaving(true);
+    setError(null);
+    setSaved(false);
+    try {
+      const next = await updateSupplierFreshDays(accessToken, orgId, n);
+      onSaved(next);
+      setSaved(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save that.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <h2 style={{ marginTop: 0 }}>Supplier prices</h2>
+      <p className="hint">
+        Recipes and stock are costed at your default supplier&rsquo;s price. When an item has no default, the cheapest
+        supplier price is used, but a supplier that has not delivered or updated its prices for this many days is left
+        out while another supplier is current. It stays linked, is marked &ldquo;resting&rdquo; on the item, and comes
+        back as soon as it delivers, sends a newer price list, or you confirm its price.
+      </p>
+      <div className="tc-row">
+        <span className="muted">Leave a supplier out after</span>
+        <input
+          className="price-in"
+          type="number"
+          min={14}
+          max={730}
+          step={1}
+          value={value}
+          onChange={(e) => {
+            setValue(e.target.value);
+            setSaved(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              save();
+            }
+          }}
+          aria-label="Days before a supplier is left out of costing"
+        />
+        <span className="muted">days without a delivery or price update</span>
+        <button type="button" className="btn-ghost small" disabled={saving || !valid || !dirty} onClick={save}>
+          {saving ? "Saving…" : "Save"}
+        </button>
+        {saved && !dirty && <span className="muted" style={{ fontSize: 12 }}>Saved</span>}
+      </div>
+      {!valid && <p className="error">Use a whole number of days from 14 to 730.</p>}
+      {error && <p className="error">{error}</p>}
+      <p className="hint" style={{ marginBottom: 0 }}>
+        The default is 90. Choose a longer time if you buy some items only a few times a year.
+      </p>
+    </div>
+  );
+}
 
 function OwnNamesPanel({ accessToken }: { accessToken: string }) {
   const [names, setNames] = useState<OwnBusinessName[] | null>(null);

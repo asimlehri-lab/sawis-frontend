@@ -3889,3 +3889,8 @@ button.rp-gcard:hover { border-color: var(--muted); }
 .im-chg { font-size: 11.5px; color: var(--muted); margin-top: 4px; max-width: 260px; line-height: 1.4; }
 .im-chg.warn { color: var(--caution); font-weight: 600; }
 
+/* A supplier with no recent delivery or price update: kept on the item, left out of costing. */
+.resting { font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; margin-left: 6px; padding: 2px 7px; border-radius: 100px; background: var(--caution-soft); color: var(--caution); }
+.resting-note { color: var(--caution); line-height: 1.45; margin-top: 3px; max-width: 340px; }
+.resting-note .link-btn { font-size: inherit; }
+

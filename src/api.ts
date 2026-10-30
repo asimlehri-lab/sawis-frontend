@@ -166,7 +166,7 @@ export interface Me {
   id: string;
   email: string;
   name: string;
-  org: { id: string; name: string };
+  org: { id: string; name: string; supplier_price_fresh_days?: number };
   memberships: Membership[];
 }
 
@@ -1915,6 +1915,12 @@ export interface ItemSupplierRow {
   min_order_qty: string | null;
   last_ordered_at: string | null;
   matched_from: string | null;
+  // The last time something happened on this link (a delivery, a price list update, or a
+  // person confirming/editing the price), and whether that is within the business's
+  // "fresh days" setting. A link that is not fresh is "resting": kept, but left out of
+  // costing while another supplier of the item is fresh.
+  last_activity?: string | null;
+  price_fresh?: boolean;
   // The SUPPLIER's own product code for this item -- distinct from
   // Item.sku (our own internal code). A lookup aid only, never required.
   supplier_sku: string;
@@ -2082,6 +2088,37 @@ export async function linkPriceListLine(
   });
   if (!res.ok) throw await priceListError(res, "Could not link this line.");
   return res.json();
+}
+
+// "This price is still right": counts as activity, so a resting supplier is used again.
+export async function confirmItemSupplier(accessToken: string, id: string): Promise<ItemSupplierRow> {
+  const res = await fetch(`${API_URL}/api/catalog/item-suppliers/${id}/confirm/`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("Could not confirm this price.");
+  return res.json();
+}
+
+// Days a supplier can go without a delivery or price update before it is left out of costing.
+export async function updateSupplierFreshDays(accessToken: string, orgId: string, days: number): Promise<number> {
+  const res = await fetch(`${API_URL}/api/tenancy/organizations/${orgId}/`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ supplier_price_fresh_days: days }),
+  });
+  if (!res.ok) {
+    let msg = "Could not save that.";
+    try {
+      const body = await res.json();
+      const first = Array.isArray(body?.supplier_price_fresh_days) ? body.supplier_price_fresh_days[0] : null;
+      if (first) msg = String(first);
+    } catch {
+      /* keep the generic message */
+    }
+    throw new Error(msg);
+  }
+  return (await res.json()).supplier_price_fresh_days as number;
 }
 
 export async function deleteItemSupplier(accessToken: string, id: string): Promise<void> {

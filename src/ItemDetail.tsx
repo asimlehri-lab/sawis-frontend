@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { effectiveCost } from "./costing";
+import { daysSince, effectiveCost } from "./costing";
 import {
   fetchItem,
   updateItem,
@@ -14,6 +14,7 @@ import {
   updateItemStockUnit,
   deleteItemStockUnit,
   updateItemSupplier,
+  confirmItemSupplier,
   createCategory,
   deleteItem,
   login,
@@ -641,6 +642,22 @@ export default function ItemDetail({
       await saveField({ default_supplier: row.supplier });
     } finally {
       setSettingDefaultId(null);
+    }
+  }
+
+  // "This price is still right": counts as a delivery or update, so a resting supplier is used
+  // for costing again. Recipes and stock values follow, so ask the parent to refresh too.
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  async function handleConfirmPrice(row: ItemSupplierRow) {
+    setConfirmingId(row.id);
+    try {
+      await confirmItemSupplier(accessToken, row.id);
+      reload();
+      onChanged();
+    } catch {
+      // The button stays; the person can try again.
+    } finally {
+      setConfirmingId(null);
     }
   }
 
@@ -1570,6 +1587,8 @@ export default function ItemDetail({
             if (cheaperElsewhere && Number(cheaperElsewhere.unit_price) < Number(best.unit_price)) {
               status += ` ${cheaperElsewhere.supplier_name} lists ${formatMoney(Number(cheaperElsewhere.unit_price), currency)}/${item.base_unit}, which is not used for costing.`;
             }
+            const staleDays = best.price_fresh === false ? daysSince(best.last_activity) : null;
+            if (staleDays !== null) status += ` That price was last delivered or updated ${staleDays} days ago, so check it is still right.`;
             if (target) {
               const diff = ((Number(best.unit_price) - target) / target) * 100;
               if (Math.abs(diff) >= 0.5) status += ` That is ${Math.abs(diff).toFixed(0)}% ${diff > 0 ? "above" : "below"} your target.`;
@@ -1623,6 +1642,15 @@ export default function ItemDetail({
             Number(r.unit_price) < Number(min.unit_price) ? r : min
           );
           const costedFrom = effectiveCost(pricedRows, item.default_supplier);
+          // A supplier with no recent delivery or price update is "resting": kept, but left out of
+          // costing while another supplier is fresh. The row used for costing gets a "check the
+          // price" note instead when its own price is old.
+          const restingDays = (r: ItemSupplierRow) =>
+            r.price_fresh === false && Number(r.unit_price) > 0 && costedFrom && costedFrom.link.id !== r.id
+              ? daysSince(r.last_activity)
+              : null;
+          const checkDays = (r: ItemSupplierRow) =>
+            r.price_fresh === false && costedFrom && costedFrom.link.id === r.id ? daysSince(r.last_activity) : null;
           const isDefault = itemSuppliers.length > 1 && item.default_supplier === row.supplier;
           const linkedSupplier = suppliers.find((s) => s.id === row.supplier);
           const listHint = listPriceHint(row);
@@ -1657,7 +1685,24 @@ export default function ItemDetail({
                 {itemSuppliers.length > 1 && costedFrom && row.id === costedFrom.link.id && (
                   <span className="deftag" title="Recipes and stock are costed at this supplier's price">costing</span>
                 )}
+                {restingDays(row) !== null && <span className="resting">resting</span>}
                 {row.last_ordered_at && <div className="sd">last ordered {row.last_ordered_at}</div>}
+                {restingDays(row) !== null && (
+                  <div className="sd resting-note">
+                    No delivery or price update for {restingDays(row)} days, so it is left out of costing.{" "}
+                    <button type="button" className="link-btn" disabled={confirmingId === row.id} onClick={() => handleConfirmPrice(row)}>
+                      {confirmingId === row.id ? "Saving…" : "Price is still correct"}
+                    </button>
+                  </div>
+                )}
+                {checkDays(row) !== null && itemSuppliers.length > 0 && (
+                  <div className="sd resting-note">
+                    Last delivered or updated {checkDays(row)} days ago. Check this price.{" "}
+                    <button type="button" className="link-btn" disabled={confirmingId === row.id} onClick={() => handleConfirmPrice(row)}>
+                      {confirmingId === row.id ? "Saving…" : "Price is still correct"}
+                    </button>
+                  </div>
+                )}
               </span>
               <span className="supcode-field">
                 <label>Supplier's code</label>

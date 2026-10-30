@@ -123,10 +123,15 @@ export default function Reorder({ accessToken, items, locations, location, itemS
     const link = defaultLink(itemId);
     return !!item?.default_supplier && !!link && item.default_supplier === link.supplier;
   }
+  // The cheapest option worth suggesting as a saving. A supplier with no recent delivery or
+  // price update ("resting") is never offered: its price may be out of date, or it may no longer
+  // sell the item. With no fresh option the usual supplier is returned, so no saving is shown.
   function cheapestLink(itemId: string): ItemSupplierRow | null {
     const links = linksFor(itemId);
     if (links.length === 0) return null;
-    return links.reduce((a, b) => (Number(b.unit_price) < Number(a.unit_price) ? b : a));
+    const fresh = links.filter((l) => l.price_fresh !== false);
+    if (fresh.length === 0) return defaultLink(itemId);
+    return fresh.reduce((a, b) => (Number(b.unit_price) < Number(a.unit_price) ? b : a));
   }
   function chosenLink(h: ReorderLine): ItemSupplierRow | null {
     const links = linksFor(h.itemId);
