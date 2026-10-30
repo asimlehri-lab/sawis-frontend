@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { DAY_NAMES } from "./App";
-import { formatMoney, defaultCurrency, currencySymbol, createSupplier, bulkImportSupplierItems, readPriceListPdf, readPriceListSheet } from "./api";
+import { formatMoney, defaultCurrency, currencySymbol, createSupplier, bulkImportSupplierItems, readPriceListPdf, readPriceListSheet, attachPriceListFile } from "./api";
 import type { PdfPriceList } from "./api";
 import PdfPriceListReview from "./PdfPriceListReview";
 import { downloadSupplierListTemplate } from "./supplierListTemplate";
-import { inspectSupplierListFile } from "./supplierListFile";
-import type { SupplierListRow } from "./supplierListFile";
+import { inspectSupplierListFile, uploadRecord } from "./supplierListFile";
+import type { ListSource, SupplierListRow } from "./supplierListFile";
 import type { SupplierTab } from "./SupplierDeliveries";
 import type { Supplier, Location, PriceListInfo } from "./api";
 
@@ -57,12 +57,14 @@ export default function SupplierList({
   const [listFileName, setListFileName] = useState("");
   const [listRows, setListRows] = useState<SupplierListRow[]>([]);
   const [pdfReading, setPdfReading] = useState(false);
-  const [pdfReview, setPdfReview] = useState<{ fileName: string; data: PdfPriceList } | null>(null);
+  const [listSource, setListSource] = useState<ListSource | null>(null);
+  const [pdfReview, setPdfReview] = useState<{ fileName: string; data: PdfPriceList; source: ListSource } | null>(null);
   const [listError, setListError] = useState<string | null>(null);
 
   function handleListFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     setListRows([]);
+    setListSource(null);
     setListError(null);
     if (!file) {
       setListFileName("");
@@ -74,7 +76,12 @@ export default function SupplierList({
       readPriceListPdf(accessToken, file)
         .then((data) => {
           if (data.rows.length === 0) setListError("No products with a price were found in that PDF.");
-          else setPdfReview({ fileName: file.name, data });
+          else
+            setPdfReview({
+              fileName: file.name,
+              data,
+              source: { method: "ai_pdf", file, currency: data.currency, valid_from: data.valid_from },
+            });
         })
         .catch((err) => setListError(err instanceof Error ? err.message : "Could not read that PDF."))
         .finally(() => setPdfReading(false));
@@ -85,6 +92,7 @@ export default function SupplierList({
         // Template layout is used as it is; any other layout is read by the AI and checked by the person.
         if (res.matchesTemplate) {
           setListRows(res.rows);
+          setListSource({ method: "template", file });
           return;
         }
         if (!res.text.trim()) {
@@ -95,7 +103,12 @@ export default function SupplierList({
         readPriceListSheet(accessToken, res.text)
           .then((data) => {
             if (data.rows.length === 0) setListError("No products with a price were found in that file.");
-            else setPdfReview({ fileName: file.name, data });
+            else
+              setPdfReview({
+                fileName: file.name,
+                data,
+                source: { method: "ai_sheet", file, currency: data.currency, valid_from: data.valid_from },
+              });
           })
           .catch((err) =>
             setListError((err instanceof Error ? err.message : "Could not read that file.") + " You can also use the template.")
@@ -110,6 +123,7 @@ export default function SupplierList({
     setPdfReading(false);
     setListFileName("");
     setListRows([]);
+    setListSource(null);
     setListError(null);
     setNewName("");
     setNewEmail("");
@@ -141,15 +155,22 @@ export default function SupplierList({
       let opts: { tab?: SupplierTab; notice?: string } | undefined;
       if (listRows.length > 0) {
         try {
-          await bulkImportSupplierItems(accessToken, {
+          const result = await bulkImportSupplierItems(accessToken, {
             supplier: created.id,
             rows: listRows.map((r) => ({
               name: r.name,
               unit: r.unit,
               price: r.price,
               base_qty_per_unit: r.base_qty_per_unit,
+              article_no: r.article_no,
+              pack: r.pack,
+              vat_percent: r.vat_percent,
+              category: r.category,
             })),
+            ...(listSource ? { upload: uploadRecord(listSource) } : {}),
           });
+          // Keep the original file with the upload record. Best effort: the list is already saved.
+          if (listSource && result.upload) attachPriceListFile(accessToken, result.upload, listSource.file).catch(() => {});
           onListUploaded();
           opts = { tab: "prices" };
         } catch (err) {
@@ -362,6 +383,7 @@ export default function SupplierList({
                     currency={defaultCurrency(locations)}
                     onUse={(rows) => {
                       setListRows(rows);
+                      setListSource(pdfReview.source);
                       setPdfReview(null);
                     }}
                     onCancel={() => {

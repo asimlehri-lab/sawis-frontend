@@ -589,6 +589,15 @@ function OwnNamesPanel({ accessToken }: { accessToken: string }) {
 
 // The monthly overhead lines a location can fill in. The server adds them up
 // into the one monthly overhead figure the reports use.
+type PlaceKey = "address" | "city" | "postcode" | "country";
+// Where each venue is (optional; used later to suggest nearby suppliers).
+const PLACE_FIELDS: [PlaceKey, string][] = [
+  ["address", "Address"],
+  ["city", "City"],
+  ["postcode", "Postcode"],
+  ["country", "Country"],
+];
+
 const OVERHEAD_PARTS = [
   { key: "overhead_rent", label: "Rent" },
   { key: "overhead_labour", label: "Labour / staff" },
@@ -603,6 +612,7 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
   const [foodTargetValues, setFoodTargetValues] = useState<Record<string, string>>({});
   const [drinkTargetValues, setDrinkTargetValues] = useState<Record<string, string>>({});
   const [vatValues, setVatValues] = useState<Record<string, string>>({});
+  const [placeValues, setPlaceValues] = useState<Record<string, Partial<Record<PlaceKey, string>>>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [saved, setSaved] = useState<Record<string, boolean>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -634,6 +644,9 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
   function vatFor(loc: Location) {
     return vatValues[loc.id] ?? loc.vat_number ?? "";
   }
+  function placeFor(loc: Location, key: PlaceKey) {
+    return placeValues[loc.id]?.[key] ?? loc[key] ?? "";
+  }
 
   async function handleSave(loc: Location) {
     const foodRaw = foodTargetFor(loc).trim();
@@ -651,6 +664,10 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
         target_food_cost_pct: foodRaw === "" ? "30" : foodRaw,
         target_drink_cost_pct: drinkRaw === "" ? "30" : drinkRaw,
         vat_number: vatFor(loc).trim(),
+        address: placeFor(loc, "address").trim(),
+        city: placeFor(loc, "city").trim(),
+        postcode: placeFor(loc, "postcode").trim(),
+        country: placeFor(loc, "country").trim(),
       });
       setSaved((s) => ({ ...s, [loc.id]: true }));
     } catch (e) {
@@ -664,7 +681,7 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Locations</h2>
       <p className="hint">
-        Currency, monthly overhead, food and drink targets and VAT number for each location.
+        Currency, monthly overhead, food and drink targets, VAT number and address for each location.
         <HelpLink topic="settings" ask="locations-settings" />
       </p>
       {!locations.length && <p className="muted">No locations yet.</p>}
@@ -756,6 +773,23 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
                 }}
               />
               <span className="muted">Printed on the Purchases report for the accountant. Not checked or used in any calculation.</span>
+            </div>
+            <div className="loc-place">
+              {PLACE_FIELDS.map(([key, label]) => (
+                <label key={key} className="oh-field">
+                  {label}
+                  <input
+                    type="text"
+                    maxLength={key === "address" ? 200 : key === "postcode" ? 20 : 100}
+                    value={placeFor(loc, key)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setPlaceValues((pv) => ({ ...pv, [loc.id]: { ...pv[loc.id], [key]: v } }));
+                      setSaved((s) => ({ ...s, [loc.id]: false }));
+                    }}
+                  />
+                </label>
+              ))}
             </div>
             <div className="oh-box">
               <p className="oh-title">Monthly overhead (per month)</p>

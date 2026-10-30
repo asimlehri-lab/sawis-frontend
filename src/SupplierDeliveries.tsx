@@ -237,7 +237,7 @@ export default function SupplierDeliveries({
                 <input
                   defaultValue={supplier.vat_number ?? ""}
                   onBlur={(e) => handleSaveField({ vat_number: e.target.value.trim() })}
-                  placeholder="optional, as printed on their invoices"
+                  placeholder="as printed on their invoices; helps match them later"
                 />
               </div>
               <div className="field">
@@ -296,6 +296,44 @@ export default function SupplierDeliveries({
             </div>
           </div>
 
+          <div className="card">
+            <h2>Where they are and what they supply</h2>
+            <p className="hint">Optional. Kept so suppliers can be matched and found by area later.</p>
+            <div className="fgrid fgrid-2">
+              <div className="field">
+                <label>Address</label>
+                <input defaultValue={supplier.address ?? ""} onBlur={(e) => handleSaveField({ address: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>City</label>
+                <input defaultValue={supplier.city ?? ""} onBlur={(e) => handleSaveField({ city: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Postcode</label>
+                <input defaultValue={supplier.postcode ?? ""} onBlur={(e) => handleSaveField({ postcode: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Country</label>
+                <input defaultValue={supplier.country ?? ""} onBlur={(e) => handleSaveField({ country: e.target.value })} />
+              </div>
+              <div className="field">
+                <label>Website</label>
+                <input defaultValue={supplier.website ?? ""} onBlur={(e) => handleSaveField({ website: e.target.value })} placeholder="optional" />
+              </div>
+              <div className="field">
+                <label>What they supply</label>
+                <input
+                  defaultValue={(supplier.categories ?? []).join(", ")}
+                  onBlur={(e) =>
+                    handleSaveField({
+                      categories: e.target.value.split(",").map((w) => w.trim()).filter(Boolean),
+                    })
+                  }
+                  placeholder="for example dairy, packaging"
+                />
+              </div>
+            </div>
+          </div>
           </fieldset>
           <div className="card">
             <h2 style={{ marginTop: 0 }}>Archive</h2>

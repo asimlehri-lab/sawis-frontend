@@ -981,6 +981,11 @@ export interface Location {
   // The VAT registration number typed in Settings > Locations (free text,
   // may be empty). Printed on the Purchases report; never used in a sum.
   vat_number?: string;
+  // Where the venue is (optional); used later to suggest nearby suppliers.
+  address?: string;
+  city?: string;
+  postcode?: string;
+  country?: string;
 }
 
 export async function fetchLocations(accessToken: string): Promise<Location[]> {
@@ -1001,6 +1006,10 @@ export async function updateLocation(
     target_food_cost_pct?: string;
     target_drink_cost_pct?: string;
     vat_number?: string;
+    address?: string;
+    city?: string;
+    postcode?: string;
+    country?: string;
   }
 ): Promise<Location> {
   const res = await fetch(`${API_URL}/api/tenancy/locations/${id}/`, {
@@ -1679,6 +1688,13 @@ export interface Supplier {
   block_below_min: boolean;
   notes: string;
   archived: boolean;
+  // Where the supplier is and what it sells (all optional; kept for a future supplier directory).
+  address: string;
+  city: string;
+  postcode: string;
+  country: string;
+  website: string;
+  categories: string[];
 }
 
 // How much of each supplier's uploaded price list is linked to your items.
@@ -1751,6 +1767,12 @@ export async function updateSupplier(
     block_below_min?: boolean;
     notes?: string;
     archived?: boolean;
+    address?: string;
+    city?: string;
+    postcode?: string;
+    country?: string;
+    website?: string;
+    categories?: string[];
   }
 ): Promise<Supplier> {
   const res = await fetch(`${API_URL}/api/catalog/suppliers/${id}/`, {
@@ -1812,7 +1834,29 @@ export interface BulkImportSupplierItemsInput {
   supplier: string;
   // accept: the person already decided, in the import review, to use this row's unit / pack /
   // price on an already-linked line. Without it such a change is held as a price check.
-  rows: { name: string; unit: string; price: string; base_qty_per_unit?: string; accept?: boolean }[];
+  rows: {
+    name: string;
+    unit: string;
+    price: string;
+    base_qty_per_unit?: string;
+    accept?: boolean;
+    // Details printed on the supplier's list, when the AI reader found them.
+    article_no?: string;
+    pack?: string;
+    vat_percent?: number | null;
+    category?: string;
+  }[];
+  // A record of the upload (kept for the supplier directory groundwork).
+  upload?: PriceListUploadInput;
+}
+
+export interface PriceListUploadInput {
+  method: "template" | "ai_sheet" | "ai_pdf";
+  file_name: string;
+  content_type?: string;
+  size_bytes?: number;
+  currency?: string;
+  valid_from?: string;
 }
 
 export interface BulkImportSupplierItemsResult {
@@ -1830,6 +1874,21 @@ export interface BulkImportSupplierItemsResult {
   // Lines held for a price check: the unit, pack size or price changed on a line that is
   // already linked, so nothing was applied and the items keep their current cost.
   held?: { id: string; raw_name: string; reason: PriceCheckReason; items: string[] }[];
+  // Id of the upload record, when the page sent one: the original file is attached to it.
+  upload?: string | null;
+}
+
+// Keeps the original price list file with its upload record. Best effort: the import is already
+// saved, so a failure here is ignored by the caller.
+export async function attachPriceListFile(accessToken: string, uploadId: string, file: File): Promise<void> {
+  const body = new FormData();
+  body.append("file", file);
+  const res = await fetch(`${API_URL}/api/catalog/price-list-uploads/${uploadId}/file/`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body,
+  });
+  if (!res.ok) throw new Error("The original file could not be kept.");
 }
 
 // Upserts by (supplier, raw_name) on the backend instead of one create-only

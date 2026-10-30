@@ -19,6 +19,7 @@ import {
   bulkImportSupplierItems,
   readPriceListPdf,
   readPriceListSheet,
+  attachPriceListFile,
   createSupplier,
   fetchPurchaseOrders,
   createPurchaseOrder,
@@ -86,7 +87,8 @@ import SupplierDeliveries from "./SupplierDeliveries";
 import type { SupplierTab } from "./SupplierDeliveries";
 import SupplierList from "./SupplierList";
 import { downloadSupplierListTemplate } from "./supplierListTemplate";
-import { inspectSupplierListFile } from "./supplierListFile";
+import { inspectSupplierListFile, uploadRecord } from "./supplierListFile";
+import type { ListSource, SupplierListRow } from "./supplierListFile";
 import PdfPriceListReview from "./PdfPriceListReview";
 import { compareLine, heldCandidates, indexExisting, isBigMove, summarise } from "./priceListChanges";
 import PriceCheckCards from "./PriceCheckCards";
@@ -658,13 +660,13 @@ export default function App() {
   // Items list; see AllergenReview.tsx.
   const [showAllergenReview, setShowAllergenReview] = useState(false);
   const [importSupplier, setImportSupplier] = useState("");
-  const [importRows, setImportRows] = useState<
-    { name: string; unit: string; price: string; base_qty_per_unit?: string }[]
-  >([]);
+  const [importRows, setImportRows] = useState<SupplierListRow[]>([]);
+  // How the rows were read and the original file, kept with an upload record on the server.
+  const [importSource, setImportSource] = useState<ListSource | null>(null);
   const [importFileName, setImportFileName] = useState("");
   // A PDF price list: read by the AI reader, then checked in PdfPriceListReview.
   const [pdfReading, setPdfReading] = useState(false);
-  const [pdfReview, setPdfReview] = useState<{ fileName: string; data: PdfPriceList } | null>(null);
+  const [pdfReview, setPdfReview] = useState<{ fileName: string; data: PdfPriceList; source: ListSource } | null>(null);
   const [importSaving, setImportSaving] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importDone, setImportDone] = useState<
@@ -1430,6 +1432,7 @@ export default function App() {
   }
 
   function resetImport() {
+    setImportSource(null);
     setImportDecisions({});
     setImportSupplier("");
     setImportRows([]);
@@ -1453,7 +1456,12 @@ export default function App() {
       readPriceListPdf(accessToken, file)
         .then((data) => {
           if (data.rows.length === 0) setImportError("No products with a price were found in that PDF.");
-          else setPdfReview({ fileName: file.name, data });
+          else
+            setPdfReview({
+              fileName: file.name,
+              data,
+              source: { method: "ai_pdf", file, currency: data.currency, valid_from: data.valid_from },
+            });
         })
         .catch((err) => setImportError(err instanceof Error ? err.message : "Could not read that PDF."))
         .finally(() => setPdfReading(false));
@@ -1465,6 +1473,7 @@ export default function App() {
         // the AI and checked by the person, so no column is guessed silently.
         if (res.matchesTemplate) {
           setImportRows(res.rows);
+          setImportSource({ method: "template", file });
           return;
         }
         setImportRows([]);
@@ -1477,7 +1486,12 @@ export default function App() {
         readPriceListSheet(accessToken, res.text)
           .then((data) => {
             if (data.rows.length === 0) setImportError("No products with a price were found in that file.");
-            else setPdfReview({ fileName: file.name, data });
+            else
+              setPdfReview({
+                fileName: file.name,
+                data,
+                source: { method: "ai_sheet", file, currency: data.currency, valid_from: data.valid_from },
+              });
           })
           .catch((err) =>
             setImportError(
@@ -1514,9 +1528,16 @@ export default function App() {
             price: r.price,
             base_qty_per_unit: ok?.base_qty_per_unit ?? r.base_qty_per_unit,
             ...(ok ? { accept: true } : {}),
+            article_no: r.article_no,
+            pack: r.pack,
+            vat_percent: r.vat_percent,
+            category: r.category,
           };
         }),
+        ...(importSource ? { upload: uploadRecord(importSource) } : {}),
       });
+      // Keep the original file with the upload record. Best effort: the import is already saved.
+      if (importSource && result.upload) attachPriceListFile(accessToken, result.upload, importSource.file).catch(() => {});
       setImportDone({
         created: result.created.length,
         updated: result.updated.length,
@@ -3487,6 +3508,7 @@ export default function App() {
                 existing={existingForImport}
                 onUse={(rows) => {
                   setImportRows(rows);
+                  setImportSource(pdfReview.source);
                   setPdfReview(null);
                 }}
                 onCancel={() => {

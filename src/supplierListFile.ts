@@ -6,6 +6,11 @@ export interface SupplierListRow {
   unit: string;
   price: string;
   base_qty_per_unit?: string;
+  // Details the AI reader found on the supplier's list (kept with the line, never used in a sum).
+  article_no?: string;
+  pack?: string;
+  vat_percent?: number | null;
+  category?: string;
 }
 
 // Turns a sheet's raw rows (from either CSV or Excel) into rows for the
@@ -111,4 +116,23 @@ export function inspectSupplierListFile(file: File): Promise<InspectedListFile> 
     if (isSpreadsheet) reader.readAsArrayBuffer(file);
     else reader.readAsText(file);
   });
+}
+
+// What the page tells the server about an upload so it can keep a record of it.
+export interface ListSource {
+  method: "template" | "ai_sheet" | "ai_pdf";
+  file: File;
+  currency?: string;
+  valid_from?: string;
+}
+
+export function uploadRecord(src: ListSource) {
+  return {
+    method: src.method,
+    file_name: src.file.name,
+    content_type: src.file.type,
+    size_bytes: src.file.size,
+    currency: src.currency,
+    valid_from: src.valid_from,
+  };
 }

@@ -3957,3 +3957,6 @@ button.rp-gcard:hover { border-color: var(--muted); }
   .htbl input[type="number"] { width: 64px !important; }
   .task-item { flex-wrap: wrap; }
 }
+.loc-place { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 10px; margin: 0 0 14px; }
+.loc-place .oh-field input { width: 100%; }
+@media (max-width: 700px) { .loc-place { grid-template-columns: 1fr 1fr; } }

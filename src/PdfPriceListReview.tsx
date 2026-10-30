@@ -16,6 +16,8 @@ interface EditRow {
   unit: string;
   price: string;
   vat_percent: number | null;
+  pack: string;
+  category: string;
   skip: boolean;
 }
 
@@ -37,6 +39,8 @@ export default function PdfPriceListReview({ fileName, data, currency, existing,
       unit: r.import_unit,
       price: r.price,
       vat_percent: r.vat_percent,
+      pack: r.pack,
+      category: r.category,
       skip: false,
     }))
   );
@@ -208,7 +212,19 @@ export default function PdfPriceListReview({ fileName, data, currency, existing,
             type="button"
             className="btn-primary"
             disabled={usable.length === 0}
-            onClick={() => onUse(usable.map((r) => ({ name: r.name.trim(), unit: r.unit.trim(), price: Number(r.price).toFixed(2) })))}
+            onClick={() =>
+              onUse(
+                usable.map((r) => ({
+                  name: r.name.trim(),
+                  unit: r.unit.trim(),
+                  price: Number(r.price).toFixed(2),
+                  article_no: r.article_no,
+                  pack: r.pack,
+                  vat_percent: r.vat_percent,
+                  category: r.category,
+                }))
+              )
+            }
           >
             Use {usable.length} products
           </button>
