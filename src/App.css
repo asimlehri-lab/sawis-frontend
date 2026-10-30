@@ -1178,7 +1178,7 @@ nav {
 .mobile-topbar-brand { display: flex; align-items: center; gap: 8px; }
 .mobile-topbar-brand b { font-size: 14.5px; }
 
-@media (max-width: 700px) {
+@media (max-width: 700px), (max-height: 500px) and (orientation: landscape) {
   .app { display: block; min-height: 100vh; }
 
   .mobile-topbar {
@@ -1224,7 +1224,7 @@ nav {
   .content-header { margin: -16px -16px 16px; padding: 10px 16px; }
 }
 
-@media (max-width: 700px) and (prefers-reduced-motion: reduce) {
+@media (max-width: 700px) and (prefers-reduced-motion: reduce), (max-height: 500px) and (orientation: landscape) and (prefers-reduced-motion: reduce) {
   .sidebar, .mobile-nav-backdrop { transition: none; }
 }
 
@@ -1308,7 +1308,7 @@ nav {
    -- .head-search's fixed 240px plus a couple of buttons simply don't
    fit a ~360px viewport in one row. Same breakpoint as the sidebar drawer
    (App.tsx's mobile-topbar) so it's one consistent "phone" threshold. */
-@media (max-width: 700px) {
+@media (max-width: 700px), (max-height: 500px) and (orientation: landscape) {
   .content-head { flex-direction: column; align-items: stretch; }
   .content-head > div { flex-wrap: wrap; width: 100%; }
   .head-search { flex: 1 1 160px; width: auto; }
@@ -3943,3 +3943,17 @@ button.rp-gcard:hover { border-color: var(--muted); }
 .pc-sub { font-size: 12px; color: var(--muted); }
 .pc-title { font-size: 12px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted); margin: 0 0 2px; }
 @media (max-width: 640px) { .pc-cmp { grid-template-columns: 1fr; } .pc-arrow { transform: rotate(90deg); } }
+
+/* Phone fixes (portrait and landscape): cards were keeping their 32px
+   desktop padding so tables and buttons ran past the card edge. Long
+   filenames and wide tables now wrap or scroll inside their own box. */
+.content { min-width: 0; }
+.task-item > :first-child { min-width: 0; overflow-wrap: anywhere; }
+.task-item > :last-child { flex: none; }
+@media (max-width: 700px), (max-height: 500px) and (orientation: landscape) {
+  .card { padding: 16px; border-radius: 14px; }
+  .htbl th { padding: 8px 6px; }
+  .htbl td { padding: 10px 6px; font-size: 13px; }
+  .htbl input[type="number"] { width: 64px !important; }
+  .task-item { flex-wrap: wrap; }
+}
