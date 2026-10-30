@@ -104,6 +104,8 @@ import NotificationBell from "./NotificationBell";
 import FilterBar from "./FilterBar";
 import type { FilterFacet, FilterValues } from "./FilterBar";
 import HelpChat from "./HelpChat";
+import { OPEN_HELP_EVENT } from "./helpBus";
+import HelpLink from "./HelpLink";
 import "./App.css";
 
 // admin / manager / finance -- everyone except plain staff. Mirrors the
@@ -934,6 +936,16 @@ export default function App() {
   // How much of each supplier's uploaded price list is linked (Suppliers tab).
   const [priceListInfo, setPriceListInfo] = useState<Record<string, PriceListInfo>>({});
   const [showHelp, setShowHelp] = useState(false);
+  // Topic the Help window opens on when launched from a "More in Help" link.
+  const [helpTopic, setHelpTopic] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    const onOpen = (e: Event) => {
+      setHelpTopic((e as CustomEvent<{ topicId?: string }>).detail?.topicId);
+      setShowHelp(true);
+    };
+    window.addEventListener(OPEN_HELP_EVENT, onOpen);
+    return () => window.removeEventListener(OPEN_HELP_EVENT, onOpen);
+  }, []);
   const [showNewPO, setShowNewPO] = useState(false);
   const [newPOSupplier, setNewPOSupplier] = useState("");
   const [newPOLocation, setNewPOLocation] = useState("");
@@ -2313,7 +2325,16 @@ export default function App() {
             </>
           )}
         </div>
-        {showHelp && <HelpChat onClose={() => setShowHelp(false)} />}
+        {showHelp && (
+          <HelpChat
+            key={helpTopic ?? "none"}
+            initialTopicId={helpTopic}
+            onClose={() => {
+              setShowHelp(false);
+              setHelpTopic(undefined);
+            }}
+          />
+        )}
         {(activePage === "Inventory" || inventoryParked) && accessToken && me && (
           <div style={{ display: activePage === "Inventory" ? undefined : "none" }}>
             <div className="content-head">
@@ -3125,7 +3146,7 @@ export default function App() {
                   placeholder="e.g. 3.00"
                 />
                 <span className="hint" style={{ display: "block", marginTop: 4 }}>
-                  What you expect to pay for one {newUnit}. Recipes use it until a supplier price is recorded, then the supplier price takes over.
+                  Expected price for one {newUnit}. A supplier price replaces it.
                 </span>
               </label>
               {newItemError && <p className="error">{newItemError}</p>}
@@ -3369,8 +3390,7 @@ export default function App() {
           <div className="modal wide" onClick={(e) => e.stopPropagation()}>
             <h2>Upload price list</h2>
             <p className="hint" style={{ marginTop: -8, marginBottom: 16 }}>
-              Suppliers usually send their full product list as a CSV or Excel spreadsheet. Every line
-              goes on this supplier&rsquo;s Price list tab, where you link it to your items.
+              Every line goes on this supplier&rsquo;s Price list tab, where you link it to your items.
             </p>
 
             <div className="field" style={{ marginBottom: 12 }}>
@@ -3387,15 +3407,8 @@ export default function App() {
               />
               {pdfReading && <p className="hint">Reading the PDF with AI. This can take up to a minute.</p>}
               <div className="vhint">
-                A PDF price list also works: it is read by AI and you check the result before it is stored.
-                <br />
-                CSV or Excel (.xlsx/.xls). One product per row: name, unit, price — e.g. "Beef mince
-                5%, kg, 7.40". A header row is fine.
-                <br />
-                Optional 4th column if this supplier's unit doesn't match how you'll use the item —
-                how many of your item's own unit one of theirs contains, e.g. "Syrup, kg, 12.00, 1000"
-                for a kg-priced syrup you'll use in grams. Leave it off (or blank) when the units
-                already match.
+                CSV, Excel or PDF. One product per row: name, unit, price, e.g. "Beef mince 5%, kg, 7.40".
+                <HelpLink topic="suppliers" />
                 <br />
                 <button type="button" className="mini" style={{ marginTop: 6 }} onClick={() => downloadSupplierListTemplate()}>
                   ⇩ Download the template
@@ -3636,8 +3649,7 @@ export default function App() {
             {!scanResult && (
               <>
                 <p className="hint" style={{ marginTop: -8, marginBottom: 16 }}>
-                  Take or choose a photo of the receipt below — we'll pre-fill the order for you to
-                  check and correct.
+                  Photograph the receipt and check the pre-filled order.
                 </p>
                 <div className="field" style={{ marginBottom: 12 }}>
                   <label>Receipt photo</label>
@@ -4128,8 +4140,7 @@ export default function App() {
                     {scanUnmatchedCount > 0 && (
                       <p className="hint" style={{ marginTop: 8 }}>
                         {scanUnmatchedCount} row{scanUnmatchedCount === 1 ? "" : "s"} need
-                        {scanUnmatchedCount === 1 ? "s" : ""} a matching item picked above before they
-                        can be included — or Skip the row if it isn't a real stock item.
+                        {scanUnmatchedCount === 1 ? "s" : ""} an item picked above, or Skip.
                       </p>
                     )}
                   </>
@@ -4137,9 +4148,7 @@ export default function App() {
 
                 {scanCreatedPO && (
                   <p className="hint">
-                    The purchase order was created (and its lines saved) — only marking it received
-                    failed. Retry below, or leave it as "Sent" and mark it received later from the
-                    order itself.
+                    The order was created; only marking it received failed. Retry, or receive it later from the order.
                   </p>
                 )}
                 {scanCreateError && <p className="error">{scanCreateError}</p>}

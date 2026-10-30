@@ -1208,8 +1208,7 @@ export default function ProcurementDetail({
             ) : (
               <div className="dz-confirm">
                 <p className="hint" style={{ margin: "0 0 8px" }}>
-                  This deletes the draft permanently — there's nothing to send or receive yet, so
-                  nothing else is affected.
+                  Deletes the draft permanently. Nothing else is affected.
                 </p>
                 <div className="dz-confirm-row">
                   <button className="btn-danger" onClick={handleDeleteDraft} disabled={deleting}>
@@ -1239,9 +1238,7 @@ export default function ProcurementDetail({
             ) : (
               <div className="dz-confirm">
                 <p className="hint" style={{ margin: "0 0 8px" }}>
-                  Reverses the stock this order's receipt posted (with an offsetting entry, not a
-                  delete — the record stays in the ledger) and puts it back in Draft so the lines can
-                  be corrected and received again.
+                  Reverses the stock this receipt posted and puts the order back in Draft for correction.
                 </p>
                 <div className="dz-confirm-row">
                   <button className="btn-danger" onClick={handleReopen} disabled={reopening}>
@@ -1325,8 +1322,7 @@ export default function ProcurementDetail({
       <div className="card">
         <h2>Attachments</h2>
         <p className="hint" style={{ marginTop: -4, marginBottom: 12 }}>
-          Receipt/invoice photos from scanning this order, plus anything attached by hand -- kept
-          here for the full record (e.g. handing a PO and its invoice to an accountant).
+          Invoice photos from scanning, plus anything attached by hand.
         </p>
         {po.attachments.length === 0 ? (
           <p className="muted">No attachments yet.</p>
@@ -1609,8 +1605,8 @@ export default function ProcurementDetail({
           </form>
         ) : (
           <p className="hint" style={{ marginTop: 12 }}>
-            Lines lock once a PO is sent, so the record matches what was actually ordered.
-            {po.status === "received" && !readOnly ? " Something wrong? Reopen it to Draft, fix the lines with Edit, and receive it again." : ""}
+            Lines lock once a PO is sent.
+            {po.status === "received" && !readOnly ? " Something wrong? Reopen it to Draft and fix the lines." : ""}
           </p>
         )}
       </div>
@@ -1637,8 +1633,7 @@ export default function ProcurementDetail({
           <div className="modal wide xwide" role="dialog" aria-label="Receive delivery" onClick={(e) => e.stopPropagation()}>
           <h2>Receive delivery{po.po_number ? ` · ${po.po_number}` : ""}</h2>
           <p className="hint">
-            Confirm what actually arrived. Any changes here post as real stock movements and update
-            this supplier's price for next time — the ordered amounts above stay on record either way.
+            Confirm what arrived. Stock and this supplier's price update from what you enter.
           </p>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
             <div className="field" style={{ maxWidth: 200 }}>
@@ -1663,8 +1658,7 @@ export default function ProcurementDetail({
           <div className="field" style={{ marginBottom: 12 }}>
             <label>Scan delivery (optional)</label>
             <p className="hint" style={{ marginTop: 0, marginBottom: 8 }}>
-              Take or choose a photo of what arrived and we'll check it against this order below —
-              amend by hand afterwards as usual.
+              Photograph the delivery note to check it against this order.
             </p>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <label className="btn-ghost small" style={{ cursor: scanningDelivery ? "default" : "pointer", opacity: scanningDelivery ? 0.6 : 1 }}>
@@ -1932,8 +1926,7 @@ export default function ProcurementDetail({
             {!resourceResult ? (
               <>
                 <p className="hint" style={{ marginTop: -8, marginBottom: 16 }}>
-                  Assign each item to a supplier. Items assigned to more than one supplier become
-                  separate new draft orders, created together.
+                  Assign each item to a supplier. Each supplier gets its own new draft order.
                 </p>
                 <div className="table-scroll">
                   <table className="im-tbl">

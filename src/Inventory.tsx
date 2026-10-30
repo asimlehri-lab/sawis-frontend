@@ -1421,8 +1421,7 @@ function SectionsTab({
   return (
     <>
       <p className="muted" style={{ fontSize: 13, marginTop: 0, marginBottom: 16 }}>
-        Sections are your permanent storage layout — set them up once and they're reused for every count. Assign who
-        counts them on the <b>Count sheets</b> tab.
+        Sections are your storage layout, reused for every count. Assign counters on <b>Count sheets</b>.
       </p>
 
       {sectionsError && <p className="error">{sectionsError}</p>}
@@ -1469,8 +1468,8 @@ function SectionsTab({
             <h2>{editing ? `Edit ${editing.name}` : "New section"}</h2>
             <p className="muted" style={{ fontSize: 12.5, marginTop: 0 }}>
               {editing
-                ? "Add or remove items as your storage changes — the section keeps its name and history."
-                : "Group items by where they physically live, so a counter can walk one area at a time."}
+                ? "Add or remove items as your storage changes."
+                : "Group items by where they are stored."}
             </p>
             <div className="field">
               <label>Section name</label>

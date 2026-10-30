@@ -4,6 +4,8 @@ import type { HelpTopic } from "./helpContent";
 
 interface Props {
   onClose: () => void;
+  // Open straight on this topic (used by the "More in Help" links).
+  initialTopicId?: string;
 }
 
 interface TranscriptEntry {
@@ -50,9 +52,9 @@ function topicMatches(topic: HelpTopic, query: string): boolean {
 // the one concrete thing Phase A does specifically so Phase B (a real,
 // next-year AI-agent backend) can later swap what happens on a tap without
 // rewriting this component.
-export default function HelpChat({ onClose }: Props) {
+export default function HelpChat({ onClose, initialTopicId }: Props) {
   const [query, setQuery] = useState("");
-  const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
+  const [activeTopicId, setActiveTopicId] = useState<string | null>(initialTopicId ?? null);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
 
   const visibleTopics = useMemo(() => HELP_TOPICS.filter((t) => topicMatches(t, query)), [query]);

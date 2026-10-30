@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
+import HelpLink from "./HelpLink";
 import SquarePanel from "./SquarePanel";
 import type { SquareReturn } from "./squareApi";
 import {
@@ -223,9 +224,8 @@ export default function Settings({ accessToken, items, recipes, allergens, locat
         <div className="card">
           <h2 style={{ marginTop: 0 }}>Supplier price list template</h2>
           <p className="hint">
-            A blank layout for a supplier&rsquo;s price list: product, unit, price and an optional pack size. A
-            supplier&rsquo;s own spreadsheet works too if it has those columns. To upload a list, open the supplier in
-            Procurement and press Upload price list.
+            A blank price list layout. To upload a list, open the supplier in Procurement.
+            <HelpLink topic="settings" />
           </p>
           <button type="button" className="btn-ghost small" onClick={() => downloadSupplierListTemplate()}>
             ⇩ Download supplier list template
@@ -287,7 +287,7 @@ function ChangePasswordPanel({ accessToken }: { accessToken: string }) {
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Password</h2>
       <p className="hint">
-        Change your own sign-in password. Forgotten it instead? Ask an org admin to reset it for you from Team.
+        Change your own password. Forgotten it? Ask an admin to reset it from Team.
       </p>
       <div className="fgrid fgrid-2">
         <div className="field">
@@ -393,8 +393,7 @@ function CategorySettingsPanel({
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Item categories</h2>
       <p className="hint">
-        The categories on the Items filter and in each item's Category field. Delete the ones nobody uses to keep
-        those lists short.
+        Categories offered on the Items filter and each item. Delete unused ones to keep lists short.
       </p>
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         <span className="muted" style={{ marginBottom: 0 }}>
@@ -468,10 +467,8 @@ function SupplierPricesPanel({
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Supplier prices</h2>
       <p className="hint">
-        Recipes and stock are costed at your default supplier&rsquo;s price. When an item has no default, the cheapest
-        supplier price is used, but a supplier that has not delivered or updated its prices for this many days is left
-        out while another supplier is current. It stays linked, is marked &ldquo;resting&rdquo; on the item, and comes
-        back as soon as it delivers, sends a newer price list, or you confirm its price.
+        Days without a delivery or price update before a supplier is left out of costing.
+        <HelpLink topic="settings" />
       </p>
       <div className="tc-row">
         <span className="muted">Leave a supplier out after</span>
@@ -555,8 +552,7 @@ function OwnNamesPanel({ accessToken }: { accessToken: string }) {
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Names on your invoices</h2>
       <p className="hint">
-        Suppliers print your business name on their invoices too. Names listed here are never taken for the supplier
-        when you scan an invoice, for example &ldquo;Peggy&rsquo;s Coffee &amp; Tea&rdquo;.
+        Your own business names, so scanning an invoice never mistakes them for the supplier.
       </p>
       {names === null ? (
         <p className="muted">Loading…</p>
@@ -668,12 +664,8 @@ function LocationSettingsPanel({ accessToken, locations }: { accessToken: string
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Locations</h2>
       <p className="hint">
-        Currency changes which symbol this location's own prices/reports show — display only, no exchange-rate
-        conversion. Monthly overhead (rent, labour, utilities and other fixed costs, entered per month) feeds End of
-        day's net margin estimate and the break-even on Reports; leave it blank to skip those. Recipe costs are
-        ingredient costs only and never include overhead. Food/drink target % is what Reports and each recipe's own
-        page flag "over"/"under" against. The VAT registration number is optional and only appears on the
-        Purchases report.
+        Currency, monthly overhead, food and drink targets and VAT number for each location.
+        <HelpLink topic="settings" />
       </p>
       {!locations.length && <p className="muted">No locations yet.</p>}
       {locations.map((loc) => {
@@ -893,8 +885,7 @@ function NotificationSettingsPanel({ accessToken, locations }: { accessToken: st
     <div className="card">
       <h2 style={{ marginTop: 0 }}>Delivery reminders & inventory checks</h2>
       <p className="hint">
-        How much notice to give before a delivery is due, and which day each location runs its regular stock
-        count — both feed the notification bell (top right) and its calendar.
+        Delivery notice and stock count day for each location, shown in the notification bell.
       </p>
       {!locations.length && <p className="muted">No locations yet.</p>}
       {locations.map((loc) => (
@@ -1081,9 +1072,7 @@ function PushNotificationToggle({ accessToken }: { accessToken: string }) {
     <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
       <b>Browser push notifications</b>
       <p className="hint" style={{ marginTop: 4 }}>
-        Get a notification on this device the moment a delivery reminder, inventory check, or below-par alert
-        comes up — even when SAWIS isn't open in a tab. This is per device: enable it separately on your phone
-        and your laptop if you want both.
+        Get alerts on this device even when SAWIS isn't open. Turn it on for each device.
       </p>
       {!supported && <p className="muted">This browser doesn't support push notifications.</p>}
       {supported && permission === "denied" && (
@@ -1948,10 +1937,7 @@ function RecipeAndItemImportPanel({
           </button>
         </div>
         <div className="vhint" style={{ marginTop: 6 }}>
-          Personalized to your account — its Items tab already lists your current catalogue and its Recipes tab's
-          category dropdown lists your existing categories, so nothing has to be retyped. Three tabs: Items,
-          Recipes, Recipe Ingredients — see the Read me tab for how they fit together. Got a POS menu export
-          instead of typing it by hand? Use "Prefill from your menu list" under Advanced below.
+          Already lists your items and categories. The Read me tab inside explains each column.
         </div>
         {confirmingTemplateDownload && (
           <PasswordConfirmModal
@@ -1976,8 +1962,7 @@ function RecipeAndItemImportPanel({
         <label>Excel file</label>
         <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={handleFile} />
         <div className="vhint">
-          Upload the filled-in template from above. Matching <code>pos_id</code> (or name) <b>updates</b> an
-          existing recipe, replacing its ingredients; anything new is <b>created</b>.
+          Matching recipes are <b>updated</b> and their ingredients replaced; new ones are <b>created</b>.
         </div>
       </div>
 
@@ -1989,9 +1974,7 @@ function RecipeAndItemImportPanel({
             <input type="file" accept=".csv,text/csv,.xlsx,.xls" onChange={handleMenuListFile} />
             {menuListError && <p className="error" style={{ marginTop: 6 }}>{menuListError}</p>}
             <div className="vhint">
-              Upload your menu export from your POS or till system (CSV or Excel — a recipe/dish name column is
-              all that's required). You'll then pick each dish's ingredients from your existing items on screen —
-              nothing to type into a spreadsheet.
+              Upload your POS menu export (CSV or Excel), then pick each dish's ingredients on screen.
             </div>
           </div>
 
@@ -2007,9 +1990,7 @@ function RecipeAndItemImportPanel({
             </label>
             {prefillError && <p className="error" style={{ marginTop: 6 }}>{prefillError}</p>}
             <div className="vhint" style={{ marginTop: 6 }}>
-              Reads the same POS export and hands back the CSV template with <code>recipe</code>/<code>pos_id</code>/
-              <code>menu_category</code>/<code>menu_price</code> already filled in — add ingredient rows by hand,
-              then upload the template above.
+              Fills the template from your POS export. Add ingredient rows, then upload it above.
             </div>
           </div>
         </div>

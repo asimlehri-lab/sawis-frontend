@@ -275,6 +275,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "Suppliers isn't its own item in the sidebar — it lives inside Procurement. Click Procurement in the sidebar, then the Suppliers tab next to Orders. That opens a searchable list of every supplier you have, with their open orders and their price list: how much of an uploaded list is linked to your items, or how many prices have been remembered from your deliveries.",
       },
       {
+        q: "What format should a supplier price list be in?",
+        a: "Add an optional fourth column when the supplier's unit differs from the unit you use the item in. It is how many of your item's own unit one of theirs contains. For example \"Syrup, kg, 12.00, 1000\" is a kg-priced syrup you use in grams. Leave it blank when the units already match. A PDF price list also works: it is read by AI and you check the result before it is stored, and a header row is fine in CSV or Excel.",
+      },
+      {
         q: "Is there a template for a supplier's price list?",
         a: "Yes. In the upload window press Download the template, or go to Settings → Import and use the Supplier price list template card. It is a blank Excel file with four columns: Product, Unit, Price and an optional Pack size, and a second sheet with examples. Fill in one product per row from row 2 and upload it from the supplier's page. A supplier's own spreadsheet works too, as long as the first three columns are name, unit and price in that order.",
       },
@@ -583,7 +587,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "Can I get a notification on my phone or desktop, not just in the app?",
-        a: "Yes — turn on browser push notifications from that same \"Delivery reminders & inventory checks\" card in Settings.",
+        a: "Yes — turn on browser push notifications from that same \"Delivery reminders & inventory checks\" card in Settings. It works per device, so turn it on separately on your phone and your laptop if you want both.",
       },
     ],
   },
@@ -654,6 +658,14 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         q: "Square says it needs reconnecting. What do I do?",
         a: "An Admin goes to Settings → Integrations and presses Reconnect Square, then signs in to Square again. Sales are paused until you do, but nothing already pulled is lost, and the days missed are pulled the next time you sync.",
+      },
+      {
+        q: "What do the Locations settings mean?",
+        a: "Currency only changes which symbol that location's prices and reports show. It is display only and does not convert money. Monthly overhead (rent, labour, utilities and other fixed costs, entered per month) feeds End of day's net margin estimate and the break-even on Reports; leave it blank to skip those. Recipe costs are ingredient costs only and never include overhead. The Food and Drink target % is what Reports and each recipe's own page flag as over or under. The VAT registration number is optional and only appears on the Purchases report.",
+      },
+      {
+        q: "What does the Supplier prices setting do?",
+        a: "Recipes and stock are costed at an item's default supplier. With no default, the cheapest supplier price is used, but a supplier with no delivery or price update for this many days is left out while another supplier is current. It stays linked and comes back when it delivers, sends a newer price list or you confirm its price. See \"What does resting mean\" under Items & Recipes. Only an Admin can change the number of days (14 to 730).",
       },
       {
         q: "How do I change the currency for a location?",

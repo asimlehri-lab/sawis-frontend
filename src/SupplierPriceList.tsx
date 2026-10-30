@@ -534,8 +534,7 @@ export default function SupplierPriceList({
       <div className="card" style={{ textAlign: "center" }}>
         <h2 style={{ marginTop: 0 }}>No price list yet</h2>
         <p className="muted">
-          Upload the list this supplier sends you (CSV or Excel) and every line will show here, with its price, the date
-          it was updated, and which of your items it is linked to.
+          Upload this supplier's list (CSV or Excel) to see its lines, prices and links here.
         </p>
         {!readOnly && (
           <button className="btn-primary small" onClick={() => onUploadList(supplier.id)}>

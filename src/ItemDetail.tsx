@@ -40,6 +40,7 @@ import type {
   AllergenSuggestion,
 } from "./api";
 import AllergenIcon from "./AllergenIcon";
+import HelpLink from "./HelpLink";
 import ItemHistory from "./ItemHistory";
 import CategoryManagerModal from "./CategoryManagerModal";
 import NewPackBox from "./NewPackBox";
@@ -888,7 +889,6 @@ export default function ItemDetail({
     );
   }
 
-  const multiDept = item.holdings.length > 1;
 
   return (
     <div>
@@ -1036,10 +1036,9 @@ export default function ItemDetail({
           )}
         </div>
         <p className="hint">
-          Tag what this item contains once here and every recipe that uses it picks it up. Nothing is saved until
-          you press Confirm.
-          {item.allergen_review_status !== "confirmed" &&
-            " Nobody has confirmed this item yet, so no tags does not mean allergen-free — recipes using it show a “not all checked” warning."}
+          Tag what this item contains once; recipes using it pick it up. Press Confirm to save.
+          {item.allergen_review_status !== "confirmed" && " Not confirmed yet, so no tags does not mean allergen-free."}
+          <HelpLink topic="allergens" />
         </p>
 
         {item.allergen_suggestions.length > 0 && (
@@ -1096,8 +1095,7 @@ export default function ItemDetail({
 
         <h3 className="allergen-sub">May contain</h3>
         <p className="hint" style={{ marginTop: 0 }}>
-          Traces or cross-contact you can't rule out (a “may contain” line on the label, a shared line). An
-          allergen ticked under Contains is not repeated here.
+          Traces or cross-contact you can't rule out.
         </p>
         <div className="chip-row" style={{ marginBottom: 14 }}>
           {allergens.map((a) => {
@@ -1140,16 +1138,14 @@ export default function ItemDetail({
       <div className="card" hidden={tab !== "stock"}>
         <h2>Stock by department</h2>
         <p className="hint">
-          The same product can be held in more than one place, each with its own par level.
-          {multiDept && ` Shown in lists as "${item.name} — Department".`}
+          Each place that holds this item has its own par level.
         </p>
         <div className="su-block">
           <div className="su-head">
             <b>Stock units</b>
             <span className="muted">
               {" "}
-              How this item is kept on the shelf, besides {item.base_unit}. Add as many as you need (a sack, a tub, a case); each
-              section can count in one of them from Inventory → Manage sections. Everything is still recorded in {item.base_unit}.
+              Other ways this item is counted on the shelf (a sack, a tub, a case). Stock is always recorded in {item.base_unit}.
             </span>
           </div>
           {item.stock_units.length === 0 && <p className="muted su-none">No stock units yet.</p>}
@@ -1568,8 +1564,8 @@ export default function ItemDetail({
         <h2>Suppliers &amp; last prices</h2>
         <p className="hint">
           From your recorded purchase links — shared across all departments.
-          {itemSuppliers.length > 1 &&
-            " Pick a default to mark the supplier you normally buy from. Recipes and stock are costed at the default supplier's price; with no default, at the cheapest linked price."}
+          {itemSuppliers.length > 1 && " Costs follow the default supplier, else the cheapest."}
+          {itemSuppliers.length > 1 && <HelpLink topic="items-recipes" />}
         </p>
         {(() => {
           const priced = itemSuppliers.filter((r) => Number(r.unit_price) > 0);
@@ -1629,7 +1625,7 @@ export default function ItemDetail({
                 </button>
                 {targetCostSaved && !dirty && <span className="muted" style={{ fontSize: 12 }}>Saved</span>}
               </div>
-              <p className="hint tc-status">{status} A supplier price, from a price list, order, invoice or delivery, always takes over from the target.</p>
+              <p className="hint tc-status">{status} A supplier price always takes over from the target.</p>
             </div>
           );
         })()}
@@ -2080,17 +2076,15 @@ export default function ItemDetail({
                     : null;
                 return (
                   <div className="uinfo warn" role="alert" style={{ marginTop: 12 }}>
-                    <b>Past records are not restated.</b> Counts, deliveries, sales and recipe amounts already
-                    saved for {item.name} keep their numbers, and from now on those numbers are read in{" "}
-                    {unitNew}. For example, a recipe that uses 30 {item.base_unit} will read as 30 {unitNew}.
+                    <b>Past records are not restated.</b> Saved counts, deliveries, sales and recipes keep their numbers,
+                    now read in {unitNew} (30 {item.base_unit} becomes 30 {unitNew}).
                     {off && (
                       <>
                         {" "}
                         Anything saved in {item.base_unit} will be <b>{off}</b>.
                       </>
                     )}{" "}
-                    Only change the unit to correct a mistake made when the item was set up, and if this item is
-                    already in recipes or has counts or sales, check them afterwards.
+                    Only change the unit to fix a setup mistake, then check recipes and counts.
                   </div>
                 );
               })()}
@@ -2117,8 +2111,7 @@ export default function ItemDetail({
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2>Add a new category</h2>
             <p className="hint" style={{ marginTop: -8, marginBottom: 16 }}>
-              Sets a default VAT rate that items in this category start from — an item can still override
-              it individually.
+              Sets the default VAT rate for items in this category.
             </p>
             <div className="field" style={{ marginBottom: 14 }}>
               <label>Category name</label>

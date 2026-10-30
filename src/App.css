@@ -1497,6 +1497,8 @@ nav {
   font-weight: 700;
 }
 .card .hint { font-size: 11.5px; color: var(--muted); margin: 0 0 14px; }
+.help-link { background: none; border: 0; padding: 0 0 0 4px; font: inherit; font-size: inherit; color: var(--accent, #2E54E8); text-decoration: underline; cursor: pointer; }
+.help-link:hover { text-decoration: none; }
 
 .ing-tbl { width: 100%; border-collapse: collapse; }
 .ing-tbl th {
