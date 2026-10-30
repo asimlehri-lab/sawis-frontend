@@ -62,7 +62,7 @@ export const HELP_TOPICS: HelpTopic[] = [
     questions: [
       {
         q: "Why did a dish's cost change, and who changed its recipe?",
-        a: "Open the recipe and tap its History tab (managers and admins only). It lists what people changed, with the effect on cost per portion: ingredients added, removed or re-measured, the menu price (with the food cost before and after), the batch yield and other details. Lines marked Automatic are cost moves nobody typed into the recipe: an ingredient's cheapest supplier price went up or down, or a sub-recipe it uses got cheaper or dearer. The chart at the top shows how cost per portion has stepped over the last 30 days. Entries can't be edited or deleted.",
+        a: "Open the recipe and tap its History tab (managers and admins only). It lists what people changed, with the effect on cost per portion: ingredients added, removed or re-measured, the menu price (with the food cost before and after), the batch yield and other details. Lines marked Automatic are cost moves nobody typed into the recipe: the price an ingredient is costed at went up or down (or you changed its default supplier), or a sub-recipe it uses got cheaper or dearer. The chart at the top shows how cost per portion has stepped over the last 30 days. Entries can't be edited or deleted.",
       },
       {
         q: "Where is everything on the recipe page?",
@@ -87,7 +87,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I set a default supplier for an item?",
-        a: "An item needs at least two suppliers already linked to it before you can pick a default — open the item, scroll to its linked-suppliers list, and click Set as default next to the one you want (it only appears once there's more than one). The chosen one gets a ★ default tag. Reorder uses this to suggest who to order from — it doesn't change costing, which always uses whichever linked price is cheapest regardless of which supplier is marked default.",
+        a: "An item needs at least two suppliers already linked to it before you can pick a default — open the item, scroll to its linked-suppliers list, and click Set as default next to the one you want (it only appears once there's more than one). The chosen one gets a ★ default tag. Reorder uses this to suggest who to order from, and costing follows it too: recipes, sales and stock value use the default supplier's price. A cheaper supplier on the same item is still shown, but is not used for costing. If the item has no default (or the default has no price yet), costing uses the cheapest linked price.",
       },
       {
         q: "Can I bulk-import items or recipes?",

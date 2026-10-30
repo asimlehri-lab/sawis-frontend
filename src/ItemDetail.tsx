@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
+import { effectiveCost } from "./costing";
 import {
   fetchItem,
   updateItem,
@@ -1551,16 +1552,24 @@ export default function ItemDetail({
         <p className="hint">
           From your recorded purchase links — shared across all departments.
           {itemSuppliers.length > 1 &&
-            " Pick a default to mark which one you'd normally reorder from — it doesn't change costing, which always uses the cheapest linked price."}
+            " Pick a default to mark the supplier you normally buy from. Recipes and stock are costed at the default supplier's price; with no default, at the cheapest linked price."}
         </p>
         {(() => {
           const priced = itemSuppliers.filter((r) => Number(r.unit_price) > 0);
-          const best = priced.length ? priced.reduce((m, r) => (Number(r.unit_price) < Number(m.unit_price) ? r : m)) : null;
+          const eff = effectiveCost(priced, item.default_supplier);
+          const best = eff ? eff.link : null;
+          const cheaperElsewhere =
+            eff && eff.basis === "default"
+              ? priced.reduce((m, r) => (Number(r.unit_price) < Number(m.unit_price) ? r : m))
+              : null;
           const target = item.target_cost ? Number(item.target_cost) : null;
           const dirty = (item.target_cost ? Number(item.target_cost) : null) !== (targetCostInput.trim() === "" ? null : Number(targetCostInput));
           let status: string;
           if (best) {
-            status = `Recipes and sales are costed at ${formatMoney(Number(best.unit_price), currency)}/${item.base_unit}, the cheapest supplier price (${best.supplier_name}).`;
+            status = `Recipes and sales are costed at ${formatMoney(Number(best.unit_price), currency)}/${item.base_unit}, ${eff!.basis === "default" ? "your default supplier's price" : "the cheapest supplier price"} (${best.supplier_name}).`;
+            if (cheaperElsewhere && Number(cheaperElsewhere.unit_price) < Number(best.unit_price)) {
+              status += ` ${cheaperElsewhere.supplier_name} lists ${formatMoney(Number(cheaperElsewhere.unit_price), currency)}/${item.base_unit}, which is not used for costing.`;
+            }
             if (target) {
               const diff = ((Number(best.unit_price) - target) / target) * 100;
               if (Math.abs(diff) >= 0.5) status += ` That is ${Math.abs(diff).toFixed(0)}% ${diff > 0 ? "above" : "below"} your target.`;
@@ -1607,11 +1616,13 @@ export default function ItemDetail({
         })()}
         {itemSuppliers.length === 0 && <p className="muted">No suppliers linked yet.</p>}
         {itemSuppliers.map((row) => {
-          // Same rule as costing: the cheapest price above zero (a link priced at 0 has no price yet).
+          // Same rule as costing (see costing.ts): the default supplier's price when it has one,
+          // else the cheapest price above zero. A link priced at 0 has no price yet.
           const pricedRows = itemSuppliers.filter((r) => Number(r.unit_price) > 0);
           const cheapest = (pricedRows.length ? pricedRows : itemSuppliers).reduce((min, r) =>
             Number(r.unit_price) < Number(min.unit_price) ? r : min
           );
+          const costedFrom = effectiveCost(pricedRows, item.default_supplier);
           const isDefault = itemSuppliers.length > 1 && item.default_supplier === row.supplier;
           const linkedSupplier = suppliers.find((s) => s.id === row.supplier);
           const listHint = listPriceHint(row);
@@ -1642,6 +1653,9 @@ export default function ItemDetail({
                 {isDefault && <span className="deftag">★ default</span>}
                 {row.id === cheapest.id && itemSuppliers.length > 1 && (
                   <span className="best">cheapest</span>
+                )}
+                {itemSuppliers.length > 1 && costedFrom && row.id === costedFrom.link.id && (
+                  <span className="deftag" title="Recipes and stock are costed at this supplier's price">costing</span>
                 )}
                 {row.last_ordered_at && <div className="sd">last ordered {row.last_ordered_at}</div>}
               </span>

@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useRef, useState } from "react";
+import { effectiveCost } from "./costing";
 import Loader from "./Loader";
 import FilterBar from "./FilterBar";
 import type { FilterFacet, FilterValues } from "./FilterBar";
@@ -335,15 +336,13 @@ export default function Inventory({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, activeLocation, items.length, refreshTick]);
 
-  // The cheapest supplier price above zero, the same rule the backend costs with
-  // (Item.cost_and_source). A link priced at 0 means "no price yet", not a free item.
+  // What the item costs per base unit: the same rule the backend costs recipes with
+  // (Item.cost_and_source) -- the default supplier's price when it has one, else the
+  // cheapest price above zero. A link priced at 0 means "no price yet", not a free item.
+  // (Kept under its old name; it is passed down to the Live stock and count views.)
   function cheapestPrice(itemId: string): number | null {
-    const prices = itemSupplierLinks
-      .filter((l) => l.item === itemId)
-      .map((l) => Number(l.unit_price))
-      .filter((p) => p > 0);
-    if (!prices.length) return null;
-    return Math.min(...prices);
+    const links = itemSupplierLinks.filter((l) => l.item === itemId);
+    return effectiveCost(links, items.find((i) => i.id === itemId)?.default_supplier)?.price ?? null;
   }
 
   const sectionsHere = sections.filter((s) => s.location === activeLocation);
