@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   fetchPurchaseOrder,
   updatePurchaseOrder,
@@ -20,8 +20,20 @@ import {
   fetchPOAttachmentDownloadUrl,
   deletePOAttachment,
   fetchSupplierPriceList,
+  applyPriceCheckNew,
+  keepPriceCheckCurrent,
 } from "./api";
-import type { PurchaseOrder, CatalogItem, Supplier, ItemSupplierRow, Location, ReceiveLineOverride } from "./api";
+import type {
+  PurchaseOrder,
+  CatalogItem,
+  Supplier,
+  ItemSupplierRow,
+  Location,
+  ReceiveLineOverride,
+  PriceListLine,
+} from "./api";
+import PriceCheckPanel from "./PriceCheckPanel";
+import { sidesOf } from "./priceCheck";
 import SearchSelect from "./SearchSelect";
 import SupplierUnitPicker from "./SupplierUnitPicker";
 import type { UnitChoice } from "./SupplierUnitPicker";
@@ -300,6 +312,40 @@ export default function ProcurementDetail({
     delivered_newest: string | null;
   } | null>(null);
   const supplierIdForList = po?.supplier;
+  // Price list lines of this supplier waiting for a price check (a new list changed a unit, pack
+  // size or price on an item you already buy). Shown as a notice on the order and, for a manager,
+  // as a decision on the receive screen. Nothing here changes how the order itself is priced.
+  const [checkLines, setCheckLines] = useState<PriceListLine[]>([]);
+  const [checkTick, setCheckTick] = useState(0);
+  const [checkBusyId, setCheckBusyId] = useState<string | null>(null);
+  const [checkErr, setCheckErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (!supplierIdForList) return;
+    let cancelled = false;
+    fetchSupplierPriceList(accessToken, supplierIdForList)
+      .then((d) => !cancelled && setCheckLines(d.lines.filter((l) => l.check && l.link)))
+      .catch(() => !cancelled && setCheckLines([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, supplierIdForList, checkTick]);
+  const checkByItem = new Map(checkLines.map((l) => [l.link!.item, l]));
+
+  async function resolveCheck(line: PriceListLine, use: boolean, qty?: string) {
+    setCheckBusyId(line.id);
+    setCheckErr(null);
+    try {
+      if (use) await applyPriceCheckNew(accessToken, line.id, qty);
+      else await keepPriceCheckCurrent(accessToken, line.id);
+      setCheckTick((n) => n + 1);
+      onItemsChanged?.();
+    } catch (e) {
+      setCheckErr(e instanceof Error ? e.message : "Could not save your decision.");
+    } finally {
+      setCheckBusyId(null);
+    }
+  }
+
   useEffect(() => {
     if (!supplierIdForList || !onOpenPriceList) return;
     let cancelled = false;
@@ -1609,6 +1655,29 @@ export default function ProcurementDetail({
             {po.status === "received" && !readOnly ? " Something wrong? Reopen it to Draft and fix the lines." : ""}
           </p>
         )}
+        {po.status !== "received" && po.lines.some((l) => checkByItem.has(l.item)) && (
+          <div className="pc-banner" style={{ marginTop: 12, alignItems: "flex-start", flexDirection: "column" }}>
+            <b>Price check</b>
+            {po.lines
+              .filter((l) => checkByItem.has(l.item))
+              .map((l) => {
+                const cl = checkByItem.get(l.item)!;
+                const s = sidesOf(cl)!;
+                return (
+                  <span key={l.id}>
+                    <b>{l.item_name}:</b> {po.supplier_name}&rsquo;s new list says {s.next.unit} · {formatMoney(s.next.price, currency)}. This order
+                    uses your current {s.cur.unit} · {formatMoney(s.cur.price, currency)}.
+                  </span>
+                );
+              })}
+            <span className="pc-sub">
+              The order is not held up.{" "}
+              {readOnly
+                ? "A manager or admin will decide the new price."
+                : "Decide it when you receive the delivery, or on the supplier's Price list."}
+            </span>
+          </div>
+        )}
       </div>
       </fieldset>
 
@@ -1729,8 +1798,15 @@ export default function ProcurementDetail({
                   const lineItem = items.find((it) => it.id === l.item);
                   const ordered = poLineFigures(l, lineItem?.base_unit ?? "");
                   const choice = receiveUnits[l.id] ?? { unit: "", packQty: "1" };
+                  const checkLine = checkByItem.get(l.item);
+                  const sides = checkLine ? sidesOf(checkLine) : null;
+                  // What the person says it arrived in, against the unit saved and the one the new list uses.
+                  const sameU = (a: string, b: string) => !!a && a.trim().toLowerCase() === b.trim().toLowerCase();
+                  const matches: "new" | "current" | null =
+                    sides && sameU(choice.unit, sides.next.unit) ? "new" : sides && sameU(choice.unit, sides.cur.unit) ? "current" : null;
                   return (
-                    <tr key={l.id}>
+                    <Fragment key={l.id}>
+                    <tr>
                       <td className="dispname">
                         {l.item_name}
                         {status === "match" && <span className="badge b-ok" style={{ marginLeft: 6 }}>✓ matches</span>}
@@ -1785,6 +1861,45 @@ export default function ProcurementDetail({
                         />
                       </td>
                     </tr>
+                    {checkLine && sides && checkLine.check && (
+                      <tr>
+                        <td colSpan={5} style={{ paddingTop: 0 }}>
+                          <div className="pc-sub" style={{ marginBottom: 6 }}>
+                            <span className="pc-flag static">⚑ Price check</span>{" "}
+                            {matches === "new"
+                              ? `You are receiving it in ${choice.unit}, which matches the supplier's new list.`
+                              : matches === "current"
+                                ? `You are receiving it in ${choice.unit}, which matches your current unit and price.`
+                                : "The supplier's new list differs from what is saved for this item."}{" "}
+                            Receiving records the price you confirm; the supplier list's unit and price stay as saved until you decide below.
+                          </div>
+                          {readOnly ? (
+                            <div className="pc-sub">A manager or admin needs to decide this.</div>
+                          ) : (
+                            <PriceCheckPanel
+                              key={`${checkLine.id}-${choice.unit}-${choice.packQty}`}
+                              compact
+                              name={checkLine.raw_name}
+                              item={l.item_name}
+                              baseUnit={lineItem?.base_unit ?? "unit"}
+                              reason={checkLine.check.reason}
+                              cur={sides.cur}
+                              next={sides.next}
+                              currency={currency ?? ""}
+                              busy={checkBusyId === checkLine.id}
+                              error={checkErr}
+                              initialQty={matches === "new" && Number(choice.packQty) > 1 ? choice.packQty : undefined}
+                              qtyNote={matches === "new" && Number(choice.packQty) > 1 ? "from what you entered above" : undefined}
+                              emphasise={matches === "current" ? "keep" : matches === "new" ? "use" : undefined}
+                              onUse={(qty) => resolveCheck(checkLine, true, qty)}
+                              onKeep={() => resolveCheck(checkLine, false)}
+                              onLater={() => undefined}
+                            />
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })}
               </tbody>

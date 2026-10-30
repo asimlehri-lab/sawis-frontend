@@ -1,3 +1,5 @@
+import type { PriceCheckReason } from "./api";
+
 // Compares the lines about to be imported with what is already on the supplier's
 // Price list, so the person can see before importing what will change: a unit that
 // differs (which leaves an already-linked item's price alone, see the backend
@@ -9,6 +11,9 @@ export interface ExistingLine {
   price: number;
   // Name of the item this line is already linked to, if any.
   linkedItem: string | null;
+  // How much one unit holds in that item's own unit, and what that unit is.
+  pack?: number;
+  baseUnit?: string | null;
 }
 
 export type LineChange =
@@ -73,4 +78,47 @@ export function summarise(
     }
   });
   return s;
+}
+
+// A row that changes how an already-linked line converts to the item's own unit (or jumps in
+// price) is never applied on its own: the person decides in the import review, and anything
+// left undecided is held as a "price check" on the Price list tab. Mirrors the backend
+// (price_check.py), which is the one that actually enforces it.
+export interface HeldCandidate {
+  key: string;
+  name: string;
+  reason: PriceCheckReason;
+  item: string;
+  baseUnit: string;
+  cur: { unit: string; price: number; pack: number };
+  next: { unit: string; price: number; pack: number | null };
+}
+
+export function heldCandidates(
+  rows: { name: string; unit: string; price: string | number; base_qty_per_unit?: string }[],
+  existing: Map<string, ExistingLine>
+): HeldCandidate[] {
+  const out: HeldCandidate[] = [];
+  rows.forEach((r) => {
+    const old = existing.get(r.name.trim().toLowerCase());
+    if (!old || !old.linkedItem) return;
+    const price = Number(r.price);
+    const oldPack = old.pack && old.pack > 0 ? old.pack : 1;
+    const givenPack = r.base_qty_per_unit ? Number(r.base_qty_per_unit) : null;
+    let reason: PriceCheckReason | null = null;
+    if (old.unit.trim().toLowerCase() !== r.unit.trim().toLowerCase()) reason = "unit";
+    else if (givenPack !== null && givenPack > 0 && givenPack !== oldPack) reason = "pack";
+    else if (old.price > 0 && price > 0 && (price / old.price >= BIG_MOVE || price / old.price <= 1 / BIG_MOVE)) reason = "price";
+    if (!reason) return;
+    out.push({
+      key: r.name.trim().toLowerCase(),
+      name: r.name,
+      reason,
+      item: old.linkedItem,
+      baseUnit: old.baseUnit ?? "unit",
+      cur: { unit: old.unit, price: old.price, pack: oldPack },
+      next: { unit: r.unit, price, pack: givenPack && givenPack > 0 ? givenPack : reason === "price" ? oldPack : null },
+    });
+  });
+  return out;
 }

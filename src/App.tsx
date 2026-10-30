@@ -87,7 +87,10 @@ import SupplierList from "./SupplierList";
 import { downloadSupplierListTemplate } from "./supplierListTemplate";
 import { readSupplierListFile } from "./supplierListFile";
 import PdfPriceListReview from "./PdfPriceListReview";
-import { indexExisting, summarise } from "./priceListChanges";
+import { compareLine, heldCandidates, indexExisting, isBigMove, summarise } from "./priceListChanges";
+import PriceCheckCards from "./PriceCheckCards";
+import { acceptFor, isIncomplete } from "./priceCheck";
+import type { Decision } from "./priceCheck";
 import type { ExistingLine } from "./priceListChanges";
 import type { PdfPriceList } from "./api";
 import WasteLog from "./WasteLog";
@@ -664,8 +667,17 @@ export default function App() {
   const [importSaving, setImportSaving] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importDone, setImportDone] = useState<
-    { created: number; updated: number; linkedSynced: string[]; linkedSkipped: string[] } | null
+    {
+      created: number;
+      updated: number;
+      linkedSynced: string[];
+      linkedSkipped: string[];
+      held: { raw_name: string; items: string[] }[];
+    } | null
   >(null);
+  // What the person chose for each already-linked line the new list would change (keyed by
+  // lower-case line name). Anything left on "keep" is held as a Price check.
+  const [importDecisions, setImportDecisions] = useState<Record<string, Decision>>({});
   // What the chosen supplier's Price list already holds (with the item each line is
   // linked to), used to flag unit and price changes before importing.
   const existingForImport: ExistingLine[] = importSupplier
@@ -678,10 +690,13 @@ export default function App() {
             unit: si.unit,
             price: Number(si.price),
             linkedItem: link ? (items ?? []).find((i) => i.id === link.item)?.name ?? "an item" : null,
+            pack: Number(si.base_qty_per_unit),
+            baseUnit: link ? (items ?? []).find((i) => i.id === link.item)?.base_unit ?? null : null,
           };
         })
     : [];
-
+  // The already-linked lines this list would change in a way that needs a person's decision.
+  const importCards = importRows.length > 0 ? heldCandidates(importRows, indexExisting(existingForImport)) : [];
 
   const [recipeFilter, setRecipeFilter] = useState<"all" | "dish" | "sub">("all");
   // Client-side only, same pattern as recipeFilter/poFilter -- these lists
@@ -926,6 +941,8 @@ export default function App() {
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
   // Tab the supplier screen opens on (the PO screen's "View price list" link asks for the Price list).
   const [supplierTab, setSupplierTab] = useState<SupplierTab | undefined>(undefined);
+  // A price list line to open the Price check on when the supplier screen opens.
+  const [supplierCheckLine, setSupplierCheckLine] = useState<string | undefined>(undefined);
   // Shown on the supplier screen right after something went wrong while creating it.
   const [supplierNotice, setSupplierNotice] = useState<string | null>(null);
   // Procurement's two tabs, and the "+ New supplier" form the Suppliers tab opens.
@@ -1344,6 +1361,7 @@ export default function App() {
     setShowPurchases(false);
     setSelectedSupplierId(null);
     setSupplierTab(undefined);
+    setSupplierCheckLine(undefined);
     setSupplierNotice(null);
     setProcTab("orders");
     setShowNewPO(false);
@@ -1411,6 +1429,7 @@ export default function App() {
   }
 
   function resetImport() {
+    setImportDecisions({});
     setImportSupplier("");
     setImportRows([]);
     setImportFileName("");
@@ -1460,20 +1479,29 @@ export default function App() {
       // One bulk request instead of one POST per row — the backend upserts
       // by (supplier, raw_name), so re-running an updated CSV refreshes
       // existing lines' price/unit in place instead of duplicating them.
+      // A line that is already linked and would change unit, pack size or jump in price is
+      // only applied when the person accepted it in the review; otherwise the server holds it.
+      const cands = new Map(importCards.map((c) => [c.key, c]));
       const result = await bulkImportSupplierItems(accessToken, {
         supplier: importSupplier,
-        rows: importRows.map((r) => ({
-          name: r.name,
-          unit: r.unit,
-          price: r.price,
-          base_qty_per_unit: r.base_qty_per_unit,
-        })),
+        rows: importRows.map((r) => {
+          const c = cands.get(r.name.trim().toLowerCase());
+          const ok = c ? acceptFor(c, importDecisions[c.key]) : null;
+          return {
+            name: r.name,
+            unit: r.unit,
+            price: r.price,
+            base_qty_per_unit: ok?.base_qty_per_unit ?? r.base_qty_per_unit,
+            ...(ok ? { accept: true } : {}),
+          };
+        }),
       });
       setImportDone({
         created: result.created.length,
         updated: result.updated.length,
         linkedSynced: result.linked_prices_synced,
         linkedSkipped: result.linked_prices_skipped ?? [],
+        held: (result.held ?? []).map((h) => ({ raw_name: h.raw_name, items: h.items })),
       });
       fetchSupplierItems(accessToken).then(setSupplierItems).catch(() => {});
       // A refreshed price may have just changed what an already-linked
@@ -2499,7 +2527,7 @@ export default function App() {
           />
         ) : activePage === "Procurement" && selectedSupplierId && accessToken ? (
           <SupplierDeliveries
-            key={`${selectedSupplierId}-${supplierTab ?? ""}`}
+            key={`${selectedSupplierId}-${supplierTab ?? ""}-${supplierCheckLine ?? ""}`}
             supplierId={selectedSupplierId}
             readOnly={!canManage(me)}
             accessToken={accessToken}
@@ -2508,6 +2536,7 @@ export default function App() {
             locations={locations}
             items={items ?? []}
             initialTab={supplierTab}
+            initialCheckLineId={supplierCheckLine}
             listVersion={supplierItems}
             onUploadList={(sid) => {
               setImportSupplier(sid);
@@ -2524,6 +2553,7 @@ export default function App() {
             onBack={() => {
               setSelectedSupplierId(null);
               setSupplierTab(undefined);
+              setSupplierCheckLine(undefined);
               setSupplierNotice(null);
             }}
             notice={supplierNotice}
@@ -3040,6 +3070,13 @@ export default function App() {
                   setItemTab(tab);
                 }}
                 onNavigateApp={(label) => goToNav(label)}
+                onOpenPriceCheck={(supplierId, lineId) => {
+                  goToNav("Procurement");
+                  setProcTab("suppliers");
+                  setSelectedSupplierId(supplierId);
+                  setSupplierTab("prices");
+                  setSupplierCheckLine(lineId);
+                }}
                 onReviewAllergens={() => {
                   goToNav("Items");
                   setShowAllergenReview(true);
@@ -3445,22 +3482,49 @@ export default function App() {
             )}
 
             {importRows.length > 0 && importDone === null && (() => {
-              const sm = summarise(importRows, indexExisting(existingForImport));
-              if (sm.unitLinked === 0 && sm.bigMoves === 0) return null;
+              const known = indexExisting(existingForImport);
+              // Big moves on lines that are not linked to an item change nothing but the list.
+              const unlinkedBig = importRows.filter((r) => {
+                const c = compareLine(r, known);
+                return c.kind === "price" && isBigMove(c) && !c.linkedItem;
+              }).length;
+              const sm = summarise(importRows, known);
+              if (importCards.length === 0 && unlinkedBig === 0 && sm.unitOther === 0) return null;
               return (
-                <div className="im-changes" role="status">
-                  {sm.unitLinked > 0 && (
-                    <div className="warn">
-                      <b>{sm.unitLinked}</b> line{sm.unitLinked > 1 ? "s" : ""} with a different unit on an item you have
-                      already linked. Importing leaves that item&rsquo;s price as it is; link the line again afterwards.
+                <>
+                  {importCards.length > 0 && (
+                    <div style={{ marginTop: 12 }}>
+                      <div className="pc-title">
+                        {importCards.length} line{importCards.length > 1 ? "s" : ""} need{importCards.length > 1 ? "" : "s"} your decision
+                      </div>
+                      <p className="hint" style={{ margin: "0 0 8px" }}>
+                        Nothing here changes unless you use the new value.
+                        <HelpLink topic="suppliers" ask="price-check" />
+                      </p>
+                      <PriceCheckCards
+                        cards={importCards}
+                        decisions={importDecisions}
+                        currency={orgCurrency}
+                        onChange={(key, d) => setImportDecisions((prev) => ({ ...prev, [key]: d }))}
+                      />
                     </div>
                   )}
-                  {sm.bigMoves > 0 && (
-                    <div className="warn">
-                      <b>{sm.bigMoves}</b> price{sm.bigMoves > 1 ? "s" : ""} moved by half or more. Check them in the file.
+                  {(unlinkedBig > 0 || sm.unitOther > 0) && (
+                    <div className="im-changes" role="status">
+                      {sm.unitOther > 0 && (
+                        <div className="warn">
+                          <b>{sm.unitOther}</b> line{sm.unitOther > 1 ? "s" : ""} with a different unit, not linked to an item yet. Their saved
+                          pack size is reset, so you will be asked for it when you link them.
+                        </div>
+                      )}
+                      {unlinkedBig > 0 && (
+                        <div className="warn">
+                          <b>{unlinkedBig}</b> price{unlinkedBig > 1 ? "s" : ""} on unlinked lines moved by half or more. Check them in the file.
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
+                </>
               );
             })()}
 
@@ -3513,11 +3577,11 @@ export default function App() {
                     {importDone.linkedSynced.join(", ")}.
                   </div>
                 )}
-                {importDone.linkedSkipped.length > 0 && (
+                {importDone.held.length > 0 && (
                   <div style={{ marginTop: 6 }}>
-                    <b>Check these:</b> the unit changed on {importDone.linkedSkipped.length} already-linked item
-                    {importDone.linkedSkipped.length > 1 ? "s" : ""}, so their price was left as it was and needs
-                    linking again on the Price list tab: {importDone.linkedSkipped.join(", ")}.
+                    <b>Price check:</b> {importDone.held.length} line{importDone.held.length > 1 ? "s" : ""} kept the current unit and
+                    price, so these items cost the same as before: {importDone.held.flatMap((h) => h.items).join(", ")}. A manager or
+                    admin decides on the Price list tab, when receiving a delivery, or under End of day &rarr; Actions.
                   </div>
                 )}
               </div>
@@ -3539,7 +3603,12 @@ export default function App() {
               {importDone === null && (
                 <button
                   className="btn-primary"
-                  disabled={importSaving || !importSupplier || importRows.length === 0}
+                  disabled={
+                    importSaving ||
+                    !importSupplier ||
+                    importRows.length === 0 ||
+                    importCards.some((c) => isIncomplete(c, importDecisions[c.key]))
+                  }
                   onClick={handleImportSubmit}
                 >
                   {importSaving ? "Storing…" : `Store ${importRows.length || ""} products`}

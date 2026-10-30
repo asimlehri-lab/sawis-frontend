@@ -21,6 +21,8 @@ interface Props {
   items: CatalogItem[];
   // Which tab to open on (the PO screen's "View price list" link opens Price list).
   initialTab?: SupplierTab;
+  // Open this price list line's Price check on arrival (End of day -> Actions).
+  initialCheckLineId?: string;
   // Changes when a new list was uploaded, so the Price list tab fetches again.
   listVersion: unknown;
   onUploadList: (supplierId: string) => void;
@@ -55,6 +57,7 @@ export default function SupplierDeliveries({
   onSupplierUpdated,
   items,
   initialTab,
+  initialCheckLineId,
   listVersion,
   onUploadList,
   onLinksChanged,
@@ -390,6 +393,7 @@ export default function SupplierDeliveries({
           onUploadList={onUploadList}
           onLinksChanged={onLinksChanged}
           onOpenItem={onOpenItem}
+          initialCheckLineId={initialCheckLineId}
         />
       )}
     </div>

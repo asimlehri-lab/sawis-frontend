@@ -44,6 +44,8 @@ interface Props {
   // count, "Waste log" for the reminder) -- same goToNav App.tsx already
   // uses for its own sidebar.
   onNavigateApp: (label: string) => void;
+  // Opens a supplier's Price list on a line waiting for a price check (Actions tab).
+  onOpenPriceCheck: (supplierId: string, lineId: string) => void;
 }
 
 interface ParsedRow {
@@ -194,6 +196,7 @@ export default function EndOfDay({
   onReviewAllergens,
   onItemsChanged,
   onNavigateApp,
+  onOpenPriceCheck,
 }: Props) {
   // Sales (and importing sales) is manager-only data -- the backend 403s it
   // for staff, so staff land on Actions and never see the Sales tab at all.
@@ -977,6 +980,7 @@ export default function EndOfDay({
           onItemsChanged={onItemsChanged}
           onViewReorder={() => setTab("reorder")}
           onNavigateApp={onNavigateApp}
+          onOpenPriceCheck={onOpenPriceCheck}
         />
       )}
 

@@ -3912,3 +3912,34 @@ button.rp-gcard:hover { border-color: var(--muted); }
 .resting-note { color: var(--caution); line-height: 1.45; margin-top: 3px; max-width: 340px; }
 .resting-note .link-btn { font-size: inherit; }
 
+/* ---- Price check (see PriceCheckCards.tsx, PriceCheckPanel.tsx) ---- */
+.pc-cards { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 14px; }
+.pc-card { border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--surface)); background: color-mix(in srgb, var(--warn-soft) 45%, var(--surface)); border-radius: 12px; padding: 12px 14px; text-align: left; }
+.pc-h { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.pc-why { font-size: 12px; font-weight: 700; color: var(--warn); background: var(--warn-soft); border-radius: 6px; padding: 2px 8px; }
+.pc-linked { font-size: 12.5px; color: var(--muted); }
+.pc-cmp { display: grid; grid-template-columns: 1fr 22px 1fr; gap: 8px; margin: 10px 0; align-items: stretch; }
+.pc-box { border: 1px solid var(--border); border-radius: 10px; padding: 8px 11px; background: var(--surface); font-size: 13px; }
+.pc-box small { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 2px; }
+.pc-new { background: var(--warn-soft); }
+.pc-big { font-size: 14.5px; font-weight: 700; }
+.pc-per { color: var(--muted); font-size: 12px; }
+.pc-up { color: var(--brick, #a3321f); font-weight: 700; }
+.pc-arrow { align-self: center; text-align: center; color: var(--muted); }
+.pc-effect { font-size: 12.5px; background: var(--bg); border-radius: 8px; padding: 7px 10px; margin: 0 0 10px; }
+.pc-effect b { color: var(--brick, #a3321f); }
+.pc-opts { display: flex; flex-direction: column; gap: 6px; }
+.pc-opt { display: flex; gap: 9px; align-items: flex-start; border: 1px solid var(--border); border-radius: 10px; padding: 8px 11px; background: var(--surface); cursor: pointer; font-size: 13px; }
+.pc-opt input { margin-top: 3px; }
+.pc-opt.sel { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 9%, var(--surface)); }
+.pc-opt small { display: block; color: var(--muted); font-size: 12px; font-weight: 400; }
+.pc-qty { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 2px 0 0 26px; font-size: 13px; }
+.pc-qty input { width: 110px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; font: inherit; background: var(--surface); color: var(--ink); }
+.pc-qty .pc-res { color: var(--good); font-weight: 600; }
+.pc-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.pc-flag { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 1px 8px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--surface)); background: var(--warn-soft); color: var(--warn); font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; }
+.pc-flag.static { cursor: default; }
+.pc-banner { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--warn-soft); border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--surface)); border-radius: 12px; padding: 10px 14px; margin-bottom: 12px; font-size: 13px; }
+.pc-sub { font-size: 12px; color: var(--muted); }
+.pc-title { font-size: 12px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted); margin: 0 0 2px; }
+@media (max-width: 640px) { .pc-cmp { grid-template-columns: 1fr; } .pc-arrow { transform: rotate(90deg); } }

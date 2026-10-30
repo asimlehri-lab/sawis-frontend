@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { autoFactor, UNIT_FAMILY, deleteItemSupplier, fetchSupplierPriceList, formatMoney, linkPriceListLine } from "./api";
+import {
+  autoFactor,
+  UNIT_FAMILY,
+  deleteItemSupplier,
+  fetchSupplierPriceList,
+  formatMoney,
+  keepPriceCheckCurrent,
+  linkPriceListLine,
+  applyPriceCheckNew,
+} from "./api";
+import PriceCheckPanel from "./PriceCheckPanel";
 import type {
   CatalogItem,
   PriceListDelivery,
@@ -20,9 +30,11 @@ interface Props {
   // Item supplier links changed: the app reloads its own copies.
   onLinksChanged: () => void;
   onOpenItem?: (itemId: string) => void;
+  // Open this line's price check straight away (End of day -> Actions links here).
+  initialCheckLineId?: string;
 }
 
-type Filter = "all" | "linked" | "not" | "del" | "old";
+type Filter = "all" | "linked" | "not" | "del" | "old" | "check";
 
 const SHOW_STEP = 100;
 const STALE_DAYS = 60;
@@ -308,6 +320,7 @@ export default function SupplierPriceList({
   onUploadList,
   onLinksChanged,
   onOpenItem,
+  initialCheckLineId,
 }: Props) {
   const [data, setData] = useState<PriceListData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -318,6 +331,10 @@ export default function SupplierPriceList({
   const [busy, setBusy] = useState(false);
   const [pickError, setPickError] = useState<string | null>(null);
   const [confirmUnlink, setConfirmUnlink] = useState<string | null>(null);
+  // The line whose price check is open, and the state of resolving it.
+  const [checking, setChecking] = useState<string | null>(initialCheckLineId ?? null);
+  const [checkBusy, setCheckBusy] = useState(false);
+  const [checkError, setCheckError] = useState<string | null>(null);
 
   function load() {
     fetchSupplierPriceList(accessToken, supplier.id)
@@ -342,6 +359,7 @@ export default function SupplierPriceList({
       not: lines.filter((l) => !l.link).length,
       del: deliveries.length,
       old: lines.filter(isStale).length + deliveries.filter(isStaleDelivery).length,
+      check: lines.filter((l) => l.check).length,
     }),
     [lines, deliveries]
   );
@@ -353,6 +371,7 @@ export default function SupplierPriceList({
       if (filter === "linked" && !l.link) return false;
       if (filter === "not" && l.link) return false;
       if (filter === "old" && !isStale(l)) return false;
+      if (filter === "check" && !l.check) return false;
       if (q && !l.raw_name.toLowerCase().includes(q) && !(l.link && l.link.item_name.toLowerCase().includes(q)))
         return false;
       return true;
@@ -362,7 +381,7 @@ export default function SupplierPriceList({
   const shownDeliveries = useMemo(() => {
     const q = query.trim().toLowerCase();
     return deliveries.filter((d) => {
-      if (filter === "not") return false;
+      if (filter === "not" || filter === "check") return false;
       if (filter === "old" && !isStaleDelivery(d)) return false;
       return !q || d.item_name.toLowerCase().includes(q);
     });
@@ -388,6 +407,56 @@ export default function SupplierPriceList({
     } finally {
       setBusy(false);
     }
+  }
+
+  async function resolveCheck(line: PriceListLine, use: boolean, qty?: string) {
+    setCheckBusy(true);
+    setCheckError(null);
+    try {
+      if (use) await applyPriceCheckNew(accessToken, line.id, qty);
+      else await keepPriceCheckCurrent(accessToken, line.id);
+      setChecking(null);
+      onLinksChanged();
+      load();
+    } catch (e) {
+      setCheckError(e instanceof Error ? e.message : "Could not save your decision.");
+    } finally {
+      setCheckBusy(false);
+    }
+  }
+
+  function checkFlag(l: PriceListLine) {
+    if (!l.check) return null;
+    if (readOnly) return <span className="pc-flag static">⚑ Price check</span>;
+    return (
+      <button type="button" className="pc-flag" onClick={() => { setChecking(l.id); setCheckError(null); }}>
+        ⚑ Price check
+      </button>
+    );
+  }
+
+  function checkPanel() {
+    const l = lines.find((x) => x.id === checking);
+    if (!l || !l.check || readOnly) return null;
+    const curPack = Number(l.base_qty_per_unit) > 0 ? Number(l.base_qty_per_unit) : 1;
+    const nextPack = l.check.pack ? Number(l.check.pack) : l.check.reason === "price" ? curPack : null;
+    return (
+      <PriceCheckPanel
+        key={l.id}
+        name={l.raw_name}
+        item={l.link?.item_name ?? "the linked items"}
+        baseUnit={l.link?.base_unit ?? "unit"}
+        reason={l.check.reason}
+        cur={{ unit: l.unit, price: Number(l.price), pack: curPack }}
+        next={{ unit: l.check.unit, price: Number(l.check.price), pack: nextPack }}
+        currency={currency}
+        busy={checkBusy}
+        error={checkError}
+        onUse={(qty) => resolveCheck(l, true, qty)}
+        onKeep={() => resolveCheck(l, false)}
+        onLater={() => setChecking(null)}
+      />
+    );
   }
 
   async function handleUnlink(linkId: string) {
@@ -580,6 +649,32 @@ export default function SupplierPriceList({
         )}
       </div>
 
+      {counts.check > 0 && (
+        <div className="pc-banner">
+          <span>
+            <b>
+              {counts.check} item{counts.check > 1 ? "s" : ""} in Price check.
+            </b>{" "}
+            {readOnly
+              ? "The supplier's new list differs from what is saved. A manager or admin will decide; costs stay as they are."
+              : "The supplier's new list differs from what is saved. Costs stay on the current values until you decide."}
+          </span>
+          {!readOnly && (
+            <button
+              type="button"
+              className="btn-ghost small"
+              onClick={() => {
+                const first = lines.find((x) => x.check);
+                if (first) { setFilter("check"); setChecking(first.id); setCheckError(null); }
+              }}
+            >
+              Review
+            </button>
+          )}
+        </div>
+      )}
+      {checkPanel()}
+
       <div className="spl-tools">
         {(
           (data.total === 0
@@ -591,6 +686,7 @@ export default function SupplierPriceList({
                 ["all", "All", counts.all],
                 ["linked", "Linked", counts.linked],
                 ["not", "Not linked", counts.not],
+                ...(counts.check > 0 ? [["check", "Price check", counts.check]] : []),
                 ...(deliveries.length > 0 ? [["del", "From deliveries", counts.del]] : []),
                 ["old", `Older than ${STALE_DAYS} days`, counts.old],
               ]) as [Filter, string, number][]
@@ -635,7 +731,7 @@ export default function SupplierPriceList({
                 {visible.map((l) => (
                   <tr key={l.id}>
                     <td>
-                      <span className="spl-raw">{l.raw_name}</span>
+                      <span className="spl-raw">{l.raw_name}{checkFlag(l)}</span>
                       <span className="spl-sub">{l.unit}</span>
                     </td>
                     <td className="num">
@@ -688,6 +784,7 @@ export default function SupplierPriceList({
                 <div className="top">
                   <span className="spl-raw">
                     {l.raw_name}
+                    {checkFlag(l)}
                     <span className="spl-sub">{l.unit}</span>
                   </span>
                   <span className="price">

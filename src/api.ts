@@ -1685,6 +1685,8 @@ export interface Supplier {
 export interface PriceListInfo {
   total: number;
   linked: number;
+  // Lines waiting for a manager's "price check" (see PriceListCheck).
+  checks?: number;
   // Items received from this supplier that no list line covers.
   delivered: number;
   delivered_newest: string | null;
@@ -1808,7 +1810,9 @@ export async function createSupplierItem(
 
 export interface BulkImportSupplierItemsInput {
   supplier: string;
-  rows: { name: string; unit: string; price: string; base_qty_per_unit?: string }[];
+  // accept: the person already decided, in the import review, to use this row's unit / pack /
+  // price on an already-linked line. Without it such a change is held as a price check.
+  rows: { name: string; unit: string; price: string; base_qty_per_unit?: string; accept?: boolean }[];
 }
 
 export interface BulkImportSupplierItemsResult {
@@ -1823,6 +1827,9 @@ export interface BulkImportSupplierItemsResult {
   // Names of linked Items whose price was NOT refreshed because the line's unit
   // changed and the file gave no pack size: they need re-linking by a person.
   linked_prices_skipped?: string[];
+  // Lines held for a price check: the unit, pack size or price changed on a line that is
+  // already linked, so nothing was applied and the items keep their current cost.
+  held?: { id: string; raw_name: string; reason: PriceCheckReason; items: string[] }[];
 }
 
 // Upserts by (supplier, raw_name) on the backend instead of one create-only
@@ -2017,6 +2024,19 @@ export interface PriceListLink {
   inferred: boolean;
 }
 
+export type PriceCheckReason = "unit" | "pack" | "price";
+
+// What the newest list said on a line that is linked to items, held until a manager or admin
+// chooses to use it or keep the current unit and price.
+export interface PriceListCheck {
+  reason: PriceCheckReason;
+  unit: string;
+  price: string;
+  // How much one unit holds in the item's own unit, when the list said so.
+  pack: string | null;
+  at: string | null;
+}
+
 export interface PriceListLine {
   id: string;
   raw_name: string;
@@ -2024,6 +2044,7 @@ export interface PriceListLine {
   price: string;
   base_qty_per_unit: string;
   imported_at: string;
+  check: PriceListCheck | null;
   link: PriceListLink | null;
   last_invoiced: { price: string; unit: string; date: string; direction: "up" | "down" | "same" } | null;
 }
@@ -2045,6 +2066,7 @@ export interface SupplierPriceList {
   last_upload: string | null;
   total: number;
   linked: number;
+  checks: number;
   stale: number;
   delivered: number;
   delivered_stale: number;
@@ -2088,6 +2110,47 @@ export async function linkPriceListLine(
   });
   if (!res.ok) throw await priceListError(res, "Could not link this line.");
   return res.json();
+}
+
+// Everything waiting for a price check, across suppliers (End of day -> Actions).
+export interface PriceCheckRow {
+  id: string;
+  supplier: string;
+  supplier_name: string;
+  raw_name: string;
+  reason: PriceCheckReason;
+  items: { id: string; name: string; base_unit: string }[];
+  current: { unit: string; price: string; pack: string };
+  proposed: { unit: string; price: string; pack: string | null };
+  checked_at: string | null;
+}
+
+export async function fetchPriceChecks(accessToken: string): Promise<PriceCheckRow[]> {
+  const res = await fetch(`${API_URL}/api/catalog/supplier-items/checks/`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("Could not load the price checks.");
+  return res.json();
+}
+
+// "Use the new list": apply what the newest list said. qty is how much one unit holds in the
+// item's own unit, needed when the unit changed (or the person says the size changed).
+export async function applyPriceCheckNew(accessToken: string, lineId: string, qty?: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/catalog/supplier-items/${lineId}/check/use/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(qty ? { base_qty_per_unit: qty } : {}),
+  });
+  if (!res.ok) throw await priceListError(res, "Could not use the new list.");
+}
+
+// "Keep current": the saved unit and price are right; closes the check.
+export async function keepPriceCheckCurrent(accessToken: string, lineId: string): Promise<void> {
+  const res = await fetch(`${API_URL}/api/catalog/supplier-items/${lineId}/check/keep/`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw await priceListError(res, "Could not keep the current price.");
 }
 
 // "This price is still right": counts as activity, so a resting supplier is used again.

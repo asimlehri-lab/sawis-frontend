@@ -303,6 +303,12 @@ export const HELP_TOPICS: HelpTopic[] = [
         fact: "💡 An orange arrow beside Last invoiced means the delivery was charged at a different price from the list price, which is a quick way to spot a supplier whose invoices and price list disagree.",
       },
       {
+        id: "price-check",
+        q: "What is a Price check and why does a price list line need my decision?",
+        a: "When a price list is uploaded, SAWIS never lets it quietly change how a supplier's unit converts to your item's unit (for example a case that holds 12,000 ml becoming a bottle), or move a price by 50% or more, on a line that is already linked to an item. That would change the item's cost, recipe costs and stock value without anyone noticing. Instead the line is held with a ⚑ Price check flag: your current unit and price stay in use and nothing else changes. Managers and admins decide, on the review window when the upload is stored, on the supplier's Price list tab (filter Price check), from End of day → Actions → Price check, or when creating or receiving an order from that supplier. Keep current: case · €65.00 leaves everything as it is. Use new list: bottle · €7.80 applies the new unit and price, and if the pack size is not known you type how many of your unit it holds. You can change your mind later: a held line stays flagged until someone decides, and Decide later leaves it flagged. Staff see the flag but only a manager or admin can decide. Lines that are not linked to an item, and ordinary price moves under 50% with the same unit, are updated as before.",
+        fact: "💡 Receiving a delivery still records the price you confirm on the invoice. A Price check on a line only asks which unit and price the supplier's list should be kept at.",
+      },
+      {
         q: "How do I add a new supplier?",
         a: "From the Suppliers list (Procurement → Suppliers tab), click + New supplier. Only the name is required — email, phone, delivery day, minimum order value and notes are all optional and can be filled in later.",
         fact: "💡 Two shortcuts worth knowing: if you're logging a delivery invoice, Scan receipt has its own + New supplier right on the scan screen, so you never have to leave that flow. And if you'd rather not add suppliers one at a time at all, upload their whole product list instead: open the supplier and press ⇪ Upload price list — SAWIS matches it against your items in the background.",
@@ -435,7 +441,7 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "I uploaded a supplier price list but the item still shows the old price",
-        a: "Importing a list updates the price on an item only when the list line is the one the item was linked from. If the line is spelled differently (Brown suger instead of Brown Sugar), it is stored as a separate line. Open the item and go to the Suppliers tab: when that supplier's list holds a newer line that looks like the same product at a different price, a note appears under the supplier saying so. Click Use this price to take it; the item is then tied to that line, so later uploads update it on their own.",
+        a: "Importing a list updates the price on an item only when the list line is the one the item was linked from, and a changed unit or a price jump of 50% or more is held as a Price check until a manager or admin decides. If the line is spelled differently (Brown suger instead of Brown Sugar), it is stored as a separate line. Open the item and go to the Suppliers tab: when that supplier's list holds a newer line that looks like the same product at a different price, a note appears under the supplier saying so. Click Use this price to take it; the item is then tied to that line, so later uploads update it on their own.",
       },
       {
         q: "I saved the wrong pack size — how do I change it?",

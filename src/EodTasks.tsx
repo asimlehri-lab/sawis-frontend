@@ -5,6 +5,7 @@ import {
   effectiveTargetPct,
   fetchActivityFeed,
   fetchNotifications,
+  fetchPriceChecks,
   fetchSections,
   fetchStockCounts,
   runAllergenWordList,
@@ -16,6 +17,7 @@ import type {
   CostBand,
   Location,
   Me,
+  PriceCheckRow,
   Recipe,
   Section,
   StockCountRow,
@@ -37,6 +39,8 @@ interface Props {
   onItemsChanged: () => void;
   onViewReorder: () => void;
   onNavigateApp: (label: string) => void;
+  // Opens a supplier's Price list on the line waiting for a price check.
+  onOpenPriceCheck: (supplierId: string, lineId: string) => void;
 }
 
 // Same windowing as NotificationBell.tsx's own "Coming up" section -- kept
@@ -173,6 +177,7 @@ export default function EodTasks({
   onItemsChanged,
   onViewReorder,
   onNavigateApp,
+  onOpenPriceCheck,
 }: Props) {
   const isManagerOrAbove = me.memberships.some(
     (m) => m.role === "admin" || m.role === "manager" || m.role === "finance"
@@ -202,6 +207,7 @@ export default function EodTasks({
       onItemsChanged={onItemsChanged}
       onViewReorder={onViewReorder}
       onNavigateApp={onNavigateApp}
+      onOpenPriceCheck={onOpenPriceCheck}
     />
   ) : (
     <StaffTasks
@@ -231,6 +237,7 @@ function ManagerTasks({
   onItemsChanged,
   onViewReorder,
   onNavigateApp,
+  onOpenPriceCheck,
 }: {
   accessToken: string;
   location: string;
@@ -246,6 +253,7 @@ function ManagerTasks({
   onItemsChanged: () => void;
   onViewReorder: () => void;
   onNavigateApp: (label: string) => void;
+  onOpenPriceCheck: (supplierId: string, lineId: string) => void;
 }) {
   // Delivery reminders (Phase 3 notifications, generated daily server-side
   // from each PurchaseOrder's expected_date) -- ordering/financial in
@@ -312,6 +320,9 @@ function ManagerTasks({
   const [stockCounts, setStockCounts] = useState<StockCountRow[]>([]);
   const [feedFilter, setFeedFilter] = useState<FeedFilter>("all");
   const [feedExpanded, setFeedExpanded] = useState(false);
+  // Price list lines where a supplier's new list changed a unit, pack size or price a lot and a
+  // manager still has to decide (see Price check).
+  const [priceChecks, setPriceChecks] = useState<PriceCheckRow[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -324,6 +335,9 @@ function ManagerTasks({
         .catch(() => {});
       fetchStockCounts(accessToken)
         .then((r) => !cancelled && setStockCounts(r))
+        .catch(() => {});
+      fetchPriceChecks(accessToken)
+        .then((r) => !cancelled && setPriceChecks(r))
         .catch(() => {});
     }
     load();
@@ -565,6 +579,52 @@ function ManagerTasks({
                   )}
                 </div>
                 {allergenCheckMsg && <div className="ov-line-sub">{allergenCheckMsg}</div>}
+              </>
+            )}
+          </div>
+
+          <div className={`ov-tile ${priceChecks.length ? "ov-warn" : "ov-good"}`}>
+            <div className="ov-head">
+              <span className="ov-icon">🏷️</span>
+              <span className="ov-title">Price check</span>
+              <span className="ov-count">{priceChecks.length}</span>
+            </div>
+            {priceChecks.length === 0 ? (
+              <p className="ov-empty">No price list changes are waiting for a decision.</p>
+            ) : (
+              <>
+                <div className="ov-big">
+                  {priceChecks.length}
+                  <span> {priceChecks.length === 1 ? "item needs" : "items need"} a decision</span>
+                </div>
+                <div className="ov-line-sub">
+                  A supplier's new list changed a unit, pack size or price. Costs stay as they are until you decide.
+                </div>
+                <div className="ov-lines">
+                  {priceChecks.slice(0, 4).map((c) => (
+                    <button key={c.id} type="button" className="ov-line" onClick={() => onOpenPriceCheck(c.supplier, c.id)}>
+                      <span className="ov-line-main">
+                        <b>{c.items.length ? c.items.map((i) => i.name).join(", ") : c.raw_name}</b>
+                        <span className="ov-line-sub">
+                          {c.supplier_name} · {c.current.unit} → {c.proposed.unit}
+                        </span>
+                      </span>
+                      <span className="ov-chip ov-chip-warn">
+                        {c.reason === "unit" ? "Unit changed" : c.reason === "pack" ? "Pack size" : "Price jumped"}
+                      </span>
+                    </button>
+                  ))}
+                  {priceChecks.length > 4 && <div className="ov-more">+{priceChecks.length - 4} more</div>}
+                </div>
+                <div className="ov-actions">
+                  <button
+                    type="button"
+                    className="btn-primary small"
+                    onClick={() => onOpenPriceCheck(priceChecks[0].supplier, priceChecks[0].id)}
+                  >
+                    Review prices
+                  </button>
+                </div>
               </>
             )}
           </div>
