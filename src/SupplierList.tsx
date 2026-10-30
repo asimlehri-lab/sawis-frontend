@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { DAY_NAMES } from "./App";
-import { formatMoney, defaultCurrency, currencySymbol, createSupplier, bulkImportSupplierItems, readPriceListPdf } from "./api";
+import { formatMoney, defaultCurrency, currencySymbol, createSupplier, bulkImportSupplierItems, readPriceListPdf, readPriceListSheet } from "./api";
 import type { PdfPriceList } from "./api";
 import PdfPriceListReview from "./PdfPriceListReview";
 import { downloadSupplierListTemplate } from "./supplierListTemplate";
-import { readSupplierListFile } from "./supplierListFile";
+import { inspectSupplierListFile } from "./supplierListFile";
 import type { SupplierListRow } from "./supplierListFile";
 import type { SupplierTab } from "./SupplierDeliveries";
 import type { Supplier, Location, PriceListInfo } from "./api";
@@ -80,12 +80,27 @@ export default function SupplierList({
         .finally(() => setPdfReading(false));
       return;
     }
-    readSupplierListFile(file)
-      .then((rows) => {
-        setListRows(rows);
-        if (rows.length === 0) {
-          setListError('No valid rows found — each row should read name, unit, price, e.g. "Beef mince 5%, kg, 7.40".');
+    inspectSupplierListFile(file)
+      .then((res) => {
+        // Template layout is used as it is; any other layout is read by the AI and checked by the person.
+        if (res.matchesTemplate) {
+          setListRows(res.rows);
+          return;
         }
+        if (!res.text.trim()) {
+          setListError("That file is empty.");
+          return;
+        }
+        setPdfReading(true);
+        readPriceListSheet(accessToken, res.text)
+          .then((data) => {
+            if (data.rows.length === 0) setListError("No products with a price were found in that file.");
+            else setPdfReview({ fileName: file.name, data });
+          })
+          .catch((err) =>
+            setListError((err instanceof Error ? err.message : "Could not read that file.") + " You can also use the template.")
+          )
+          .finally(() => setPdfReading(false));
       })
       .catch(() => setListError("Could not read that file — check it's a valid CSV or Excel spreadsheet."));
   }
@@ -333,13 +348,13 @@ export default function SupplierList({
                     ⇩ Template
                   </button>
                 </div>
-                <p className="vhint">Did they send you a list? Add it now: name, unit, price, as Excel, CSV or a PDF that AI reads for you to check. It goes onto their Price list tab.</p>
+                <p className="vhint">Did they send you a list? Add it now: name, unit, price, as Excel or CSV (a different layout, or a PDF, is read by AI for you to check). It goes onto their Price list tab.</p>
                 <input
                   type="file"
                   accept=".csv,text/csv,.xlsx,.xls,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                   onChange={handleListFile}
                 />
-                {pdfReading && <p className="hint">Reading the PDF with AI. This can take up to a minute.</p>}
+                {pdfReading && <p className="hint">Reading the file with AI. This can take up to a minute.</p>}
                 {pdfReview && (
                   <PdfPriceListReview
                     fileName={pdfReview.fileName}

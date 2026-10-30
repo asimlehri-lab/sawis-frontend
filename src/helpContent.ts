@@ -281,12 +281,12 @@ export const HELP_TOPICS: HelpTopic[] = [
       {
         id: "price-list-format",
         q: "What format should a supplier price list be in?",
-        a: "Add an optional fourth column when the supplier's unit differs from the unit you use the item in. It is how many of your item's own unit one of theirs contains. For example \"Syrup, kg, 12.00, 1000\" is a kg-priced syrup you use in grams. Leave it blank when the units already match. A PDF price list also works: it is read by AI and you check the result before it is stored, and a header row is fine in CSV or Excel.",
+        a: "Add an optional fourth column when the supplier's unit differs from the unit you use the item in. It is how many of your item's own unit one of theirs contains. For example \"Syrup, kg, 12.00, 1000\" is a kg-priced syrup you use in grams. Leave it blank when the units already match. A header row is fine in CSV or Excel. A file that follows this layout is used as it is. A supplier's own Excel or CSV in any other layout (extra columns, a different order, a title above the header, prices written as text) and a PDF are read by AI instead: SAWIS opens a Check the price list window and nothing is stored until you check it.",
       },
       {
         id: "price-list-template",
         q: "Is there a template for a supplier's price list?",
-        a: "Yes. In the upload window press Download the template, or go to Settings → Import and use the Supplier price list template card. It is a blank Excel file with four columns: Product, Unit, Price and an optional Pack size, and a second sheet with examples. Fill in one product per row from row 2 and upload it from the supplier's page. A supplier's own spreadsheet works too, as long as the first three columns are name, unit and price in that order.",
+        a: "Yes. In the upload window press Download the template, or go to Settings → Import and use the Supplier price list template card. It is a blank Excel file with four columns: Product, Unit, Price and an optional Pack size, and a second sheet with examples. Fill in one product per row from row 2 and upload it from the supplier's page. A supplier's own spreadsheet that does not follow this layout is read by AI and checked by you before it is stored.",
       },
       {
         q: "How do I upload a supplier's price list?",
@@ -294,8 +294,8 @@ export const HELP_TOPICS: HelpTopic[] = [
         fact: "💡 This isn't a one-time match at upload — a catalogue you import today keeps working for items you add next month too, since the matching runs whenever you open an item's page, not just once at import time.",
       },
       {
-        q: "Can I upload a supplier's price list as a PDF?",
-        a: "Yes, if AI reading is switched on for your account. In the Upload price list window (or the Price list section of New supplier), choose the PDF. SAWIS reads it with AI, which can take up to a minute, then opens a Check the price list window with every product it found: the name, the unit the price is for (for example case (6 x 3 kg)), and the price before VAT. Change anything that is wrong, press Skip on lines you do not want, and press Use products. They are then stored on the supplier's Price list tab exactly like an Excel upload. The AI can misread a line, so compare with the PDF before you press Use. If the list is in a different currency from your locations, SAWIS warns you and does not convert the prices.",
+        q: "Can I upload a supplier's price list as a PDF, or an Excel in the supplier's own layout?",
+        a: "Yes, if AI reading is switched on for your account. In the Upload price list window (or the Price list section of New supplier), choose the PDF. An Excel or CSV that does not follow the SAWIS template is read the same way (a file that does follow it is used as it is, without AI); the AI reads every sheet, so keep only the price list in the file. SAWIS reads it with AI, which can take up to a minute, then opens a Check the price list window with every product it found: the name, the unit the price is for (for example case (6 x 3 kg)), and the price before VAT. Change anything that is wrong, press Skip on lines you do not want, and press Use products. They are then stored on the supplier's Price list tab exactly like an Excel upload. The AI can misread a line, so compare with the original file before you press Use. If the list is in a different currency from your locations, SAWIS warns you and does not convert the prices.",
       },
       {
         q: "Where can I see a supplier's uploaded price list and link its lines to my items?",

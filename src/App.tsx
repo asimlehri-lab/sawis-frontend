@@ -18,6 +18,7 @@ import {
   fetchSupplierItems,
   bulkImportSupplierItems,
   readPriceListPdf,
+  readPriceListSheet,
   createSupplier,
   fetchPurchaseOrders,
   createPurchaseOrder,
@@ -85,7 +86,7 @@ import SupplierDeliveries from "./SupplierDeliveries";
 import type { SupplierTab } from "./SupplierDeliveries";
 import SupplierList from "./SupplierList";
 import { downloadSupplierListTemplate } from "./supplierListTemplate";
-import { readSupplierListFile } from "./supplierListFile";
+import { inspectSupplierListFile } from "./supplierListFile";
 import PdfPriceListReview from "./PdfPriceListReview";
 import { compareLine, heldCandidates, indexExisting, isBigMove, summarise } from "./priceListChanges";
 import PriceCheckCards from "./PriceCheckCards";
@@ -1458,12 +1459,32 @@ export default function App() {
         .finally(() => setPdfReading(false));
       return;
     }
-    readSupplierListFile(file)
-      .then((rows) => {
-        setImportRows(rows);
-        if (rows.length === 0) {
-          setImportError('No valid rows found — each row should read name, unit, price, e.g. "Beef mince 5%, kg, 7.40".');
+    inspectSupplierListFile(file)
+      .then((res) => {
+        // A file that follows the template is used as it is. Anything else is read by
+        // the AI and checked by the person, so no column is guessed silently.
+        if (res.matchesTemplate) {
+          setImportRows(res.rows);
+          return;
         }
+        setImportRows([]);
+        if (!res.text.trim()) {
+          setImportError("That file is empty.");
+          return;
+        }
+        if (!accessToken) return;
+        setPdfReading(true);
+        readPriceListSheet(accessToken, res.text)
+          .then((data) => {
+            if (data.rows.length === 0) setImportError("No products with a price were found in that file.");
+            else setPdfReview({ fileName: file.name, data });
+          })
+          .catch((err) =>
+            setImportError(
+              (err instanceof Error ? err.message : "Could not read that file.") + " You can also use the template."
+            )
+          )
+          .finally(() => setPdfReading(false));
       })
       .catch(() => {
         setImportRows([]);
@@ -3447,9 +3468,9 @@ export default function App() {
                 accept=".csv,text/csv,.xlsx,.xls,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                 onChange={handleImportFile}
               />
-              {pdfReading && <p className="hint">Reading the PDF with AI. This can take up to a minute.</p>}
+              {pdfReading && <p className="hint">Reading the file with AI. This can take up to a minute.</p>}
               <div className="vhint">
-                CSV, Excel or PDF. One product per row: name, unit, price, e.g. "Beef mince 5%, kg, 7.40".
+                CSV, Excel or PDF. The template layout is used as it is; any other layout is read by AI for you to check.
                 <HelpLink topic="suppliers" ask="price-list-format" />
                 <br />
                 <button type="button" className="mini" style={{ marginTop: 6 }} onClick={() => downloadSupplierListTemplate()}>

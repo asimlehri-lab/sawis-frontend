@@ -1870,6 +1870,21 @@ export async function readPriceListPdf(accessToken: string, file: File): Promise
   return res.json();
 }
 
+// An Excel or CSV list that does not follow the template: the page sends the
+// sheet's text, the AI reads it, and the same check window opens as for a PDF.
+export async function readPriceListSheet(accessToken: string, text: string): Promise<PdfPriceList> {
+  const res = await fetch(`${API_URL}/api/catalog/suppliers/read_price_list_sheet/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) {
+    const j = await res.json().catch(() => null);
+    throw new Error((j && typeof j.detail === "string" && j.detail) || "Could not read that file.");
+  }
+  return res.json();
+}
+
 export async function bulkImportSupplierItems(
   accessToken: string,
   input: BulkImportSupplierItemsInput

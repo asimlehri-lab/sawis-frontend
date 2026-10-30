@@ -5,7 +5,7 @@ import type { SupplierListRow } from "./supplierListFile";
 import { compareLine, indexExisting, isBigMove, summarise } from "./priceListChanges";
 import type { ExistingLine } from "./priceListChanges";
 
-// Shows what the AI reader found in a supplier's PDF so the person can fix
+// Shows what the AI reader found in a supplier's file so the person can fix
 // names, units and prices and drop lines before they join the price list.
 // Nothing is stored here: "Use these" hands the rows back to the normal
 // upload, which stores them as it does for an Excel file.
@@ -72,7 +72,7 @@ export default function PdfPriceListReview({ fileName, data, currency, existing,
         <div className="im-note">
           ✓ <b>{data.rows.length} products</b> read from {fileName}
           {data.valid_from ? `, valid from ${data.valid_from}` : ""}. The AI can misread a line, so check the names, units and
-          prices against the PDF. Prices are the case or unit price as printed, before VAT.
+          prices against the original file. Prices are the case or unit price as printed, before VAT.
         </div>
         {data.truncated && (
           <p className="error">The list was long and may be cut off. Check the last lines, or upload the rest as a second file.</p>
@@ -105,7 +105,7 @@ export default function PdfPriceListReview({ fileName, data, currency, existing,
                   <b>{summary.priceChanged}</b> price{summary.priceChanged > 1 ? "s" : ""} changed
                   {summary.bigMoves > 0 && (
                     <>
-                      , <b>{summary.bigMoves}</b> by half or more. Check those against the PDF
+                      , <b>{summary.bigMoves}</b> by half or more. Check those against the original file
                     </>
                   )}
                   .
