@@ -1607,7 +1607,9 @@ export default function ItemDetail({
         })()}
         {itemSuppliers.length === 0 && <p className="muted">No suppliers linked yet.</p>}
         {itemSuppliers.map((row) => {
-          const cheapest = itemSuppliers.reduce((min, r) =>
+          // Same rule as costing: the cheapest price above zero (a link priced at 0 has no price yet).
+          const pricedRows = itemSuppliers.filter((r) => Number(r.unit_price) > 0);
+          const cheapest = (pricedRows.length ? pricedRows : itemSuppliers).reduce((min, r) =>
             Number(r.unit_price) < Number(min.unit_price) ? r : min
           );
           const isDefault = itemSuppliers.length > 1 && item.default_supplier === row.supplier;

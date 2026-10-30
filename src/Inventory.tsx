@@ -335,8 +335,13 @@ export default function Inventory({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, activeLocation, items.length, refreshTick]);
 
+  // The cheapest supplier price above zero, the same rule the backend costs with
+  // (Item.cost_and_source). A link priced at 0 means "no price yet", not a free item.
   function cheapestPrice(itemId: string): number | null {
-    const prices = itemSupplierLinks.filter((l) => l.item === itemId).map((l) => Number(l.unit_price));
+    const prices = itemSupplierLinks
+      .filter((l) => l.item === itemId)
+      .map((l) => Number(l.unit_price))
+      .filter((p) => p > 0);
     if (!prices.length) return null;
     return Math.min(...prices);
   }
