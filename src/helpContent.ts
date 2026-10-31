@@ -398,7 +398,7 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "That means there's no price on file yet for that item with this supplier — link one from the item's page, or type the price in manually on this line.",
       },
       {
-        q: "I only know the line total (for example from Amazon). Do I have to work out the unit price?",
+        q: "I only know the line total (for example from an online order or a receipt). Do I have to work out the unit price?",
         a: "No. Under the price box click \"Know the line total instead? Type it\" and type the total you paid. SAWIS divides it by the quantity and fills in the unit price for you, to six decimal places, and shows the price per g and per kg (or per ml and per litre) underneath. Type in either box and the other follows; whichever you typed last is the one that stays put, so if you change the quantity afterwards a typed total stays the same and the unit price moves. If the total already includes VAT, tick \"The total includes VAT\" and set the VAT % so SAWIS can take the VAT off first. It works the same way on Edit line, Add line and the price in Receive delivery.",
       },
       {

@@ -129,7 +129,7 @@ export default function LinePriceInput({
         />
       </div>
       <label className="lt-vat">
-        <input type="checkbox" checked={withVat} onChange={(e) => setWithVat(e.target.checked)} /> The total includes VAT (as on Amazon)
+        <input type="checkbox" checked={withVat} onChange={(e) => setWithVat(e.target.checked)} /> The total includes VAT
       </label>
       {withVat && (vatPct.trim() === "" || !(vat > 0)) && <div className="lt-note">Set the VAT % above so the VAT can be taken off.</div>}
       {showReadout && (
