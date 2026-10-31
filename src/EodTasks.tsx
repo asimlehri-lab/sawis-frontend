@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
+import { costGoesUp, suggestionCost, useSuggestionAnswer } from "./DefaultSuggestion";
 import {
   costBand,
   costBandColor,
   effectiveTargetPct,
+  defaultCurrency,
   fetchActivityFeed,
+  fetchDefaultSuggestions,
   fetchNotifications,
   fetchPriceChecks,
   fetchSections,
@@ -15,6 +18,7 @@ import type {
   AppNotification,
   CatalogItem,
   CostBand,
+  DefaultSuggestion,
   Location,
   Me,
   PriceCheckRow,
@@ -323,6 +327,14 @@ function ManagerTasks({
   // Price list lines where a supplier's new list changed a unit, pack size or price a lot and a
   // manager still has to decide (see Price check).
   const [priceChecks, setPriceChecks] = useState<PriceCheckRow[]>([]);
+  // "Make this supplier the default?" questions waiting for a manager.
+  const [defaultAsks, setDefaultAsks] = useState<DefaultSuggestion[]>([]);
+  const [asksOpen, setAsksOpen] = useState(false);
+  const currency = defaultCurrency(locations);
+  const askAnswer = useSuggestionAnswer(accessToken, () => {
+    fetchDefaultSuggestions(accessToken).then(setDefaultAsks).catch(() => {});
+    onItemsChanged();
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -338,6 +350,9 @@ function ManagerTasks({
         .catch(() => {});
       fetchPriceChecks(accessToken)
         .then((r) => !cancelled && setPriceChecks(r))
+        .catch(() => {});
+      fetchDefaultSuggestions(accessToken)
+        .then((r) => !cancelled && setDefaultAsks(r))
         .catch(() => {});
     }
     load();
@@ -625,6 +640,80 @@ function ManagerTasks({
                     Review prices
                   </button>
                 </div>
+              </>
+            )}
+          </div>
+
+          <div className={`ov-tile ${defaultAsks.length ? "ov-warn" : "ov-good"}`}>
+            <div className="ov-head">
+              <span className="ov-icon">🤝</span>
+              <span className="ov-title">Supplier suggestions</span>
+              <span className="ov-count">{defaultAsks.length}</span>
+            </div>
+            {defaultAsks.length === 0 ? (
+              <p className="ov-empty">No default supplier questions right now.</p>
+            ) : (
+              <>
+                <div className="ov-big">
+                  {defaultAsks.length}
+                  <span> {defaultAsks.length === 1 ? "item" : "items"} to decide</span>
+                </div>
+                <div className="ov-line-sub">
+                  You keep buying these from a supplier that is not the default. Nothing changes unless you say yes.
+                </div>
+                <div className="ov-actions">
+                  <button type="button" className="btn-primary small" onClick={() => setAsksOpen((v) => !v)}>
+                    {asksOpen ? "Hide" : "Review suggestions"}
+                  </button>
+                </div>
+                {asksOpen && (
+                  <div className="dsq-scroll">
+                    <table className="dsq-table">
+                      <thead>
+                        <tr>
+                          <th>Item</th>
+                          <th>Bought from</th>
+                          <th>Cost now → if changed</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {defaultAsks.map((s) => (
+                          <tr key={s.item}>
+                            <td>
+                              <button type="button" className="link-btn" onClick={() => onOpenItem(s.item)}>
+                                {s.item_name}
+                              </button>
+                              {s.recipes > 0 && <div className="muted">{s.recipes} recipe{s.recipes === 1 ? "" : "s"}</div>}
+                            </td>
+                            <td>
+                              {s.supplier_name} {s.count}×
+                              <div className="muted">default: {s.current_default_name}</div>
+                            </td>
+                            <td>
+                              {suggestionCost(s.price_now, s.base_unit, currency)} →{" "}
+                              <b className={costGoesUp(s) ? "dsq-up" : undefined}>{suggestionCost(s.price_new, s.base_unit, currency)}</b>
+                            </td>
+                            <td>
+                              <div className="dsq-btns">
+                                <button type="button" className="btn-primary small" disabled={askAnswer.busy !== null} onClick={() => askAnswer.answer(s, "accept")}>
+                                  Make default
+                                </button>
+                                <button type="button" className="btn-ghost small" disabled={askAnswer.busy !== null} onClick={() => askAnswer.answer(s, "later")}>
+                                  Not now
+                                </button>
+                                <button type="button" className="btn-ghost small" disabled={askAnswer.busy !== null} onClick={() => askAnswer.answer(s, "keep")}>
+                                  Keep current
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {askAnswer.error && <p className="error">{askAnswer.error}</p>}
+                  </div>
+                )}
               </>
             )}
           </div>

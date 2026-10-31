@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
+import LinePriceInput, { unitMoney } from "./LinePriceInput";
 import {
   fetchPurchaseOrder,
   updatePurchaseOrder,
@@ -472,7 +473,7 @@ export default function ProcurementDetail({
       const bodyLines = po.lines
         .map((l) => {
           const f = poLineFigures(l, items.find((it) => it.id === l.item)?.base_unit ?? "");
-          const line = `${f.qty}${f.label ? ` ${f.label}` : ""} × ${l.item_name} @ ${formatMoney(f.unitPrice, currency, f.unitPrice < 0.1 ? 4 : 2)}${f.unit ? ` per ${f.unit}` : ""} = ${formatMoney(f.total, currency)}`;
+          const line = `${f.qty}${f.label ? ` ${f.label}` : ""} × ${l.item_name} @ ${unitMoney(f.unitPrice, currency)}${f.unit ? ` per ${f.unit}` : ""} = ${formatMoney(f.total, currency)}`;
           return encodeURIComponent(line);
         })
         .join("%0D%0A");
@@ -730,7 +731,7 @@ export default function ProcurementDetail({
         const row: ReceiveLineOverride = {
           id: l.id,
           received_qty: String(Number((qtyIn * f).toFixed(3))),
-          received_unit_price: String(Number((priceIn / f).toFixed(4))),
+          received_unit_price: String(Number((priceIn / f).toFixed(6))),
         };
         // Remember the unit the delivery was received in, but leave plain
         // item-unit lines alone.
@@ -950,7 +951,7 @@ export default function ProcurementDetail({
     const factor = unitFactor(item, choice.unit, choice.packQty);
     if (!factor) return;
     const price = Number(link.unit_price) * factor;
-    if (Number.isFinite(price)) setAddPrice(price.toFixed(price < 0.1 ? 4 : 2));
+    if (Number.isFinite(price)) setAddPrice(priceText(price));
   }
 
   // Resolves the Add-line form's current qty/price into the selected item's
@@ -989,7 +990,7 @@ export default function ProcurementDetail({
         item: addItemId,
         department: addDept,
         qty: resolved.qty.toFixed(3),
-        unit_price: resolved.unitPrice.toFixed(4),
+        unit_price: resolved.unitPrice.toFixed(6),
         vat_rate: addVatPct.trim() === "" ? undefined : (Number(addVatPct) / 100).toFixed(4),
         // Freeze the as-invoiced unit/qty onto the line itself when a
         // conversion is in play, same as a receive-via-Scan-receipt line
@@ -1208,7 +1209,7 @@ export default function ProcurementDetail({
                     <td>{l.item_name}</td>
                     <td>{f.qty}</td>
                     <td>{f.label || "—"}</td>
-                    <td>{formatMoney(f.unitPrice, currency, f.unitPrice < 0.1 ? 4 : 2)}</td>
+                    <td>{unitMoney(f.unitPrice, currency)}</td>
                     <td>{formatMoney(f.total, currency)}</td>
                   </tr>
                 );
@@ -1483,7 +1484,7 @@ export default function ProcurementDetail({
                       `${Number(l.qty).toFixed(2)}${baseUnit ? ` ${baseUnit}` : ""}`
                     )}
                   </td>
-                  <td className="num">{formatMoney(Number(l.unit_price), currency)}</td>
+                  <td className="num">{unitMoney(Number(l.unit_price), currency)}</td>
                   <td className="num">
                     {editable ? (
                       <input
@@ -1585,23 +1586,28 @@ export default function ProcurementDetail({
                   onChange={(e) => setAddQty(e.target.value)}
                 />
               </div>
-              <div className="field">
-                <label>
-                  {addSupplierUnit && addSupplierUnit !== items.find((it) => it.id === addItemId)?.base_unit
-                    ? `Price per ${addSupplierUnit}`
-                    : "Unit price"}
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={addPrice}
-                  onChange={(e) => {
-                    setAddPrice(e.target.value);
-                    setAddPriceTouched(true);
-                  }}
-                />
-              </div>
+              {(() => {
+                const addItem = items.find((it) => it.id === addItemId);
+                const hasPack = !!addItem && !!addSupplierUnit && addSupplierUnit !== addItem.base_unit;
+                const rawQty = Number(addQty || "0");
+                const resolved = addItem && hasPack ? resolveAddLineBaseUnits(addItem) : null;
+                const factor = !addItem ? null : !hasPack ? 1 : resolved && rawQty > 0 ? resolved.qty / rawQty : null;
+                return (
+                  <LinePriceInput
+                    label={hasPack ? `Price per ${addSupplierUnit}` : "Unit price"}
+                    qty={addQty}
+                    price={addPrice}
+                    onPrice={(v) => {
+                      setAddPrice(v);
+                      setAddPriceTouched(true);
+                    }}
+                    vatPct={addVatPct}
+                    factor={factor}
+                    baseUnit={addItem?.base_unit ?? ""}
+                    currency={currency}
+                  />
+                );
+              })()}
             </div>
             {addItemId &&
               (() => {
@@ -1615,21 +1621,13 @@ export default function ProcurementDetail({
                   <div className={`scan-row-total ${hasPack && !resolved ? "warn" : "ok"}`}>
                     {!hasPack && Number(addQty || "0") > 0 && (
                       <span className="scan-row-total-line">
-                        {`= ${Number(Number(addQty).toFixed(3)).toLocaleString("en-GB")} ${addItem.base_unit} in total at ${formatMoney(
-                          Number(addPrice || "0"),
-                          currency,
-                          Number(addPrice || "0") < 0.1 ? 4 : 2
-                        )} per ${addItem.base_unit}`}
+                        {`= ${Number(Number(addQty).toFixed(3)).toLocaleString("en-GB")} ${addItem.base_unit} in total at ${unitMoney(Number(addPrice || "0"), currency)} per ${addItem.base_unit}`}
                       </span>
                     )}
                     {hasPack &&
                       (resolved ? (
                         <span className="scan-row-total-line">
-                          {`= ${Number(resolved.qty.toFixed(3)).toLocaleString("en-GB")} ${addItem.base_unit} in total at ${formatMoney(
-                            Number(addPrice || "0"),
-                            currency,
-                            Number(addPrice || "0") < 0.1 ? 4 : 2
-                          )} per ${addSupplierUnit}`}
+                          {`= ${Number(resolved.qty.toFixed(3)).toLocaleString("en-GB")} ${addItem.base_unit} in total at ${unitMoney(Number(addPrice || "0"), currency)} per ${addSupplierUnit}`}
                         </span>
                       ) : (
                         <span className="scan-row-total-line">Pick or add the pack size above to see the real total</span>
@@ -1814,7 +1812,7 @@ export default function ProcurementDetail({
                         {status === "missing" && <span className="badge" style={{ marginLeft: 6 }}>not in photo</span>}
                       </td>
                       <td className="num muted">
-                        {ordered.qty} {ordered.unit} @ {formatMoney(ordered.unitPrice, currency, ordered.unitPrice < 0.1 ? 4 : 2)}
+                        {ordered.qty} {ordered.unit} @ {unitMoney(ordered.unitPrice, currency)}
                       </td>
                       <td className="recv-unit">
                         <SupplierUnitPicker
@@ -1845,19 +1843,21 @@ export default function ProcurementDetail({
                         />
                       </td>
                       <td className="num">
-                        <input
-                          className="par-in"
-                          type="number"
-                          min="0"
-                          step="any"
-                          style={status === "diff" ? { background: "var(--caution-soft)" } : undefined}
-                          value={receiveLines[l.id]?.price ?? l.unit_price}
-                          onChange={(e) =>
+                        <LinePriceInput
+                          compact
+                          qty={receiveLines[l.id]?.qty ?? l.qty}
+                          price={receiveLines[l.id]?.price ?? l.unit_price}
+                          onPrice={(v) =>
                             setReceiveLines((prev) => ({
                               ...prev,
-                              [l.id]: { qty: prev[l.id]?.qty ?? l.qty, price: e.target.value },
+                              [l.id]: { qty: prev[l.id]?.qty ?? l.qty, price: v },
                             }))
                           }
+                          vatPct={l.effective_vat_rate ? String(Number((Number(l.effective_vat_rate) * 100).toFixed(2))) : ""}
+                          factor={lineItem ? unitFactor(lineItem, choice.unit, choice.packQty) : 1}
+                          baseUnit={lineItem?.base_unit ?? ""}
+                          currency={currency}
+                          inputStyle={status === "diff" ? { background: "var(--caution-soft)" } : undefined}
                         />
                       </td>
                     </tr>

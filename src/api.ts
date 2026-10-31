@@ -166,7 +166,7 @@ export interface Me {
   id: string;
   email: string;
   name: string;
-  org: { id: string; name: string; supplier_price_fresh_days?: number };
+  org: { id: string; name: string; supplier_price_fresh_days?: number; default_supplier_ask_after?: number };
   memberships: Membership[];
 }
 
@@ -2258,6 +2258,57 @@ export async function updateSupplierFreshDays(accessToken: string, orgId: string
   return (await res.json()).supplier_price_fresh_days as number;
 }
 
+// "You bought X from B three times in a row. Make B the default?" Ask first, never automatic.
+export interface DefaultSuggestion {
+  item: string;
+  item_name: string;
+  base_unit: string;
+  supplier: string;
+  supplier_name: string;
+  current_default: string;
+  current_default_name: string;
+  count: number;
+  dates: string[];
+  price_now: string | null;
+  price_new: string | null;
+  recipes: number;
+}
+
+export async function fetchDefaultSuggestions(accessToken: string): Promise<DefaultSuggestion[]> {
+  const res = await fetch(`${API_URL}/api/catalog/items/default-suggestions/`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error("Could not load supplier suggestions.");
+  const body = await res.json();
+  return Array.isArray(body) ? body : body.results ?? [];
+}
+
+// accept = make it the default; later = ask again after the next order from that supplier; keep = stop asking for this item.
+export async function answerDefaultSuggestion(
+  accessToken: string,
+  itemId: string,
+  action: "accept" | "later" | "keep",
+): Promise<void> {
+  const res = await fetch(`${API_URL}/api/catalog/items/${itemId}/default-suggestion/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ action }),
+  });
+  if (res.status === 409) throw new Error("This question is already answered. Refresh to see the latest.");
+  if (!res.ok) throw new Error("Could not save your answer.");
+}
+
+// How many orders in a row from one supplier before we ask. 0 turns the question off.
+export async function updateDefaultAskAfter(accessToken: string, orgId: string, n: number): Promise<number> {
+  const res = await fetch(`${API_URL}/api/tenancy/organizations/${orgId}/`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ default_supplier_ask_after: n }),
+  });
+  if (!res.ok) throw new Error("Could not save that.");
+  return (await res.json()).default_supplier_ask_after as number;
+}
+
 export async function deleteItemSupplier(accessToken: string, id: string): Promise<void> {
   const res = await fetch(`${API_URL}/api/catalog/item-suppliers/${id}/`, {
     method: "DELETE",
@@ -3698,4 +3749,4 @@ export async function scanEndOfDaySales(accessToken: string, file: File): Promis
     throw new Error((body && typeof body === "object" && body.detail) || "Could not scan that receipt.");
   }
   return res.json();
-}
+}

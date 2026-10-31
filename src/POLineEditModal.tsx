@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { formatMoney, unitFactor, updatePOLine } from "./api";
 import type { CatalogItem, POLineRow } from "./api";
+import LinePriceInput, { unitMoney } from "./LinePriceInput";
 import SupplierUnitPicker from "./SupplierUnitPicker";
 import type { UnitChoice } from "./SupplierUnitPicker";
 
@@ -66,7 +67,7 @@ export default function POLineEditModal({ line, item, currency, accessToken, onC
     try {
       await updatePOLine(accessToken, line.id, {
         qty: resolved.qty.toFixed(3),
-        unit_price: resolved.unitPrice.toFixed(4),
+        unit_price: resolved.unitPrice.toFixed(6),
         supplier_unit: converting ? unit : "",
         supplier_qty: converting ? String(rawQty) : null,
         // Only sent when it was changed, so an inherited rate stays inherited.
@@ -78,8 +79,6 @@ export default function POLineEditModal({ line, item, currency, accessToken, onC
       setSaving(false);
     }
   }
-
-  const priceDecimals = (n: number) => (n < 0.1 ? 4 : 2);
 
   return (
     <div className="modal-backdrop" onClick={() => !saving && onClose()}>
@@ -103,20 +102,22 @@ export default function POLineEditModal({ line, item, currency, accessToken, onC
             <label>{converting ? `Qty (in ${unit})` : "Qty"}</label>
             <input type="number" min="0" step="any" value={qty} onChange={(e) => setQty(e.target.value)} />
           </div>
-          <div className="field">
-            <label>{converting ? `Price per ${unit}` : "Unit price"}</label>
-            <input type="number" min="0" step="any" value={price} onChange={(e) => setPrice(e.target.value)} />
-          </div>
+          <LinePriceInput
+            label={converting ? `Price per ${unit}` : "Unit price"}
+            qty={qty}
+            price={price}
+            onPrice={setPrice}
+            vatPct={vat}
+            factor={factor}
+            baseUnit={base}
+            currency={currency}
+          />
         </div>
         {item && (resolved || lineTotal > 0) && (
           <div className={`scan-row-total ${converting && !resolved ? "warn" : "ok"}`}>
             {resolved ? (
               <span className="scan-row-total-line">
-                {`= ${Number(resolved.qty.toFixed(3)).toLocaleString("en-GB")} ${base} in total at ${formatMoney(
-                  resolved.unitPrice,
-                  currency,
-                  priceDecimals(resolved.unitPrice)
-                )} per ${base}`}
+                {`= ${Number(resolved.qty.toFixed(3)).toLocaleString("en-GB")} ${base} in total at ${unitMoney(resolved.unitPrice, currency)} per ${base}`}
               </span>
             ) : (
               <span className="scan-row-total-line">Pick or add the pack size above to see the real total</span>

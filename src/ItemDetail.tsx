@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
+import { DefaultSuggestionBanner } from "./DefaultSuggestion";
 import { daysSince, effectiveCost } from "./costing";
 import {
   fetchItem,
@@ -9,6 +10,7 @@ import {
   fetchOnHand,
   BASE_UNITS,
   fetchItemSuppliers,
+  fetchDefaultSuggestions,
   createItemSupplier,
   createItemStockUnit,
   updateItemStockUnit,
@@ -29,6 +31,7 @@ import {
 import type {
   CatalogItem,
   Category,
+  DefaultSuggestion,
   Location,
   ItemSupplierRow,
   ItemStockUnit,
@@ -265,6 +268,8 @@ export default function ItemDetail({
   const [settingDefaultId, setSettingDefaultId] = useState<string | null>(null);
   const [removeDefaultOpen, setRemoveDefaultOpen] = useState(false);
   const [removingDefault, setRemovingDefault] = useState(false);
+  // "Make X the default?" question for this item (managers and admins only).
+  const [defaultAsk, setDefaultAsk] = useState<DefaultSuggestion | null>(null);
   // Per-suggestion "how many {base_unit} in 1 {supplier's unit}?" overrides —
   // only ever shown/used when the supplier's unit can't be auto-converted
   // (a pack/case, or a unit family mismatch). Keyed by SupplierItemRow.id;
@@ -296,7 +301,7 @@ export default function ItemDetail({
         setItem(it);
         setVatPct(it.vat_rate ? (Number(it.vat_rate) * 100).toString() : "");
         setTargetWasteInput(it.target_waste_pct ?? "");
-        setTargetCostInput(it.target_cost ? String(parseFloat(Number(it.target_cost).toFixed(4))) : "");
+        setTargetCostInput(it.target_cost ? String(parseFloat(Number(it.target_cost).toFixed(6))) : "");
         Promise.all(
           it.holdings.map((h) =>
             fetchOnHand(accessToken, it.id, h.location, h.department).then((qty) => [h.id, qty] as const)
@@ -319,6 +324,18 @@ export default function ItemDetail({
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [itemId]);
+
+  function loadDefaultAsk() {
+    if (readOnly) return;
+    fetchDefaultSuggestions(accessToken)
+      .then((rows) => setDefaultAsk(rows.find((r) => r.item === itemId) ?? null))
+      .catch(() => setDefaultAsk(null));
+  }
+  useEffect(() => {
+    setDefaultAsk(null);
+    loadDefaultAsk();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemId, readOnly]);
 
   useEffect(() => {
     if (locations.length && !newLocation) setNewLocation(locations[0].id);
@@ -400,7 +417,7 @@ export default function ItemDetail({
     try {
       const unitDiffers = si.unit !== item.base_unit;
       const updated = await updateItemSupplier(accessToken, row.id, {
-        unit_price: converted.toFixed(4),
+        unit_price: converted.toFixed(6),
         matched_from: si.id,
         supplier_unit: unitDiffers ? si.unit : "",
         supplier_unit_price: unitDiffers ? si.price : null,
@@ -622,7 +639,7 @@ export default function ItemDetail({
       await createItemSupplier(accessToken, {
         item: item.id,
         supplier: sug.supplierItem.supplier,
-        unit_price: converted.toFixed(4),
+        unit_price: converted.toFixed(6),
         matched_from: sug.supplierItem.id,
         // Only recorded when the supplier's unit actually differs from the
         // item's own — keeps a same-unit link exactly as simple as before
@@ -1580,6 +1597,18 @@ export default function ItemDetail({
           {itemSuppliers.length > 1 && " Costs follow the default supplier, else the cheapest."}
           {itemSuppliers.length > 1 && <HelpLink topic="items-recipes" ask="default-supplier" />}
         </p>
+        {defaultAsk && !readOnly && (
+          <DefaultSuggestionBanner
+            suggestion={defaultAsk}
+            currency={currency}
+            accessToken={accessToken}
+            onAnswered={() => {
+              setDefaultAsk(null);
+              reload();
+              onChanged();
+            }}
+          />
+        )}
         {(() => {
           const priced = itemSuppliers.filter((r) => Number(r.unit_price) > 0);
           const eff = effectiveCost(priced, item.default_supplier);

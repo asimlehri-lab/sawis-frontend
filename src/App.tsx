@@ -2109,7 +2109,7 @@ export default function App() {
             overrides.push({
               id: line.id,
               received_qty: conv.qty.toFixed(3),
-              received_unit_price: conv.unitPrice.toFixed(4),
+              received_unit_price: conv.unitPrice.toFixed(6),
               // undefined (not blank/"0") when the row's VAT % field is
               // empty -- JSON.stringify drops it, so receive() leaves
               // whatever's already on the line alone instead of zeroing it.
@@ -2172,7 +2172,7 @@ export default function App() {
           item: row.matchedItemId,
           department: "kitchen",
           qty: conv.qty.toFixed(3),
-          unit_price: conv.unitPrice.toFixed(4),
+          unit_price: conv.unitPrice.toFixed(6),
           vat_rate: vatFractionFromPct(row.vatPct),
         });
         // Pushed for every row (not just ones needing a unit override)
@@ -2185,7 +2185,7 @@ export default function App() {
         overrides.push({
           id: createdLine.id,
           received_qty: conv.qty.toFixed(3),
-          received_unit_price: conv.unitPrice.toFixed(4),
+          received_unit_price: conv.unitPrice.toFixed(6),
           raw_description: row.description,
           ...(item && row.supplierUnit && row.supplierUnit !== item.base_unit
             ? {
@@ -3141,6 +3141,9 @@ export default function App() {
                   loadItems(accessToken);
                   fetchItemSuppliers(accessToken).then(setItemSupplierLinks).catch(() => {});
                 }}
+                onAskAfterChanged={(n) =>
+                  setMe((m) => (m ? { ...m, org: { ...m.org, default_supplier_ask_after: n } } : m))
+                }
                 squareReturn={SQUARE_RETURN}
                 onItemsChanged={() => loadItems(accessToken)}
                 onRecipesChanged={() => loadRecipes(accessToken)}
@@ -4327,4 +4330,4 @@ export default function App() {
       )}
     </div>
   );
-}
+}

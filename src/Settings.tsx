@@ -22,6 +22,7 @@ import {
   currencySymbol,
   formatMoney,
   updateSupplierFreshDays,
+  updateDefaultAskAfter,
 } from "./api";
 import type { Allergen, BulkItemInput, CatalogItem, Category, CurrencyCode, InventoryCheckSchedule, Location, OwnBusinessName, Recipe } from "./api";
 import CategoryManagerModal from "./CategoryManagerModal";
@@ -44,8 +45,9 @@ interface Props {
   locations: Location[];
   // The business: its id and how many days a supplier can go without a delivery or price update
   // before it is left out of costing. onFreshDaysChanged refreshes what depends on it.
-  org: { id: string; supplier_price_fresh_days?: number };
+  org: { id: string; supplier_price_fresh_days?: number; default_supplier_ask_after?: number };
   onFreshDaysChanged: (days: number) => void;
+  onAskAfterChanged: (n: number) => void;
   // Set when Square has just sent the person back to the app (see squareApi).
   squareReturn?: SquareReturn;
   // App.tsx caches `items`/`recipes` and only reloads them on demand — a
@@ -170,7 +172,7 @@ const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
   { key: "account", label: "Account" },
 ];
 
-export default function Settings({ accessToken, items, recipes, allergens, locations, org, onFreshDaysChanged, squareReturn = null, onItemsChanged, onRecipesChanged, onCategoriesChanged }: Props) {
+export default function Settings({ accessToken, items, recipes, allergens, locations, org, onFreshDaysChanged, onAskAfterChanged, squareReturn = null, onItemsChanged, onRecipesChanged, onCategoriesChanged }: Props) {
   // Coming back from Square's sign-in page lands straight on Integrations.
   const [tab, setTab] = useState<SettingsTab>(squareReturn ? "integrations" : "locations");
   // Every pane stays mounted and is only hidden when it is not the open tab,
@@ -202,6 +204,8 @@ export default function Settings({ accessToken, items, recipes, allergens, locat
         <CategorySettingsPanel accessToken={accessToken} onCategoriesChanged={onCategoriesChanged} />
         <div style={{ height: 20 }} />
         <SupplierPricesPanel accessToken={accessToken} orgId={org.id} days={org.supplier_price_fresh_days ?? 90} onSaved={onFreshDaysChanged} />
+        <div style={{ height: 20 }} />
+        <DefaultAskPanel accessToken={accessToken} orgId={org.id} after={org.default_supplier_ask_after ?? 3} onSaved={onAskAfterChanged} />
         <div style={{ height: 20 }} />
         <OwnNamesPanel accessToken={accessToken} />
       </div>
@@ -501,6 +505,86 @@ function SupplierPricesPanel({
       {error && <p className="error">{error}</p>}
       <p className="hint" style={{ marginBottom: 0 }}>
         The default is 90. Choose a longer time if you buy some items only a few times a year.
+      </p>
+    </div>
+  );
+}
+
+// How many received orders in a row from one supplier before we ask "make it the default?" (0 = never ask).
+function DefaultAskPanel({
+  accessToken,
+  orgId,
+  after,
+  onSaved,
+}: {
+  accessToken: string;
+  orgId: string;
+  after: number;
+  onSaved: (n: number) => void;
+}) {
+  const [value, setValue] = useState(String(after));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const n = Number(value);
+  const valid = Number.isInteger(n) && n >= 0 && n <= 10;
+  const dirty = n !== after;
+
+  async function save() {
+    if (!valid || !dirty) return;
+    setSaving(true);
+    setError(null);
+    setSaved(false);
+    try {
+      const next = await updateDefaultAskAfter(accessToken, orgId, n);
+      onSaved(next);
+      setSaved(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save that.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <h2 style={{ marginTop: 0 }}>Default supplier question</h2>
+      <p className="hint">
+        When an item comes from the same supplier several received orders in a row, a manager is asked if that supplier should become its default.
+        Nothing changes until someone says yes.
+        <HelpLink topic="settings" ask="default-supplier-question" />
+      </p>
+      <div className="tc-row">
+        <span className="muted">Ask after</span>
+        <input
+          className="price-in"
+          type="number"
+          min={0}
+          max={10}
+          step={1}
+          value={value}
+          onChange={(e) => {
+            setValue(e.target.value);
+            setSaved(false);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              save();
+            }
+          }}
+          aria-label="Orders in a row before asking about a default supplier"
+        />
+        <span className="muted">received orders in a row</span>
+        <button type="button" className="btn-ghost small" disabled={saving || !valid || !dirty} onClick={save}>
+          {saving ? "Saving…" : "Save"}
+        </button>
+        {saved && !dirty && <span className="muted" style={{ fontSize: 12 }}>Saved</span>}
+      </div>
+      {!valid && <p className="error">Use a whole number from 0 to 10.</p>}
+      {error && <p className="error">{error}</p>}
+      <p className="hint" style={{ marginBottom: 0 }}>
+        The default is 3. Type 0 to stop asking.
       </p>
     </div>
   );

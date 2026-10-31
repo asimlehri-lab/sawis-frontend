@@ -398,6 +398,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "That means there's no price on file yet for that item with this supplier — link one from the item's page, or type the price in manually on this line.",
       },
       {
+        q: "I only know the line total (for example from Amazon). Do I have to work out the unit price?",
+        a: "No. Under the price box click \"Know the line total instead? Type it\" and type the total you paid. SAWIS divides it by the quantity and fills in the unit price for you, to six decimal places, and shows the price per g and per kg (or per ml and per litre) underneath. Type in either box and the other follows; whichever you typed last is the one that stays put, so if you change the quantity afterwards a typed total stays the same and the unit price moves. If the total already includes VAT, tick \"The total includes VAT\" and set the VAT % so SAWIS can take the VAT off first. It works the same way on Edit line, Add line and the price in Receive delivery.",
+      },
+      {
         q: "Can I order in a different unit than the item's base unit?",
         a: "Yes — on the line you're adding, use the Order in menu under the item. It lists the units this item already has: its base unit, any packs saved on it (such as carton or bag) and, for things weighed or poured, kg or L. If this supplier usually sells it in one of them, that one is already chosen and the price is filled in for it. If the pack you need isn't listed, choose + Add a pack size, give it a name and say what it holds in whichever unit suits you: 1.5 L, 2 kg, or even 12 of a bottle you already saved. SAWIS does the sum (for example 1 carton = 12 bottle = 18,000 ml) and shows it before you save. It is saved on the item, so it is also there when you count stock and on the next order. If you saved a pack with the wrong size (say 25 instead of 30), open the item, go to the Stock tab and change the number in its Stock units row; it saves when you click away.",
       },
@@ -680,6 +684,11 @@ export const HELP_TOPICS: HelpTopic[] = [
         id: "locations-settings",
         q: "What do the Locations settings mean?",
         a: "Currency only changes which symbol that location's prices and reports show. It is display only and does not convert money. Monthly overhead (rent, labour, utilities and other fixed costs, entered per month) feeds End of day's net margin estimate and the break-even on Reports; leave it blank to skip those. Recipe costs are ingredient costs only and never include overhead. The Food and Drink target % is what Reports and each recipe's own page flag as over or under. The VAT registration number is optional and only appears on the Purchases report.",
+      },
+      {
+        id: "default-supplier-question",
+        q: "What is the \"make this supplier the default?\" question?",
+        a: "When an item has a default supplier but its last few received orders in a row all came from another supplier, SAWIS asks a manager if that supplier should become the default. You see it on the item's Suppliers section and under End of day > Actions > Supplier suggestions, with the cost per unit now and if you say yes (higher costs are shown in amber). Make default changes the cost and re-costs recipes. Not now asks again after the next received order from that supplier. Keep current stops asking for that item. Nothing ever changes by itself. An Admin sets how many orders in a row (3 to start with, 0 turns it off) in Settings > Catalogue.",
       },
       {
         id: "supplier-prices-setting",
