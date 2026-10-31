@@ -96,7 +96,12 @@ export default function WasteLog({
   function cheapestPrice(itemId: string): number | null {
     // Same rule as costing everywhere else: the default supplier's price, else the cheapest.
     const links = itemSupplierLinks.filter((l) => l.item === itemId);
-    return effectiveCost(links, items.find((i) => i.id === itemId)?.default_supplier)?.price ?? null;
+    const it = items.find((i) => i.id === itemId);
+    const eff = effectiveCost(links, it?.default_supplier)?.price;
+    if (eff != null) return eff;
+    // No supplier has a price: cost from the item's target cost, as recipes do.
+    const target = it?.target_cost ? Number(it.target_cost) : 0;
+    return target > 0 ? target : null;
   }
 
   const unitCost = selectedItem ? cheapestPrice(selectedItem) : null;

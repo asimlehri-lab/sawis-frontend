@@ -342,7 +342,12 @@ export default function Inventory({
   // (Kept under its old name; it is passed down to the Live stock and count views.)
   function cheapestPrice(itemId: string): number | null {
     const links = itemSupplierLinks.filter((l) => l.item === itemId);
-    return effectiveCost(links, items.find((i) => i.id === itemId)?.default_supplier)?.price ?? null;
+    const it = items.find((i) => i.id === itemId);
+    const eff = effectiveCost(links, it?.default_supplier)?.price;
+    if (eff != null) return eff;
+    // No supplier has a price: cost from the item's target cost, as recipes do.
+    const target = it?.target_cost ? Number(it.target_cost) : 0;
+    return target > 0 ? target : null;
   }
 
   const sectionsHere = sections.filter((s) => s.location === activeLocation);

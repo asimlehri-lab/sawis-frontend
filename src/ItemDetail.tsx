@@ -263,6 +263,8 @@ export default function ItemDetail({
   const [linkingId, setLinkingId] = useState<string | null>(null);
   const [supplierError, setSupplierError] = useState<string | null>(null);
   const [settingDefaultId, setSettingDefaultId] = useState<string | null>(null);
+  const [removeDefaultOpen, setRemoveDefaultOpen] = useState(false);
+  const [removingDefault, setRemovingDefault] = useState(false);
   // Per-suggestion "how many {base_unit} in 1 {supplier's unit}?" overrides —
   // only ever shown/used when the supplier's unit can't be auto-converted
   // (a pack/case, or a unit family mismatch). Keyed by SupplierItemRow.id;
@@ -643,6 +645,17 @@ export default function ItemDetail({
       await saveField({ default_supplier: row.supplier });
     } finally {
       setSettingDefaultId(null);
+    }
+  }
+
+  // Take the default off: costing then uses the cheapest supplier that is still active.
+  async function handleRemoveDefault() {
+    setRemovingDefault(true);
+    try {
+      await saveField({ default_supplier: null });
+      setRemoveDefaultOpen(false);
+    } finally {
+      setRemovingDefault(false);
     }
   }
 
@@ -1762,7 +1775,32 @@ export default function ItemDetail({
                   {settingDefaultId === row.id ? "Setting…" : "Set as default"}
                 </button>
               )}
+              {isDefault && (
+                <button type="button" className="setdefaultbtn" onClick={() => setRemoveDefaultOpen((v) => !v)}>
+                  Remove default
+                </button>
+              )}
             </div>
+            {isDefault && removeDefaultOpen && (() => {
+              const without = effectiveCost(pricedRows, null);
+              const now = costedFrom?.price ?? null;
+              const next = without?.price ?? null;
+              const fmt = (v: number | null) => (v == null ? "no price" : `${formatMoney(v, currency, 4)}/${item.base_unit}`);
+              return (
+                <div className="sup-listhint">
+                  Without a default, the cheapest supplier that is still active sets the cost.{" "}
+                  {now != null && next != null && Math.abs(now - next) < 1e-9
+                    ? `The cost stays at ${fmt(now)}.`
+                    : `The cost goes from ${fmt(now)} to ${fmt(next)}${usedInRecipes.length ? `, and ${usedInRecipes.length} recipe${usedInRecipes.length === 1 ? "" : "s"} are re-costed` : ""}.`}{" "}
+                  <button type="button" className="link-btn" disabled={removingDefault} onClick={handleRemoveDefault}>
+                    {removingDefault ? "Removing…" : "Remove default"}
+                  </button>{" "}
+                  <button type="button" className="link-btn" onClick={() => setRemoveDefaultOpen(false)}>
+                    Cancel
+                  </button>
+                </div>
+              );
+            })()}
             {listHint && (
               <div className="sup-listhint">
                 {row.supplier_name}&rsquo;s price list has &ldquo;{listHint.si.raw_name}&rdquo; at{" "}
