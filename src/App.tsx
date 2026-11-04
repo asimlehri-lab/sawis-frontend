@@ -106,6 +106,8 @@ import CategoryManagerModal from "./CategoryManagerModal";
 import Reports from "./Reports";
 import SearchSelect from "./SearchSelect";
 import { confidentGuess, rankNames } from "./dishMatch";
+import AiChip from "./AiChip";
+import { useAiMatches } from "./useAiMatches";
 import NotificationBell from "./NotificationBell";
 import FilterBar from "./FilterBar";
 import type { FilterFacet, FilterValues } from "./FilterBar";
@@ -1018,6 +1020,13 @@ export default function App() {
   const scanLocation = scanLocationId || soleLocationId;
   const poLocation = newPOLocation || soleLocationId;
   const [scanRows, setScanRows] = useState<ScanRow[]>([]);
+  // Lines the scan could not match (after remembered matches and our name rules): ask the AI once.
+  const scanAi = useAiMatches(
+    accessToken ?? "",
+    "items",
+    scanRows.filter((r) => !r.skip && !r.matchedItemId).map((r) => r.description),
+    !!accessToken && scanRows.length > 0,
+  );
   // Editable, pre-filled from Textract's own INVOICE_RECEIPT_ID read (see
   // scanReceipt's response) -- shown as a real input in the review modal
   // rather than just a line of static text, since a misread digit or two
@@ -4066,14 +4075,17 @@ export default function App() {
                               />
                               {!row.skip && !row.matchedItemId && (() => {
                                 const guesses = rankNames(row.description, items ?? [], 3, 0.5);
-                                return guesses.length > 0 ? (
+                                const ai = scanAi.get(row.description);
+                                const aiItem = ai?.id && !guesses.some((g) => g.id === ai.id) ? (items ?? []).find((it) => it.id === ai.id) : undefined;
+                                return guesses.length > 0 || aiItem ? (
                                   <div className="sq-sugg" style={{ marginTop: 6 }}>
-                                    <span>Did you mean</span>
+                                    {guesses.length > 0 && <span>Did you mean</span>}
                                     {guesses.map((g) => (
                                       <button key={g.id} type="button" className="sq-chip" onClick={() => pickScanItem(i, row, g.id)}>
                                         {g.name}
                                       </button>
                                     ))}
+                                    <AiChip match={ai} label={aiItem?.name} onPick={() => aiItem && pickScanItem(i, row, aiItem.id)} />
                                   </div>
                                 ) : null;
                               })()}

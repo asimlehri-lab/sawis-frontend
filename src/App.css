@@ -3981,3 +3981,7 @@ button.rp-gcard:hover { border-color: var(--muted); }
 .lt-readout { font-weight: 600; }
 .lt-compact { display: flex; flex-direction: column; align-items: flex-end; }
 .lt-compact .lt-box { align-items: stretch; text-align: left; min-width: 190px; }
+.ai-sugg { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ai-tag { font-size: 12px; color: var(--muted, #667); }
+.ai-chip { border-style: dashed; }
+.ai-unsure { opacity: .75; }

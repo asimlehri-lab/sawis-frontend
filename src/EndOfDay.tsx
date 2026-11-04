@@ -10,6 +10,8 @@ import { PickLocationPrompt } from "./AllLocationsParts";
 import EodTasks from "./EodTasks";
 import SearchSelect from "./SearchSelect";
 import { confidentGuess, rankNames } from "./dishMatch";
+import AiChip from "./AiChip";
+import { useAiMatches } from "./useAiMatches";
 import ScanEodSales from "./ScanEodSales";
 import { fetchSquareStatus, fmtSquareDate, fmtSquareDateTime, type SquareConnection } from "./squareApi";
 
@@ -720,6 +722,12 @@ export default function EndOfDay({
   };
   const dayCount = new Set(rows.map((r) => r.date)).size;
   const guessable = groups.filter((g) => g.status === "needs" && confidentGuess(g.name, dishRecipes)).length;
+  // Dish names still needing a recipe after our own name rules: ask the AI once.
+  const salesAi = useAiMatches(
+    accessToken,
+    "dishes",
+    groups.filter((g) => g.status === "needs" && !confidentGuess(g.name, dishRecipes)).map((g) => g.name),
+  );
 
   function setGroupMatch(key: string, recipeId: string | null, guessed = false) {
     setRows((rs) => rs.map((r) => (dishKey(r.dishRaw) === key ? { ...r, matchedRecipeId: recipeId } : r)));
@@ -1167,16 +1175,21 @@ export default function EndOfDay({
                                       aria-label="Matched recipe"
                                       options={dishRecipes.map((d) => ({ value: d.id, label: d.name }))}
                                     />
-                                    {guesses.length > 0 && (
-                                      <div className="sq-sugg">
-                                        <span>Did you mean</span>
-                                        {guesses.map((s) => (
-                                          <button key={s.id} type="button" className="sq-chip" onClick={() => setGroupMatch(g.key, s.id)}>
-                                            {s.name}
-                                          </button>
-                                        ))}
-                                      </div>
-                                    )}
+                                    {(() => {
+                                      const ai = salesAi.get(g.name);
+                                      const aiDish = ai?.id && !guesses.some((s) => s.id === ai.id) ? dishRecipes.find((d) => d.id === ai.id) : undefined;
+                                      return guesses.length > 0 || aiDish ? (
+                                        <div className="sq-sugg">
+                                          {guesses.length > 0 && <span>Did you mean</span>}
+                                          {guesses.map((s) => (
+                                            <button key={s.id} type="button" className="sq-chip" onClick={() => setGroupMatch(g.key, s.id)}>
+                                              {s.name}
+                                            </button>
+                                          ))}
+                                          <AiChip match={ai} label={aiDish?.name} onPick={() => aiDish && setGroupMatch(g.key, aiDish.id)} />
+                                        </div>
+                                      ) : null;
+                                    })()}
                                   </>
                                 ) : (
                                   <span className="muted">Skipped</span>

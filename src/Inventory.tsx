@@ -1,4 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react";
+import AiChip from "./AiChip";
+import { useAiMatches } from "./useAiMatches";
 import { effectiveCost } from "./costing";
 import Loader from "./Loader";
 import FilterBar from "./FilterBar";
@@ -1926,6 +1928,27 @@ function CountSheet({
   // this section -- surfaced so the counter can add them by hand rather
   // than silently losing what was written on the sheet.
   const [unmatchedScanRows, setUnmatchedScanRows] = useState<ScannedCountRow[]>([]);
+  // Rows the photo had that matched nothing here: the AI may know which item of this section they mean.
+  const scanAi = useAiMatches(
+    accessToken,
+    "items",
+    unmatchedScanRows.map((r) => r.item_text),
+    unmatchedScanRows.length > 0,
+    holdings.map((h) => h.itemId),
+  );
+  // Same pre-fill as an automatic match: ticked and quantity filled, still reviewed before Submit.
+  function applyAiCountRow(h: FlatHolding, row: ScannedCountRow) {
+    clearDraft(h);
+    setChecked((c) => ({ ...c, [h.id]: true }));
+    setExtras((x) => ({ ...x, [h.id]: [] }));
+    const expectedScan = expectedHere(h);
+    setQty((q) => ({
+      ...q,
+      [h.id]: cleanNumeric(row.qty_text) || (expectedScan === null ? "" : Math.max(0, expectedScan).toFixed(2)),
+    }));
+    setScanConfidence((sc) => ({ ...sc, [h.id]: row.confidence }));
+    setUnmatchedScanRows((rows) => rows.filter((r) => r !== row));
+  }
 
   async function handleScanFileSelected(file: File) {
     setScanError(null);
@@ -2246,6 +2269,16 @@ function CountSheet({
               {i > 0 ? ", " : ""}
               <b>{r.item_text || "(blank)"}</b>
               {r.qty_text ? ` (${r.qty_text})` : ""}
+              {(() => {
+                const ai = scanAi.get(r.item_text);
+                const h = ai?.id ? holdings.find((x) => x.itemId === ai.id && !checked[x.id]) : undefined;
+                return h ? (
+                  <>
+                    {" "}
+                    <AiChip match={ai} label={h.itemName} onPick={() => applyAiCountRow(h, r)} />
+                  </>
+                ) : null;
+              })()}
             </span>
           ))}
         </div>

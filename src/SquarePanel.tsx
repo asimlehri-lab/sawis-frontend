@@ -3,6 +3,8 @@ import type { Location, Recipe } from "./api";
 import { defaultCurrency, formatMoney } from "./api";
 import SearchSelect from "./SearchSelect";
 import { suggestDishes } from "./squareSuggest";
+import AiChip from "./AiChip";
+import { useAiMatches } from "./useAiMatches";
 import {
   disconnectSquare,
   fetchSquareStatus,
@@ -74,6 +76,13 @@ export default function SquarePanel({ accessToken, recipes, locations, squareRet
   const currency = defaultCurrency(locations);
   const dishes = recipes.filter((r) => r.kind === "dish" && !r.archived);
   const suggestionsFor = (name: string) => suggestDishes(name, dishes.map((d) => ({ id: d.id, name: d.name })));
+  // Square items still unmatched after the name rules find nothing close: ask the AI once.
+  const ai = useAiMatches(
+    accessToken,
+    "dishes",
+    unmatched.filter((u) => suggestionsFor(u.item_name).length === 0).map((u) => u.item_name),
+    unmatched.length > 0,
+  );
 
   const apply = useCallback((r: { status: SquareStatus; unmatched: SquareUnmatched[] }) => {
     setStatus(r.status);
@@ -446,22 +455,28 @@ export default function SquarePanel({ accessToken, recipes, locations, squareRet
                       Not a dish
                     </button>
                   </div>
-                  {suggestionsFor(u.item_name).length > 0 && (
-                    <div className="sq-sugg">
-                      <span>Did you mean</span>
-                      {suggestionsFor(u.item_name).map((d) => (
-                        <button
-                          key={d.id}
-                          type="button"
-                          className={`sq-chip${picks[u.item_key] === d.id ? " on" : ""}`}
-                          aria-pressed={picks[u.item_key] === d.id}
-                          onClick={() => setPicks((p) => ({ ...p, [u.item_key]: d.id }))}
-                        >
-                          {d.name}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  {(() => {
+                    const guesses = suggestionsFor(u.item_name);
+                    const aiMatch = ai.get(u.item_name);
+                    const aiDish = aiMatch?.id ? dishes.find((d) => d.id === aiMatch.id) : undefined;
+                    return guesses.length > 0 || aiDish ? (
+                      <div className="sq-sugg">
+                        {guesses.length > 0 && <span>Did you mean</span>}
+                        {guesses.map((d) => (
+                          <button
+                            key={d.id}
+                            type="button"
+                            className={`sq-chip${picks[u.item_key] === d.id ? " on" : ""}`}
+                            aria-pressed={picks[u.item_key] === d.id}
+                            onClick={() => setPicks((p) => ({ ...p, [u.item_key]: d.id }))}
+                          >
+                            {d.name}
+                          </button>
+                        ))}
+                        <AiChip match={aiMatch} label={aiDish?.name} onPick={() => aiDish && setPicks((p) => ({ ...p, [u.item_key]: aiDish.id }))} />
+                      </div>
+                    ) : null;
+                  })()}
                 </li>
               ))}
             </ul>

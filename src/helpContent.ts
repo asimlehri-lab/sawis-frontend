@@ -398,6 +398,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "That means there's no price on file yet for that item with this supplier — link one from the item's page, or type the price in manually on this line.",
       },
       {
+        q: "What does \"AI suggests\" mean next to a name I have to match?",
+        a: "When you scan a receipt or count sheet, import till (POS) sales or open Square's Items to match, SAWIS first uses what you already matched before and its own name rules. For names that are still unmatched, an AI looks at the name and your own list of items (or dishes) and suggests one, shown as an \"AI suggests\" chip next to \"Did you mean\". \"AI is not sure\" means a weaker guess. Tapping the chip only fills the picker, exactly like the other chips; you still check it and confirm, and the match is remembered so that name is not sent again. It does not match anything by itself, and it will not treat a different size (330 ml and 500 ml, large and small) as the same. Only the names are sent, never prices or supplier details. Each business has a monthly allowance (500 names to start with); after that the chips stop and \"Did you mean\" carries on as before. If you see no AI chip, the AI is not switched on for your server yet or nothing close was found.",
+      },
+      {
         q: "I only know the line total (for example from an online order or a receipt). Do I have to work out the unit price?",
         a: "No. Under the price box click \"Know the line total instead? Type it\" and type the total you paid. SAWIS divides it by the quantity and fills in the unit price for you, to six decimal places, and shows the price per g and per kg (or per ml and per litre) underneath. Type in either box and the other follows; whichever you typed last is the one that stays put, so if you change the quantity afterwards a typed total stays the same and the unit price moves. If the total already includes VAT, tick \"The total includes VAT\" and set the VAT % so SAWIS can take the VAT off first. It works the same way on Edit line, Add line and the price in Receive delivery.",
       },

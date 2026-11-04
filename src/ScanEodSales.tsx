@@ -4,6 +4,8 @@ import type { Recipe } from "./api";
 import SearchSelect from "./SearchSelect";
 import Loader from "./Loader";
 import { confidentGuess, rankNames } from "./dishMatch";
+import AiChip from "./AiChip";
+import { useAiMatches } from "./useAiMatches";
 
 interface Props {
   accessToken: string;
@@ -200,6 +202,12 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, curre
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<ScanEodRow[]>([]);
+  // Dish names the scan could not match (after remembered matches and our own rules): ask the AI once.
+  const dishAi = useAiMatches(
+    accessToken,
+    "dishes",
+    rows.filter((r) => !r.skip && !r.matchedRecipeId).map((r) => r.description),
+  );
   const [rawCount, setRawCount] = useState(0);
   const [saleDate, setSaleDate] = useState("");
   const [importing, setImporting] = useState(false);
@@ -520,14 +528,17 @@ export default function ScanEodSales({ accessToken, location, dishRecipes, curre
             <div className="sq-sugg" style={{ marginTop: 6 }}>
               {(() => {
                 const guesses = rankNames(row.description, dishRecipes, 3, 0.45);
-                return guesses.length > 0 ? (
+                const ai = dishAi.get(row.description);
+                const aiDish = ai?.id && !guesses.some((s) => s.id === ai.id) ? dishRecipes.find((d) => d.id === ai.id) : undefined;
+                return guesses.length > 0 || aiDish ? (
                   <>
-                    <span>Did you mean</span>
+                    {guesses.length > 0 && <span>Did you mean</span>}
                     {guesses.map((s) => (
                       <button key={s.id} type="button" className="sq-chip" onClick={() => updateRow(i, { matchedRecipeId: s.id })}>
                         {s.name}
                       </button>
                     ))}
+                    <AiChip match={ai} label={aiDish?.name} onPick={() => aiDish && updateRow(i, { matchedRecipeId: aiDish.id })} />
                   </>
                 ) : null;
               })()}

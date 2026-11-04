@@ -2309,6 +2309,34 @@ export async function updateDefaultAskAfter(accessToken: string, orgId: string, 
   return (await res.json()).default_supplier_ask_after as number;
 }
 
+// AI name matching: for names that memory and our own rules could not match, the AI suggests which
+// of our items (or dishes) each one means. Suggestions only; a person confirms.
+export interface AiMatch {
+  name: string;
+  id: string | null;
+  confidence?: "high" | "medium" | "low";
+  reason?: string;
+}
+
+export async function aiMatchNames(
+  accessToken: string,
+  kind: "items" | "dishes",
+  names: string[],
+  onlyIds?: string[],
+): Promise<{ matches: AiMatch[]; capped: boolean; remaining: number | null }> {
+  const res = await fetch(`${API_URL}/api/catalog/ai-match/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ kind, names, ...(onlyIds ? { only_ids: onlyIds } : {}) }),
+  });
+  if (res.status === 503) throw new AiMatchOff();
+  if (!res.ok) throw new Error("Could not ask the AI.");
+  return res.json();
+}
+
+// The server has no AI model set up: the screens stop asking and keep the usual "Did you mean".
+export class AiMatchOff extends Error {}
+
 export async function deleteItemSupplier(accessToken: string, id: string): Promise<void> {
   const res = await fetch(`${API_URL}/api/catalog/item-suppliers/${id}/`, {
     method: "DELETE",
