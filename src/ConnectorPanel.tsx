@@ -12,6 +12,30 @@ const CONSENT =
   "that AI app and its provider, and handled under our own agreement with them. SAWIS only sends it when a person signs in " +
   "and allows it. I can change what is shared, switch this off, or disconnect anyone, at any time.";
 
+type Tab = "connect" | "reads" | "activity";
+const ACTIVITY_SHOWN = 6;
+
+function fmtDay(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+function clock(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+}
+
+function dayLabel(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === today.toDateString()) return "Today";
+  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
+  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
+}
+
 export default function ConnectorPanel({ accessToken }: { accessToken: string }) {
   const [state, setState] = useState<ConnectorState | null>(null);
   const [error, setError] = useState("");
@@ -25,6 +49,9 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
   const [confirmOff, setConfirmOff] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [tab, setTab] = useState<Tab>("connect");
+  const [app, setApp] = useState<"claude" | "chatgpt">("claude");
+  const [showAllActivity, setShowAllActivity] = useState(false);
 
   const load = useCallback(() => {
     fetchConnector(accessToken)
@@ -142,7 +169,46 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
     </div>
   );
 
-  const sharing = (
+  const itemRow = (i: SharedItem) => (
+    <li key={i.key} className={askingFor(i.key) ? "cn-asking" : ""}>
+      <button
+        type="button"
+        role="switch"
+        className="switch"
+        aria-checked={shared(i.key)}
+        aria-label={i.label}
+        disabled={!!busy}
+        onClick={() => toggleItem(i.key)}
+      />
+      <span className="cn-toggle-text">
+        <strong>
+          {i.label}
+          {cur.enabled && i.sensitive && i.enabled && i.enabled_at && <em className="cn-badge">Agreed {fmtDay(i.enabled_at)}</em>}
+        </strong>
+        <span>{i.summary}</span>
+        {askingFor(i.key) && consentBlock(i)}
+      </span>
+    </li>
+  );
+
+  const pendingButtons = cur.enabled && pending.length > 0 && (
+    <div className="sq-btns" style={{ marginTop: 10 }}>
+      <button
+        type="button"
+        className="btn-primary"
+        disabled={!moneyAgreed || !!busy}
+        onClick={() => saveItems([...cur.items.filter((i) => i.enabled).map((i) => i.key), ...pending], pending)}
+      >
+        {busy === "items" ? "Switching on…" : "Switch on the money figures I ticked"}
+      </button>
+      <button type="button" className="btn-ghost small" onClick={() => setPending([])}>
+        Cancel
+      </button>
+    </div>
+  );
+
+  // Before it is switched on: choose, agree, switch on (unchanged flow).
+  const sharingFirstTime = (
     <div className="cn-lists">
       <div>
         <h3>What your AI app can read</h3>
@@ -168,53 +234,16 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
                   <span>Money figures: each needs your own agreement</span>
                 </li>
               )}
-              <li className={askingFor(i.key) ? "cn-asking" : ""}>
-                <button
-                  type="button"
-                  role="switch"
-                  className="switch"
-                  aria-checked={shared(i.key)}
-                  aria-label={i.label}
-                  disabled={!!busy}
-                  onClick={() => toggleItem(i.key)}
-                />
-                <span className="cn-toggle-text">
-                  <strong>{i.label}</strong>
-                  <span>{i.summary}</span>
-                  {askingFor(i.key) && consentBlock(i)}
-                </span>
-              </li>
+              {itemRow(i)}
             </Fragment>
           ))}
         </ul>
-        {cur.enabled && pending.length > 0 && (
-          <div className="sq-btns" style={{ marginTop: 10 }}>
-            <button
-              type="button"
-              className="btn-primary"
-              disabled={!moneyAgreed || !!busy}
-              onClick={() => saveItems([...cur.items.filter((i) => i.enabled).map((i) => i.key), ...pending], pending)}
-            >
-              {busy === "items" ? "Switching on…" : "Switch on the money figures I ticked"}
-            </button>
-            <button type="button" className="btn-ghost small" onClick={() => setPending([])}>
-              Cancel
-            </button>
-          </div>
-        )}
-        <p className="lnote" style={{ margin: "10px 0 0" }}>
-          Location names are always included, so your AI can answer by location.
-          {cur.enabled && " Changes apply to the next question. People may need to start a new chat, or reconnect, in their AI app to see new tools."}
-        </p>
+        <p className="lnote" style={{ margin: "10px 0 0" }}>Location names are always included, so your AI can answer by location.</p>
       </div>
       <div>
         <h3>It never sees or changes</h3>
         <ul>
-          {offMoney.length === cur.items.filter((i) => i.sensitive).length ? (
-            <li>Prices, costs, sales, margins or recipes</li>
-          ) : (
-            offMoney.length > 0 && <li>Money figures you have not switched on ({offMoney.map((i) => i.label.toLowerCase()).join(", ")})</li>
-          )}
+          <li>Money figures you have not chosen</li>
           <li>Supplier contact details, staff details, invoice photos</li>
           <li>Anything for a location the person cannot open</li>
           <li>It is read-only: nothing can be changed from the AI app</li>
@@ -222,6 +251,190 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
       </div>
     </div>
   );
+
+  const everyday = cur.items.filter((i) => !i.sensitive);
+  const money = cur.items.filter((i) => i.sensitive);
+  const onCount = cur.items.filter((i) => i.enabled).length;
+
+  // After it is switched on: one tab for what is shared.
+  const readsTab = (
+    <div className="cn-reads">
+      <div className="cn-grouphead">
+        <h3>Everyday figures</h3>
+        <button type="button" className="cn-link" disabled={!!busy} onClick={toggleAll}>
+          {allOn ? "Turn all off" : "Turn all on"}
+        </button>
+      </div>
+      <ul className="cn-toggles">{everyday.map(itemRow)}</ul>
+      <div className="cn-grouphead">
+        <h3>Money figures</h3>
+        <span className="cn-groupnote">Each needs its own agreement</span>
+      </div>
+      <ul className="cn-toggles">{money.map(itemRow)}</ul>
+      {pendingButtons}
+      <p className="cn-never">
+        <strong>Never shared:</strong> supplier contact details, staff details, invoice photos, or locations a person cannot open
+        {offMoney.length > 0 && <>, or the money figures that are off ({offMoney.map((i) => i.label.toLowerCase()).join(", ")})</>}. Read-only. Changes apply to
+        the next question; people may need to start a new chat, or reconnect, in their AI app to see new tools.
+      </p>
+    </div>
+  );
+
+  const tag = (i: SharedItem) => (
+    <span key={i.key} className={`cn-tag${i.sensitive ? " money" : ""}${i.enabled ? "" : " off"}`}>
+      {i.label}
+    </span>
+  );
+
+  const connectTab = (
+    <div>
+      <div className="cn-sum" aria-live="polite">
+        <div className="cn-sum-head">
+          <strong>Your AI can read</strong>
+          <button type="button" className="cn-link" onClick={() => setTab("reads")}>
+            Change
+          </button>
+        </div>
+        <div className="cn-tags">
+          <span className="cn-tags-label">Everyday</span>
+          {everyday.map(tag)}
+        </div>
+        <div className="cn-tags">
+          <span className="cn-tags-label">Money</span>
+          {money.map(tag)}
+        </div>
+        <p className="cn-sum-foot">Read-only. Never shared: supplier contacts, staff details, invoice photos.</p>
+      </div>
+
+      <div className="cn-addr">
+        <span className="cn-addr-label">Your connection address</span>
+        <code>{state.mcp_url}</code>
+        <button type="button" className="btn-ghost small" onClick={copyUrl}>
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+
+      <div className="cn-seg" role="group" aria-label="Which AI app">
+        <button type="button" aria-pressed={app === "claude"} onClick={() => setApp("claude")}>
+          Claude
+        </button>
+        <button type="button" aria-pressed={app === "chatgpt"} onClick={() => setApp("chatgpt")}>
+          ChatGPT
+        </button>
+      </div>
+
+      {app === "claude" ? (
+        <ol className="cn-steps2">
+          <li>
+            In Claude, open <b>Settings, then Connectors, then Add custom connector</b>.
+          </li>
+          <li>
+            Paste the address above and click <b>Connect</b>.
+          </li>
+          <li>
+            Sign in with your SAWIS email and password, then choose <b>Allow access</b>.
+          </li>
+        </ol>
+      ) : (
+        <ol className="cn-steps2">
+          <li>
+            Open <b>chatgpt.com/plugins</b>, click <b>+</b> or <b>Add</b>, then <b>Add custom MCP server</b> (also called Create MCP app).
+          </li>
+          <li>
+            Name it SAWIS, paste the address above and choose <b>OAuth</b>.
+          </li>
+          <li>
+            Tick the risk box, create it, sign in with SAWIS and choose <b>Allow access</b>.
+          </li>
+        </ol>
+      )}
+      <p className="cn-tip">
+        {app === "claude"
+          ? "On a Team or Enterprise plan, an owner adds it in Claude first. Changed a toggle? Start a new chat or reconnect."
+          : "ChatGPT on the web only. OpenAI changes these names often. Changed a toggle? Open the connector in ChatGPT and refresh its tools."}
+      </p>
+
+      <div className="sq-sec">
+        <h3>Connected now</h3>
+        {state.connections.length === 0 ? (
+          <p className="hint">Nobody has connected an AI app yet.</p>
+        ) : (
+          <ul className="cn-conns">
+            {state.connections.map((c) => (
+              <li key={c.id}>
+                <span className="cn-conn-who">
+                  <span className={`cn-chip ${c.app.toLowerCase().includes("chatgpt") ? "gpt" : "other"}`}>{c.app}</span>
+                  <strong>{c.person}</strong>
+                </span>
+                <span className="cn-when2">used {fmtSquareDateTime(c.last_used)}</span>
+                {confirmId === c.id ? (
+                  <span className="sq-btns">
+                    <button type="button" className="btn-ghost small danger" disabled={busy === c.id} onClick={() => run(c.id, () => disconnectAiApp(accessToken, c.id))}>
+                      Disconnect
+                    </button>
+                    <button type="button" className="btn-ghost small" onClick={() => setConfirmId(null)}>
+                      Cancel
+                    </button>
+                  </span>
+                ) : (
+                  <button type="button" className="btn-ghost small" onClick={() => setConfirmId(c.id)}>
+                    Disconnect
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="cn-tip">
+          Only Admins, Managers and Finance can connect, each with their own login. Switched on by {state.enabled_by || "an Admin"} on{" "}
+          {fmtSquareDateTime(state.enabled_at)}.
+        </p>
+      </div>
+    </div>
+  );
+
+  const shownActivity = showAllActivity ? state.activity : state.activity.slice(0, ACTIVITY_SHOWN);
+  const activityTab = (
+    <div>
+      <p className="hint" style={{ margin: "0 0 6px" }}>
+        What AI apps asked for, never the data itself. Kept for 90 days.
+      </p>
+      {state.activity.length === 0 ? (
+        <p className="hint">Nothing yet.</p>
+      ) : (
+        <>
+          {shownActivity.map((a, i) => {
+            const day = dayLabel(a.when);
+            const first = i === 0 || dayLabel(shownActivity[i - 1].when) !== day;
+            return (
+              <Fragment key={i}>
+                {first && <h3 className="cn-day">{day}</h3>}
+                <div className={`cn-act${a.ok ? "" : " bad"}`}>
+                  <span className="cn-act-main">
+                    <span className={`cn-chip ${a.app.toLowerCase().includes("chatgpt") ? "gpt" : "other"}`}>{a.app}</span>
+                    {a.person}: {TOOL_LABELS[a.tool] ?? a.tool}
+                    <span className="cn-act-rows">{a.ok ? ` · ${a.rows} ${a.rows === 1 ? "row" : "rows"}` : " · could not be answered"}</span>
+                  </span>
+                  <span className="cn-act-time">{clock(a.when)}</span>
+                </div>
+              </Fragment>
+            );
+          })}
+          {!showAllActivity && state.activity.length > ACTIVITY_SHOWN && (
+            <button type="button" className="cn-link" style={{ marginTop: 10 }} onClick={() => setShowAllActivity(true)}>
+              Show {state.activity.length - ACTIVITY_SHOWN} more
+            </button>
+          )}
+        </>
+      )}
+    </div>
+  );
+
+  const tabs: { id: Tab; label: string; count: string }[] = [
+    { id: "connect", label: "Connect", count: "" },
+    { id: "reads", label: "What it reads", count: `${onCount} of ${cur.items.length}` },
+    { id: "activity", label: "Activity", count: String(state.activity.length) },
+  ];
 
   return (
     <div className="card sq-card">
@@ -231,186 +444,81 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
           <div>
             <h2 style={{ margin: 0 }}>Connect your own AI</h2>
             <p className="hint" style={{ margin: "2px 0 0" }}>
-              Let your own AI app, such as Claude or ChatGPT, read your deliveries and stock to answer questions and write your daily summary.
+              Claude or ChatGPT can read the figures you choose. Read-only.
               <HelpLink topic="settings" ask="connect-own-ai" />
             </p>
           </div>
         </div>
         <div className="sq-btns">
           <span className={`sq-pill ${state.enabled ? "good" : "test"}`}>{state.enabled ? "On" : "Off"}</span>
+          {state.enabled && !confirmOff && (
+            <button type="button" className="btn-ghost small danger" onClick={() => setConfirmOff(true)} title="Signs everyone out of their AI app">
+              Switch off
+            </button>
+          )}
         </div>
       </div>
 
       {error && <div className="sq-notice bad" role="alert">{error}</div>}
 
-      {sharing}
+      {state.enabled && confirmOff && (
+        <div className="cn-offbar" role="alert">
+          <span className="sq-confirm">Switch off and sign everyone out of their AI app? You can switch it on again later.</span>
+          <span className="sq-btns">
+            <button type="button" className="btn-ghost small danger" disabled={busy === "off"} onClick={() => run("off", () => switchConnector(accessToken, false))}>
+              Switch off
+            </button>
+            <button type="button" className="btn-ghost small" onClick={() => setConfirmOff(false)}>
+              Cancel
+            </button>
+          </span>
+        </div>
+      )}
 
       {!state.enabled ? (
-        <div className="sq-sec">
-          <h3>Switch it on</h3>
-          <label className="cn-consent">
-            <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-            <span>{CONSENT}</span>
-          </label>
-          {!anyOn && <p className="hint" style={{ margin: "10px 0 0" }}>Choose at least one kind of information above.</p>}
-          {anyOn && !moneyAgreed && <p className="hint" style={{ margin: "10px 0 0" }}>Tick the agreement under each money figure you chose.</p>}
-          <div className="sq-btns" style={{ marginTop: 12 }}>
-            <button
-              type="button"
-              className="btn-primary"
-              disabled={!agree || !anyOn || !moneyAgreed || busy === "on"}
-              onClick={() =>
-                run("on", () =>
-                  switchConnector(
-                    accessToken,
-                    true,
-                    true,
-                    state.items.filter((i) => choice[i.key]).map((i) => i.key),
-                    chosenMoney.filter((i) => agreed[i.key]).map((i) => i.key),
-                  ),
-                )
-              }
-            >
-              {busy === "on" ? "Switching on…" : "Switch on"}
-            </button>
+        <>
+          {sharingFirstTime}
+          <div className="sq-sec">
+            <h3>Switch it on</h3>
+            <label className="cn-consent">
+              <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
+              <span>{CONSENT}</span>
+            </label>
+            {!anyOn && <p className="hint" style={{ margin: "10px 0 0" }}>Choose at least one kind of information above.</p>}
+            {anyOn && !moneyAgreed && <p className="hint" style={{ margin: "10px 0 0" }}>Tick the agreement under each money figure you chose.</p>}
+            <div className="sq-btns" style={{ marginTop: 12 }}>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={!agree || !anyOn || !moneyAgreed || busy === "on"}
+                onClick={() =>
+                  run("on", () =>
+                    switchConnector(
+                      accessToken,
+                      true,
+                      true,
+                      state.items.filter((i) => choice[i.key]).map((i) => i.key),
+                      chosenMoney.filter((i) => agreed[i.key]).map((i) => i.key),
+                    ),
+                  )
+                }
+              >
+                {busy === "on" ? "Switching on…" : "Switch on"}
+              </button>
+            </div>
           </div>
-        </div>
+        </>
       ) : (
         <>
-          <div className="sq-sec">
-            <h3>Add it to Claude</h3>
-            <ol className="cn-steps">
-              <li>In Claude, open Settings, then Connectors, then Add custom connector. On a Team or Enterprise plan an owner adds it first.</li>
-              <li>
-                Paste this address:
-                <div className="cn-url">
-                  <code>{state.mcp_url}</code>
-                  <button type="button" className="btn-ghost small" onClick={copyUrl}>
-                    {copied ? "Copied" : "Copy"}
-                  </button>
-                </div>
-              </li>
-              <li>Click Connect, sign in with your SAWIS email and password, and choose Allow access.</li>
-            </ol>
-            <p className="lnote">
-              Only Admins, Managers and Finance can connect, each with their own login, and each sees only their own locations.
-              Switched on by {state.enabled_by || "an Admin"} on {fmtSquareDateTime(state.enabled_at)}.
-            </p>
-          </div>
-
-          <div className="sq-sec">
-            <h3>Add it to ChatGPT</h3>
-            <ol className="cn-steps">
-              <li>
-                In ChatGPT on the web, open chatgpt.com/plugins (the Plugins page itself, not Settings) and click the plus or Add button, then Create MCP app,
-                also called Add custom MCP server. OpenAI changes these names often. If you do not see it, look for Developer mode under Settings, then Security
-                and login. On a Business, Enterprise or Edu workspace an admin may need to allow custom MCP servers first, under Permissions &amp; roles.
-              </li>
-              <li>Give it a name such as SAWIS, paste the same address as above as the server address, and choose OAuth for sign-in.</li>
-              <li>Tick the box that says you understand the risk, then create it. Sign in with your SAWIS email and password and choose Allow access.</li>
-            </ol>
-            <p className="lnote">
-              ChatGPT shows the tools it found; ask a question such as &ldquo;What was delivered this week?&rdquo;. After you change the toggles above, open the
-              connector in ChatGPT and refresh its tools, or remove it and add it again.
-            </p>
-          </div>
-
-          <div className="sq-sec">
-            <h3>Connected AI apps</h3>
-            {state.connections.length === 0 ? (
-              <p className="hint">Nobody has connected an AI app yet.</p>
-            ) : (
-              <div className="sq-table-wrap">
-                <table className="sq-table">
-                  <thead>
-                    <tr>
-                      <th>Person</th>
-                      <th>AI app</th>
-                      <th>Connected</th>
-                      <th>Last used</th>
-                      <th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {state.connections.map((c) => (
-                      <tr key={c.id}>
-                        <td data-label="Person">{c.person}</td>
-                        <td data-label="AI app">{c.app}</td>
-                        <td data-label="Connected">{fmtSquareDateTime(c.connected)}</td>
-                        <td data-label="Last used">{fmtSquareDateTime(c.last_used)}</td>
-                        <td>
-                          {confirmId === c.id ? (
-                            <span className="sq-btns">
-                              <button
-                                type="button"
-                                className="btn-ghost small danger"
-                                disabled={busy === c.id}
-                                onClick={() => run(c.id, () => disconnectAiApp(accessToken, c.id))}
-                              >
-                                Disconnect
-                              </button>
-                              <button type="button" className="btn-ghost small" onClick={() => setConfirmId(null)}>
-                                Cancel
-                              </button>
-                            </span>
-                          ) : (
-                            <button type="button" className="btn-ghost small" onClick={() => setConfirmId(c.id)}>
-                              Disconnect
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          <div className="sq-sec">
-            <h3>Recent activity</h3>
-            <p className="hint">What connected AI apps have read. Only what was asked for is listed, never the data itself. Kept for 90 days.</p>
-            {state.activity.length === 0 ? (
-              <p className="hint">Nothing yet.</p>
-            ) : (
-              <ul className="cn-activity">
-                {state.activity.map((a, i) => (
-                  <li key={i} className={a.ok ? "" : "bad"}>
-                    <span className="cn-when">{fmtSquareDateTime(a.when)}</span>
-                    <span>
-                      {a.person} via {a.app}: {TOOL_LABELS[a.tool] ?? a.tool}
-                      {a.ok ? ` (${a.rows} ${a.rows === 1 ? "row" : "rows"})` : " (could not be answered)"}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="sq-sec">
-            <h3>Switch it off</h3>
-            <p className="hint">Everyone is signed out of their AI app straight away. You can switch it on again later.</p>
-            {confirmOff ? (
-              <div className="sq-btns">
-                <span className="sq-confirm">Switch off and sign everyone out?</span>
-                <button
-                  type="button"
-                  className="btn-ghost small danger"
-                  disabled={busy === "off"}
-                  onClick={() => run("off", () => switchConnector(accessToken, false))}
-                >
-                  Switch off
-                </button>
-                <button type="button" className="btn-ghost small" onClick={() => setConfirmOff(false)}>
-                  Cancel
-                </button>
-              </div>
-            ) : (
-              <button type="button" className="btn-ghost small" onClick={() => setConfirmOff(true)}>
-                Switch off
+          <div className="cn-tabs" role="tablist">
+            {tabs.map((t) => (
+              <button key={t.id} type="button" role="tab" aria-selected={tab === t.id} className="cn-tab" onClick={() => setTab(t.id)}>
+                {t.label}
+                {t.count && <small>{t.count}</small>}
               </button>
-            )}
+            ))}
           </div>
+          <div role="tabpanel">{tab === "connect" ? connectTab : tab === "reads" ? readsTab : activityTab}</div>
         </>
       )}
     </div>
