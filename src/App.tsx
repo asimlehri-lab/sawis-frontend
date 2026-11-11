@@ -2412,6 +2412,7 @@ export default function App() {
             key={(helpTopic ?? "none") + (helpQuestion ?? "")}
             initialTopicId={helpTopic}
             initialQuestionId={helpQuestion}
+            assistantToken={me?.entitlements?.includes("ai_help_chat") ? accessToken ?? undefined : undefined}
             onClose={() => {
               setShowHelp(false);
               setHelpTopic(undefined);

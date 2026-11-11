@@ -3,6 +3,7 @@ import { HELP_TOPICS } from "./helpContent";
 import type { HelpTopic } from "./helpContent";
 import { searchHelp } from "./helpSearch";
 import type { HelpHit } from "./helpSearch";
+import { askHelpAssistant } from "./api";
 
 interface Props {
   onClose: () => void;
@@ -10,6 +11,9 @@ interface Props {
   initialTopicId?: string;
   // Open with this one answer already showing in full (a "More in Help" link).
   initialQuestionId?: string;
+  // Layer help chat: set when the business has the "ai_help_chat" feature.
+  // Adds an "Ask the assistant" button that answers from the help text.
+  assistantToken?: string;
 }
 
 interface TranscriptEntry {
@@ -17,6 +21,9 @@ interface TranscriptEntry {
   q: string;
   a: string;
   fact?: string;
+  // Set on an assistant answer: where in Help the same thing is written down.
+  assistant?: boolean;
+  sources?: { topic: HelpTopic; q: string }[];
 }
 
 // The in-app help chatbot -- Phase A of the help-chatbot phase plan (see
@@ -37,7 +44,7 @@ interface TranscriptEntry {
 // the one concrete thing Phase A does specifically so Phase B (a real,
 // next-year AI-agent backend) can later swap what happens on a tap without
 // rewriting this component.
-export default function HelpChat({ onClose, initialTopicId, initialQuestionId }: Props) {
+export default function HelpChat({ onClose, initialTopicId, initialQuestionId, assistantToken }: Props) {
   const [query, setQuery] = useState("");
   // The answer a link pointed at; shown open above everything else.
   const [focus, setFocus] = useState<HelpHit | null>(() => {
@@ -50,6 +57,36 @@ export default function HelpChat({ onClose, initialTopicId, initialQuestionId }:
   });
   const [activeTopicId, setActiveTopicId] = useState<string | null>(focus ? null : initialTopicId ?? null);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
+  const [asking, setAsking] = useState(false);
+  const [askError, setAskError] = useState("");
+
+  // Layer: ask the AI help assistant. It only ever sees the question and the
+  // help text, never the business's own data.
+  async function askAssistant() {
+    const question = query.trim();
+    if (!assistantToken || !question || asking) return;
+    setAsking(true);
+    setAskError("");
+    try {
+      const reply = await askHelpAssistant(assistantToken, question);
+      const sources = reply.sources.flatMap((s) => {
+        const topic = HELP_TOPICS.find((t) => t.questions.some((qa) => qa.q === s.q));
+        return topic ? [{ topic, q: s.q }] : [];
+      });
+      setTranscript((prev) => [
+        ...prev,
+        { topicTitle: "Assistant", q: question, a: reply.answer, assistant: reply.answered, sources },
+      ]);
+      setQuery("");
+      setActiveTopicId(null);
+      setOpenKey(null);
+      setFocus(null);
+    } catch (err) {
+      setAskError(err instanceof Error ? err.message : "The help assistant could not answer.");
+    } finally {
+      setAsking(false);
+    }
+  }
 
   // Best answers for a typed sentence, across every topic.
   const hits = useMemo(() => searchHelp(query), [query]);
@@ -109,6 +146,7 @@ export default function HelpChat({ onClose, initialTopicId, initialQuestionId }:
           placeholder='Ask in your own words — e.g. "how do I enter waste %"'
           value={query}
           onChange={(e) => {
+            setAskError("");
             setQuery(e.target.value);
             setActiveTopicId(null);
             setOpenKey(null);
@@ -116,6 +154,18 @@ export default function HelpChat({ onClose, initialTopicId, initialQuestionId }:
           }}
           autoFocus
         />
+
+        {assistantToken && query.trim() && (
+          <div className="help-assistant-ask">
+            <button type="button" className="btn-primary small" disabled={asking} onClick={askAssistant}>
+              {asking ? "Thinking…" : "Ask the assistant"}
+            </button>
+            <span className="muted">
+              Answers from the SAWIS help. Please don't type personal or customer details; questions are saved without your name to improve Help.
+            </span>
+            {askError && <span className="help-assistant-error">{askError}</span>}
+          </div>
+        )}
 
         {!query.trim() && focus && (
           <div className="help-results">
@@ -201,6 +251,27 @@ export default function HelpChat({ onClose, initialTopicId, initialQuestionId }:
                 <div className="help-bubble help-bubble-q">{entry.q}</div>
                 <div className="help-bubble help-bubble-a">{entry.a}</div>
                 {entry.fact && <div className="help-bubble help-bubble-fact">{entry.fact}</div>}
+                {entry.assistant && (
+                  <div className="help-assistant-sources muted">
+                    AI answer from the SAWIS help. Check anything important.
+                    {entry.sources && entry.sources.length > 0 && " More in Help:"}
+                    {entry.sources?.map((s) => (
+                      <button
+                        key={s.q}
+                        type="button"
+                        className="btn-ghost small"
+                        onClick={() => {
+                          const item = s.topic.questions.find((qa) => qa.q === s.q);
+                          if (!item) return;
+                          setFocus({ key: s.topic.id + "::" + item.q, topic: s.topic, item, score: 0 });
+                          setActiveTopicId(null);
+                        }}
+                      >
+                        {s.q}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             ))
           )}

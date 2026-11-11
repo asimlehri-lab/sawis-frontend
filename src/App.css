@@ -3985,3 +3985,28 @@ button.rp-gcard:hover { border-color: var(--muted); }
 .ai-tag { font-size: 12px; color: var(--muted, #667); }
 .ai-chip { border-style: dashed; }
 .ai-unsure { opacity: .75; }
+
+.help-assistant-ask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 8px 0;
+}
+.help-assistant-ask .muted {
+  font-size: 12px;
+  flex: 1 1 240px;
+}
+.help-assistant-error {
+  color: var(--danger, #b42318);
+  font-size: 13px;
+  flex-basis: 100%;
+}
+.help-assistant-sources {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 12px;
+  margin-top: 4px;
+}

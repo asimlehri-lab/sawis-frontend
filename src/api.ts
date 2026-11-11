@@ -168,6 +168,8 @@ export interface Me {
   name: string;
   org: { id: string; name: string; supplier_price_fresh_days?: number; default_supplier_ask_after?: number };
   memberships: Membership[];
+  // Feature keys the business has (e.g. "ai_help_chat"); see apps/billing on the backend.
+  entitlements?: string[];
 }
 
 interface TokenPair {
@@ -3778,3 +3780,30 @@ export async function scanEndOfDaySales(accessToken: string, file: File): Promis
   }
   return res.json();
 }
+
+// Layer: the AI how-to help chat (feature key "ai_help_chat"). The answer comes
+// from the SAWIS help text only; `answered` is false when nothing in the help
+// matched (the answer is then a fixed "I could not find that" message).
+export interface HelpAssistantReply {
+  answer: string;
+  answered: boolean;
+  sources: { id: string; q: string; topic: string }[];
+}
+
+export async function askHelpAssistant(accessToken: string, question: string): Promise<HelpAssistantReply> {
+  const res = await fetch(`${API_URL}/api/helpchat/ask/`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ question }),
+  });
+  if (!res.ok) {
+    let detail = "";
+    try {
+      detail = (await res.json()).detail ?? "";
+    } catch {
+      /* no body */
+    }
+    throw new Error(detail || "The help assistant could not answer. Try again in a minute.");
+  }
+  return res.json();
+}

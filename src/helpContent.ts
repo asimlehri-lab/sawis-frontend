@@ -747,6 +747,10 @@ export const HELP_TOPICS: HelpTopic[] = [
     keywords: ["tip", "tips", "shortcut", "shortcuts", "faster", "quick", "hidden", "easy to miss", "shift"],
     questions: [
       {
+        q: "Can I ask Help a question in my own words?",
+        a: "Yes. Tap the ? button at the top right to open Help and type your question in the box; the best matching answers appear straight away. If your business has the Layer package, an Ask the assistant button appears under the box: it writes a short answer from this same Help text and lists the Help entries it used under More in Help. It can only explain how to do things; it cannot see or change your data, so please don't type personal or customer details. Questions are saved without your name, with emails and long numbers removed, for 90 days so we can improve Help.",
+      },
+      {
         q: "What shortcuts are easy to miss when reviewing allergens?",
         a: "Shift-click a second tick box to tick a whole run. After typing in the search box, Tick all N shown ticks every match. The dark bar at the bottom appears only once something is ticked, and holds Clear, Add allergen… and Confirm. Looks right on a suggested item confirms the tags exactly as shown. On the By dish tab, confirming a dish's ingredients is what removes the † from its printed card.",
       },
