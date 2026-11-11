@@ -231,7 +231,7 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
           <div>
             <h2 style={{ margin: 0 }}>Connect your own AI</h2>
             <p className="hint" style={{ margin: "2px 0 0" }}>
-              Let your own AI app, such as Claude, read your deliveries and stock to answer questions and write your daily summary.
+              Let your own AI app, such as Claude or ChatGPT, read your deliveries and stock to answer questions and write your daily summary.
               <HelpLink topic="settings" ask="connect-own-ai" />
             </p>
           </div>
@@ -295,6 +295,23 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
             <p className="lnote">
               Only Admins, Managers and Finance can connect, each with their own login, and each sees only their own locations.
               Switched on by {state.enabled_by || "an Admin"} on {fmtSquareDateTime(state.enabled_at)}.
+            </p>
+          </div>
+
+          <div className="sq-sec">
+            <h3>Add it to ChatGPT</h3>
+            <ol className="cn-steps">
+              <li>
+                In ChatGPT on the web, turn on Developer mode under Settings, then Apps, then Advanced settings. On a Business, Enterprise or Edu workspace an
+                admin allows it first, under Permissions &amp; roles. OpenAI changes these screens often, so look for Developer mode or custom MCP connectors.
+              </li>
+              <li>Open chatgpt.com/plugins, click the plus button and choose Add custom MCP server.</li>
+              <li>Give it a name such as SAWIS, paste the same address as above as the server address, and choose OAuth for sign-in.</li>
+              <li>Tick the box that says you understand the risk, then create it. Sign in with your SAWIS email and password and choose Allow access.</li>
+            </ol>
+            <p className="lnote">
+              ChatGPT shows the tools it found; ask a question such as &ldquo;What was delivered this week?&rdquo;. After you change the toggles above, open the
+              connector in ChatGPT and refresh its tools, or remove it and add it again.
             </p>
           </div>
 
