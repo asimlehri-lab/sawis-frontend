@@ -11,6 +11,7 @@ import {
   fetchPriceChecks,
   fetchSections,
   fetchStockCounts,
+  aiAllergenSentence,
   runAllergenWordList,
 } from "./api";
 import type {
@@ -452,9 +453,10 @@ function ManagerTasks({
       const r = await runAllergenWordList(accessToken);
       onItemsChanged();
       setAllergenCheckMsg(
-        r.tags_added + r.suggestions === 0
+        (r.tags_added + r.suggestions === 0
           ? "Nothing new found from the item names."
-          : `Added ${r.tags_added} tag${r.tags_added === 1 ? "" : "s"} and ${r.suggestions} suggestion${r.suggestions === 1 ? "" : "s"} — please check them.`
+          : `Added ${r.tags_added} tag${r.tags_added === 1 ? "" : "s"} and ${r.suggestions} suggestion${r.suggestions === 1 ? "" : "s"} — please check them.`) +
+          aiAllergenSentence(r.ai)
       );
     } catch (err) {
       setAllergenCheckMsg(err instanceof Error ? err.message : "Could not check your items.");

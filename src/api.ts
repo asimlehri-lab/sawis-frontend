@@ -1456,6 +1456,22 @@ export interface SuggestAllergensResult {
   items_changed: number;
   tags_added: number;
   suggestions: number;
+  // Present only when the business has the AI allergen check (Layer).
+  ai?: { checked: number; suggestions: number; capped: boolean; failed: boolean; left: number } | null;
+}
+
+// One sentence about the AI part of a "check my items" run, or "" when the
+// business does not have the AI allergen check.
+export function aiAllergenSentence(ai: SuggestAllergensResult["ai"]): string {
+  if (!ai) return "";
+  if (ai.failed) return " The AI could not be reached just now, so press the button again in a minute.";
+  const found = `The AI looked at ${ai.checked} more name${ai.checked === 1 ? "" : "s"} and suggested ${ai.suggestions} allergen${ai.suggestions === 1 ? "" : "s"}.`;
+  const more = ai.capped
+    ? " This month's AI limit is reached, so the rest wait until next month."
+    : ai.left > 0
+      ? ` ${ai.left} more are still waiting; press the button again.`
+      : "";
+  return ` ${found}${more}`;
 }
 
 // Runs the word list over every item in the organisation. Adds tags only

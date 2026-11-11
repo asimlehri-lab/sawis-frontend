@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import AllergenIcon from "./AllergenIcon";
-import { bulkReviewItems, runAllergenWordList } from "./api";
+import { aiAllergenSentence, bulkReviewItems, runAllergenWordList } from "./api";
 import type { Allergen, CatalogItem, Recipe } from "./api";
 
 // The allergen review screen: the fast way to confirm every item's
@@ -70,7 +70,7 @@ function ReviewRow({
   const reason = item.allergen_suggestions
     .map((s) => {
       const a = allergens.find((x) => x.id === s.allergen);
-      return a ? `${a.name}: ${s.reason}` : null;
+      return a ? `${a.name}: ${s.source === "ai" ? "AI: " : ""}${s.reason}` : null;
     })
     .filter((r): r is string => !!r);
   const nothingTagged = draft.contains.length === 0 && mayOnly.length === 0;
@@ -137,7 +137,7 @@ function ReviewRow({
                     key={s.id}
                     type="button"
                     className="ar-tag ar-tag-suggest"
-                    title={s.reason}
+                    title={s.source === "ai" ? `AI suggests: ${s.reason}` : s.reason}
                     disabled={busy}
                     onClick={() =>
                       s.level === "contains"
@@ -146,7 +146,7 @@ function ReviewRow({
                     }
                   >
                     + {s.level === "may_contain" ? "May contain " : ""}
-                    {a.name}?
+                    {a.name}?{s.source === "ai" ? " (AI)" : ""}
                   </button>
                 );
               })}
@@ -287,9 +287,10 @@ export default function AllergenReview({
         /* storage can be blocked; the check is still safe to repeat */
       }
       setCheckNote(
-        r.items_changed === 0
+        (r.items_changed === 0
           ? `Checked ${r.items} item names against the word list. None matched, so every item below needs a person's check.`
-          : `Checked ${r.items} item names against the word list: ${r.items_changed} matched (${r.tags_added} tag${r.tags_added === 1 ? "" : "s"} added, ${r.suggestions} suggestion${r.suggestions === 1 ? "" : "s"} to look at). Nothing is confirmed until you confirm it.`
+          : `Checked ${r.items} item names against the word list: ${r.items_changed} matched (${r.tags_added} tag${r.tags_added === 1 ? "" : "s"} added, ${r.suggestions} suggestion${r.suggestions === 1 ? "" : "s"} to look at). Nothing is confirmed until you confirm it.`) +
+          aiAllergenSentence(r.ai)
       );
       onChanged();
     } catch (err) {
@@ -551,7 +552,7 @@ export default function AllergenReview({
                 </label>
               </div>
               <p className="hint">
-                Tags came from the word list. Tap “Looks right” if they're correct, tap a “+ …?” suggestion to add it,
+                Tags came from the word list; a suggestion marked (AI) came from the AI. Tap “Looks right” if they're correct, tap a “+ …?” suggestion to add it,
                 or open Edit. Tick several and confirm them together.
               </p>
               <div className="ar-list">

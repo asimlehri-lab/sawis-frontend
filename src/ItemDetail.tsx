@@ -1086,7 +1086,14 @@ export default function ItemDetail({
                       {a.name}
                     </b>
                     <span className="allergen-suggest-sub">
-                      {applied ? "Added automatically" : "Suggested"} · {s.reason}
+                      {applied
+                        ? "Added automatically"
+                        : s.source === "ai"
+                          ? s.confidence === "low"
+                            ? "AI is not sure"
+                            : "AI suggests"
+                          : "Suggested"}{" "}
+                      · {s.reason}
                     </span>
                   </div>
                   <div className="allergen-suggest-actions">
