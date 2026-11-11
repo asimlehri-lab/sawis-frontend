@@ -661,8 +661,14 @@ export const HELP_TOPICS: HelpTopic[] = [
     keywords: [
       "settings", "currency", "overhead", "import", "template", "category",
       "import supplier list", "square", "pos", "integrations", "connect", "till",
+      "claude", "ai", "assistant", "connector", "chatgpt",
     ],
     questions: [
+      {
+        id: "connect-own-ai",
+        q: "How do I connect my own AI app, such as Claude, to SAWIS?",
+        a: "Open Settings and the Connect your AI tab (it only shows if your package includes it). Read what is shared, tick the agreement and press Switch on. Then in Claude open Settings, then Connectors, then Add custom connector, paste the address shown under Add it to Claude, click Connect, sign in with your SAWIS email and password and choose Allow access. Your AI app can then read your deliveries (supplier name, dates, items and quantities) and stock levels, for the locations you can open, and nothing else: no prices, costs, contact details or photos, and it cannot change anything. Only Admins, Managers and Finance can connect. The tab also lists who is connected (Disconnect signs one person out), what was read recently, and a Switch off button that signs everyone out at once.",
+      },
       {
         q: "Where is everything in Settings?",
         a: "Settings is for Admins and is split into five tabs along the top. Locations holds each location's currency, food and drink targets and monthly overhead, plus Delivery reminders & inventory checks. Catalogue holds Item categories and Names on your invoices. Import holds Import recipes & items and the supplier price list template. Integrations holds the Square connection. Account holds your Password. Settings opens on Locations, and anything you have typed in one tab is still there when you switch tabs.",

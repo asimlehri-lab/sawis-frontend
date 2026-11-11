@@ -3145,6 +3145,7 @@ export default function App() {
                 allergens={allergens}
                 locations={locations}
                 org={me.org}
+                entitlements={me.entitlements}
                 onFreshDaysChanged={(days) => {
                   setMe((m) => (m ? { ...m, org: { ...m.org, supplier_price_fresh_days: days } } : m));
                   // Which suppliers are "resting" depends on the setting, so reload what carries that.
