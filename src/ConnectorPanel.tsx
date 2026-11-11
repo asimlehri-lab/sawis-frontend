@@ -286,6 +286,22 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
     </span>
   );
 
+  // The same person connecting the same AI app twice (for example a new chat or device) shows as one row.
+  const groups = (() => {
+    const m = new Map<string, { key: string; person: string; app: string; ids: string[]; last: string | null }>();
+    for (const c of state.connections) {
+      const key = `${c.person}||${c.app}`;
+      const g = m.get(key);
+      if (g) {
+        g.ids.push(c.id);
+        if (c.last_used && (!g.last || c.last_used > g.last)) g.last = c.last_used;
+      } else {
+        m.set(key, { key, person: c.person, app: c.app, ids: [c.id], last: c.last_used });
+      }
+    }
+    return [...m.values()];
+  })();
+
   const connectTab = (
     <div>
       <div className="cn-sum" aria-live="polite">
@@ -360,25 +376,37 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
           <p className="hint">Nobody has connected an AI app yet.</p>
         ) : (
           <ul className="cn-conns">
-            {state.connections.map((c) => (
-              <li key={c.id}>
+            {groups.map((g) => (
+              <li key={g.key}>
                 <span className="cn-conn-who">
-                  <span className={`cn-chip ${c.app.toLowerCase().includes("chatgpt") ? "gpt" : "other"}`}>{c.app}</span>
-                  <strong>{c.person}</strong>
+                  <span className={`cn-chip ${g.app.toLowerCase().includes("chatgpt") ? "gpt" : "other"}`}>{g.app}</span>
+                  <strong>{g.person}</strong>
+                  {g.ids.length > 1 && <span className="cn-count">{g.ids.length} connections</span>}
                 </span>
-                <span className="cn-when2">used {fmtSquareDateTime(c.last_used)}</span>
-                {confirmId === c.id ? (
+                <span className="cn-when2">used {fmtSquareDateTime(g.last)}</span>
+                {confirmId === g.key ? (
                   <span className="sq-btns">
-                    <button type="button" className="btn-ghost small danger" disabled={busy === c.id} onClick={() => run(c.id, () => disconnectAiApp(accessToken, c.id))}>
-                      Disconnect
+                    <button
+                      type="button"
+                      className="btn-ghost small danger"
+                      disabled={busy === g.key}
+                      onClick={() =>
+                        run(g.key, async () => {
+                          let next: ConnectorState = cur;
+                          for (const id of g.ids) next = await disconnectAiApp(accessToken, id);
+                          return next;
+                        })
+                      }
+                    >
+                      {g.ids.length > 1 ? `Disconnect all ${g.ids.length}` : "Disconnect"}
                     </button>
                     <button type="button" className="btn-ghost small" onClick={() => setConfirmId(null)}>
                       Cancel
                     </button>
                   </span>
                 ) : (
-                  <button type="button" className="btn-ghost small" onClick={() => setConfirmId(c.id)}>
-                    Disconnect
+                  <button type="button" className="btn-ghost small" onClick={() => setConfirmId(g.key)}>
+                    {g.ids.length > 1 ? "Disconnect all" : "Disconnect"}
                   </button>
                 )}
               </li>
