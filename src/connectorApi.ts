@@ -31,18 +31,29 @@ export interface SharedItem {
   enabled_at: string | null;
 }
 
+// Gemini cannot register itself, so the Admin creates its sign-in details (a client id and secret) here.
+export interface GeminiInfo {
+  created: boolean;
+  client_id: string;
+  created_at: string | null;
+  authorization_url: string;
+  token_url: string;
+  scope: string;
+}
+
 export interface ConnectorState {
   enabled: boolean;
   enabled_at: string | null;
   enabled_by: string;
   allowed_roles: string[];
   mcp_url: string;
+  gemini: GeminiInfo;
   items: SharedItem[];
   connections: AiConnection[];
   activity: AiActivity[];
 }
 
-async function call(accessToken: string, method: "GET" | "POST", path: string, body?: unknown): Promise<ConnectorState> {
+async function call<T = ConnectorState>(accessToken: string, method: "GET" | "POST" | "DELETE", path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${API_URL}/api/connector${path}`, {
     method,
     headers: {
@@ -72,6 +83,14 @@ export const switchConnector = (token: string, enabled: boolean, accept = false,
 // Change what is shared while switched on. Takes effect on the next question; nobody is signed out.
 export const setSharedItems = (token: string, items: string[], acceptItems: string[] = []) =>
   call(token, "POST", "/settings/", { set_items: items, accept_items: acceptItems });
+export interface GeminiMade {
+  client_id: string;
+  client_secret: string; // shown once; SAWIS keeps only a hash
+  state: ConnectorState;
+}
+// Create Gemini's sign-in details, or make a new secret (the old one stops working and Gemini is signed out).
+export const createGeminiDetails = (token: string) => call<GeminiMade>(token, "POST", "/gemini/", {});
+export const removeGeminiDetails = (token: string) => call(token, "DELETE", "/gemini/");
 export const disconnectAiApp = (token: string, id: string) => call(token, "POST", `/connections/${id}/revoke/`, {});
 
 export const TOOL_LABELS: Record<string, string> = {

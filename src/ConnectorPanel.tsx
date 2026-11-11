@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { disconnectAiApp, fetchConnector, setSharedItems, switchConnector, TOOL_LABELS } from "./connectorApi";
+import { createGeminiDetails, disconnectAiApp, fetchConnector, removeGeminiDetails, setSharedItems, switchConnector, TOOL_LABELS } from "./connectorApi";
 import type { ConnectorState, SharedItem } from "./connectorApi";
 import { fmtSquareDateTime } from "./squareApi";
 import HelpLink from "./HelpLink";
@@ -48,9 +48,12 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
   const [pending, setPending] = useState<string[]>([]);
   const [confirmOff, setConfirmOff] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState("");
   const [tab, setTab] = useState<Tab>("connect");
-  const [app, setApp] = useState<"claude" | "chatgpt">("claude");
+  const [app, setApp] = useState<"claude" | "chatgpt" | "gemini">("claude");
+  // Gemini's secret is only ever shown right after it is made; it lives here until the page is left.
+  const [geminiMade, setGeminiMade] = useState<{ client_id: string; client_secret: string } | null>(null);
+  const [confirmGemini, setConfirmGemini] = useState<"new" | "remove" | null>(null);
   const [showAllActivity, setShowAllActivity] = useState(false);
 
   const load = useCallback(() => {
@@ -80,14 +83,28 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
     }
   }
 
-  async function copyUrl() {
-    if (!state) return;
+  async function copyText(key: string, text: string) {
     try {
-      await navigator.clipboard.writeText(state.mcp_url);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
+      await navigator.clipboard.writeText(text);
+      setCopied(key);
+      window.setTimeout(() => setCopied(""), 2000);
     } catch {
-      /* the address is shown on screen to copy by hand */
+      /* it is shown on screen to copy by hand */
+    }
+  }
+
+  async function makeGemini() {
+    setBusy("gem");
+    setError("");
+    try {
+      const made = await createGeminiDetails(accessToken);
+      setState(made.state);
+      setGeminiMade({ client_id: made.client_id, client_secret: made.client_secret });
+      setConfirmGemini(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong. Try again.");
+    } finally {
+      setBusy("");
     }
   }
 
@@ -302,6 +319,100 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
     return [...m.values()];
   })();
 
+  const gem = state.gemini;
+  const geminiBox = (
+    <div className="cn-gem">
+      {!gem.created ? (
+        <>
+          <p className="cn-gem-text">Gemini cannot sign itself up like Claude and ChatGPT. SAWIS makes a Client ID and Client Secret for your business to paste into Gemini.</p>
+          <button type="button" className="btn-primary" disabled={busy === "gem"} onClick={makeGemini}>
+            {busy === "gem" ? "Creating…" : "Create sign-in details"}
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="cn-gem-row">
+            <span className="cn-gem-label">Client ID</span>
+            <code>{gem.client_id}</code>
+            <button type="button" className="btn-ghost small" onClick={() => copyText("gid", gem.client_id)}>
+              {copied === "gid" ? "Copied" : "Copy"}
+            </button>
+          </div>
+          <div className="cn-gem-row">
+            <span className="cn-gem-label">Client Secret</span>
+            {geminiMade ? (
+              <>
+                <code>{geminiMade.client_secret}</code>
+                <button type="button" className="btn-ghost small" onClick={() => copyText("gsec", geminiMade.client_secret)}>
+                  {copied === "gsec" ? "Copied" : "Copy"}
+                </button>
+              </>
+            ) : (
+              <span className="cn-gem-hidden">Hidden. It is only shown when it is made.</span>
+            )}
+          </div>
+          {geminiMade && (
+            <p className="cn-gem-warn" role="status">
+              Copy the secret now. SAWIS keeps only a scrambled copy, so it cannot show it again. If you lose it, make a new one.
+            </p>
+          )}
+          {confirmGemini ? (
+            <div className="sq-btns" style={{ marginTop: 8 }}>
+              <span className="sq-confirm">
+                {confirmGemini === "new"
+                  ? "Make a new secret? Gemini is signed out and needs the new secret."
+                  : "Remove the sign-in details? Gemini is signed out."}
+              </span>
+              <button
+                type="button"
+                className="btn-ghost small danger"
+                disabled={busy === "gem"}
+                onClick={() =>
+                  confirmGemini === "new"
+                    ? makeGemini()
+                    : run("gem", async () => {
+                        const next = await removeGeminiDetails(accessToken);
+                        setGeminiMade(null);
+                        return next;
+                      })
+                }
+              >
+                {confirmGemini === "new" ? "Make a new secret" : "Remove"}
+              </button>
+              <button type="button" className="btn-ghost small" onClick={() => setConfirmGemini(null)}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div className="sq-btns" style={{ marginTop: 8 }}>
+              <button type="button" className="btn-ghost small" onClick={() => setConfirmGemini("new")}>
+                Make a new secret
+              </button>
+              <button type="button" className="btn-ghost small" onClick={() => setConfirmGemini("remove")}>
+                Remove
+              </button>
+            </div>
+          )}
+          <details className="cn-gem-more">
+            <summary>Only if Gemini asks for more</summary>
+            <div className="cn-gem-row">
+              <span className="cn-gem-label">Authorization address</span>
+              <code>{gem.authorization_url}</code>
+            </div>
+            <div className="cn-gem-row">
+              <span className="cn-gem-label">Token address</span>
+              <code>{gem.token_url}</code>
+            </div>
+            <div className="cn-gem-row">
+              <span className="cn-gem-label">Scope</span>
+              <code>{gem.scope}</code>
+            </div>
+          </details>
+        </>
+      )}
+    </div>
+  );
+
   const connectTab = (
     <div>
       <div className="cn-sum" aria-live="polite">
@@ -325,8 +436,8 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
       <div className="cn-addr">
         <span className="cn-addr-label">Your connection address</span>
         <code>{state.mcp_url}</code>
-        <button type="button" className="btn-ghost small" onClick={copyUrl}>
-          {copied ? "Copied" : "Copy"}
+        <button type="button" className="btn-ghost small" onClick={() => copyText("url", state.mcp_url)}>
+          {copied === "url" ? "Copied" : "Copy"}
         </button>
       </div>
 
@@ -337,9 +448,27 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
         <button type="button" aria-pressed={app === "chatgpt"} onClick={() => setApp("chatgpt")}>
           ChatGPT
         </button>
+        <button type="button" aria-pressed={app === "gemini"} onClick={() => setApp("gemini")}>
+          Gemini
+        </button>
       </div>
 
-      {app === "claude" ? (
+      {app === "gemini" ? (
+        <>
+          <ol className="cn-steps2">
+            <li>
+              In Gemini, open <b>Settings, then Connectors</b> (gemini.google.com/customize/connectors) and click <b>+ Custom</b>.
+            </li>
+            <li>
+              Paste the address above as the MCP server URL. Under <b>Additional settings</b>, paste the Client ID and Client Secret from below.
+            </li>
+            <li>
+              Click Next, sign in with your SAWIS email and password, then choose <b>Allow access</b>.
+            </li>
+          </ol>
+          {geminiBox}
+        </>
+      ) : app === "claude" ? (
         <ol className="cn-steps2">
           <li>
             In Claude, open <b>Settings, then Connectors, then Add custom connector</b>.
@@ -367,7 +496,9 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
       <p className="cn-tip">
         {app === "claude"
           ? "On a Team or Enterprise plan, an owner adds it in Claude first. Changed a toggle? Start a new chat or reconnect."
-          : "ChatGPT on the web only. OpenAI changes these names often. Changed a toggle? Open the connector in ChatGPT and refresh its tools."}
+          : app === "chatgpt"
+            ? "ChatGPT on the web only. OpenAI changes these names often. Changed a toggle? Open the connector in ChatGPT and refresh its tools."
+            : "Each person adds it in their own Gemini with the same Client ID and Secret. Gemini warns that Google has not reviewed a custom app. Changed a toggle? Start a new chat or reconnect."}
       </p>
 
       <div className="sq-sec">
@@ -472,7 +603,7 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
           <div>
             <h2 style={{ margin: 0 }}>Connect your own AI</h2>
             <p className="hint" style={{ margin: "2px 0 0" }}>
-              Claude or ChatGPT can read the figures you choose. Read-only.
+              Claude, ChatGPT or Gemini can read the figures you choose. Read-only.
               <HelpLink topic="settings" ask="connect-own-ai" />
             </p>
           </div>
