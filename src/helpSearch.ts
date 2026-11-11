@@ -25,6 +25,8 @@ function norm(s: string): string {
     .toLowerCase()
     .replace(/%/g, " percent ")
     .replace(/\bpct\b/g, " percent ")
+    // "PO" is how people say purchase order (not "POS", the till).
+    .replace(/\bpo\b/g, " purchase order ")
     .replace(/[^a-z0-9]+/g, " ")
     .trim();
 }
@@ -42,11 +44,16 @@ function stem(w: string): string {
   return s;
 }
 
+// People say remove, erase or scrap where Help says delete.
+function canon(w: string): string {
+  return /^(remov|eras|discard|trash|scrap)/.test(w) ? "delete" : w;
+}
+
 function tokens(s: string): string[] {
   return norm(s)
     .split(" ")
     .filter((w) => w && !STOP.has(w))
-    .map(stem);
+    .map((w) => canon(stem(w)));
 }
 
 // Exact word, or one word starting with the other (both 4+ letters), so
