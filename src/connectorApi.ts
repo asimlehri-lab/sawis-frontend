@@ -20,11 +20,11 @@ export interface AiActivity {
   ok: boolean;
 }
 
-export interface DataGroup {
+export interface SharedItem {
   key: string;
   label: string;
-  summary: string[];
-  consent: string;
+  summary: string;
+  sensitive: boolean;
   enabled: boolean;
   enabled_by: string;
   enabled_at: string | null;
@@ -36,7 +36,7 @@ export interface ConnectorState {
   enabled_by: string;
   allowed_roles: string[];
   mcp_url: string;
-  groups: DataGroup[];
+  items: SharedItem[];
   connections: AiConnection[];
   activity: AiActivity[];
 }
@@ -64,10 +64,11 @@ async function call(accessToken: string, method: "GET" | "POST", path: string, b
 }
 
 export const fetchConnector = (token: string) => call(token, "GET", "/settings/");
-export const switchConnector = (token: string, enabled: boolean, accept = false) =>
-  call(token, "POST", "/settings/", enabled ? { enabled: true, accept } : { enabled: false });
-export const switchGroup = (token: string, group: string, enabled: boolean, accept = false) =>
-  call(token, "POST", "/settings/", enabled ? { group, enabled: true, accept } : { group, enabled: false });
+// Switch on, sharing the chosen kinds of information (items = their keys); needs the Admin's agreement.
+export const switchConnector = (token: string, enabled: boolean, accept = false, items: string[] = []) =>
+  call(token, "POST", "/settings/", enabled ? { enabled: true, accept, items } : { enabled: false });
+// Change what is shared while switched on. Takes effect on the next question; nobody is signed out.
+export const setSharedItems = (token: string, items: string[]) => call(token, "POST", "/settings/", { set_items: items });
 export const disconnectAiApp = (token: string, id: string) => call(token, "POST", `/connections/${id}/revoke/`, {});
 
 export const TOOL_LABELS: Record<string, string> = {

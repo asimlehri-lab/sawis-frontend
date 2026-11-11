@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { disconnectAiApp, fetchConnector, switchConnector, switchGroup, TOOL_LABELS } from "./connectorApi";
+import { disconnectAiApp, fetchConnector, setSharedItems, switchConnector, TOOL_LABELS } from "./connectorApi";
 import type { ConnectorState } from "./connectorApi";
 import { fmtSquareDateTime } from "./squareApi";
 import HelpLink from "./HelpLink";
@@ -8,16 +8,17 @@ import HelpLink from "./HelpLink";
 // Draft: to be read by a legal adviser before customers use it.
 const CONSENT =
   "I am allowed to share this business's information with the AI apps my team connects. When a person connects an AI app " +
-  "and allows access, the information listed above, for the locations that person can see, is sent to that AI app and its " +
-  "provider, and handled under our own agreement with them. SAWIS only sends it when a person signs in and allows it. " +
-  "I can switch this off, or disconnect anyone, at any time.";
+  "and allows access, the kinds of information I have switched on above, for the locations that person can see, are sent to " +
+  "that AI app and its provider, and handled under our own agreement with them. SAWIS only sends it when a person signs in " +
+  "and allows it. I can change what is shared, switch this off, or disconnect anyone, at any time.";
 
 export default function ConnectorPanel({ accessToken }: { accessToken: string }) {
   const [state, setState] = useState<ConnectorState | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [agree, setAgree] = useState(false);
-  const [agreeGroup, setAgreeGroup] = useState<Record<string, boolean>>({});
+  // What the Admin ticks before switching on. Once it is on, the toggles save straight away instead.
+  const [choice, setChoice] = useState<Record<string, boolean>>({});
   const [confirmOff, setConfirmOff] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -73,15 +74,69 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
     );
   }
 
+  const cur: ConnectorState = state; // a plain constant, so the helpers below keep the 'not null' check
+  const shared = (key: string) => (cur.enabled ? !!cur.items.find((i) => i.key === key)?.enabled : !!choice[key]);
+  const allOn = cur.items.every((i) => shared(i.key));
+  const anyOn = cur.items.some((i) => shared(i.key));
+
+  function toggleItem(key: string) {
+    if (!cur.enabled) {
+      setChoice((prev) => ({ ...prev, [key]: !prev[key] }));
+      return;
+    }
+    const next = cur.items.filter((i) => (i.key === key ? !i.enabled : i.enabled)).map((i) => i.key);
+    run(`i:${key}`, () => setSharedItems(accessToken, next));
+  }
+
+  function toggleAll() {
+    if (!cur.enabled) {
+      setChoice(Object.fromEntries(cur.items.map((i) => [i.key, !allOn])));
+      return;
+    }
+    run("i:all", () => setSharedItems(accessToken, allOn ? [] : cur.items.map((i) => i.key)));
+  }
+
   const sharing = (
     <div className="cn-lists">
       <div>
-        <h3>Always included</h3>
-        <ul>
-          <li>Deliveries: supplier name, dates, items and quantities</li>
-          <li>Stock levels: item, unit, amount on hand, par level</li>
-          <li>Location names</li>
+        <h3>What your AI app can read</h3>
+        <ul className="cn-toggles">
+          <li className="cn-all">
+            <button
+              type="button"
+              role="switch"
+              className="switch"
+              aria-checked={allOn}
+              aria-label="Select all"
+              disabled={!!busy}
+              onClick={toggleAll}
+            />
+            <span className="cn-toggle-text">
+              <strong>Select all</strong>
+            </span>
+          </li>
+          {cur.items.map((i) => (
+            <li key={i.key}>
+              <button
+                type="button"
+                role="switch"
+                className="switch"
+                aria-checked={shared(i.key)}
+                aria-label={i.label}
+                disabled={!!busy}
+                onClick={() => toggleItem(i.key)}
+              />
+              <span className="cn-toggle-text">
+                <strong>{i.label}</strong>
+                <span>{i.summary}</span>
+              </span>
+            </li>
+          ))}
         </ul>
+        <p className="lnote" style={{ margin: "10px 0 0" }}>
+          Location names are always included, so your AI can answer by location.
+          {cur.enabled && " Changes apply to the next question. People may need to start a new chat, or reconnect, in their AI app to see new tools."}
+        </p>
       </div>
       <div>
         <h3>It never sees or changes</h3>
@@ -124,12 +179,22 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
             <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
             <span>{CONSENT}</span>
           </label>
+          {!anyOn && <p className="hint" style={{ margin: "10px 0 0" }}>Choose at least one kind of information above.</p>}
           <div className="sq-btns" style={{ marginTop: 12 }}>
             <button
               type="button"
               className="btn-primary"
-              disabled={!agree || busy === "on"}
-              onClick={() => run("on", () => switchConnector(accessToken, true, true))}
+              disabled={!agree || !anyOn || busy === "on"}
+              onClick={() =>
+                run("on", () =>
+                  switchConnector(
+                    accessToken,
+                    true,
+                    true,
+                    state.items.filter((i) => choice[i.key]).map((i) => i.key),
+                  ),
+                )
+              }
             >
               {busy === "on" ? "Switching on…" : "Switch on"}
             </button>
@@ -156,65 +221,6 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
               Only Admins, Managers and Finance can connect, each with their own login, and each sees only their own locations.
               Switched on by {state.enabled_by || "an Admin"} on {fmtSquareDateTime(state.enabled_at)}.
             </p>
-          </div>
-
-          <div className="sq-sec">
-            <h3>Share more information</h3>
-            <p className="hint">
-              Each kind of information below is off until you switch it on, and you can switch it off again at any time. People may need to
-              start a new chat, or reconnect, in their AI app before it notices a change.
-            </p>
-            <div className="cn-groups">
-              {state.groups.map((g) => (
-                <div key={g.key} className="cn-group">
-                  <div className="cn-group-head">
-                    <h4>{g.label}</h4>
-                    <span className={`sq-pill ${g.enabled ? "good" : "test"}`}>{g.enabled ? "On" : "Off"}</span>
-                  </div>
-                  <ul>
-                    {g.summary.map((line) => (
-                      <li key={line}>{line}</li>
-                    ))}
-                  </ul>
-                  {g.enabled ? (
-                    <>
-                      <p className="lnote" style={{ margin: "8px 0" }}>
-                        Switched on by {g.enabled_by || "an Admin"} on {fmtSquareDateTime(g.enabled_at)}.
-                      </p>
-                      <button
-                        type="button"
-                        className="btn-ghost small"
-                        disabled={busy === `g:${g.key}`}
-                        onClick={() => run(`g:${g.key}`, () => switchGroup(accessToken, g.key, false))}
-                      >
-                        Switch off
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <label className="cn-consent">
-                        <input
-                          type="checkbox"
-                          checked={!!agreeGroup[g.key]}
-                          onChange={(e) => setAgreeGroup((prev) => ({ ...prev, [g.key]: e.target.checked }))}
-                        />
-                        <span>{g.consent}</span>
-                      </label>
-                      <div className="sq-btns" style={{ marginTop: 10 }}>
-                        <button
-                          type="button"
-                          className="btn-primary"
-                          disabled={!agreeGroup[g.key] || busy === `g:${g.key}`}
-                          onClick={() => run(`g:${g.key}`, () => switchGroup(accessToken, g.key, true, true))}
-                        >
-                          {busy === `g:${g.key}` ? "Switching on…" : "Switch on"}
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
           </div>
 
           <div className="sq-sec">
