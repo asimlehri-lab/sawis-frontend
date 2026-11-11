@@ -302,10 +302,10 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
             <h3>Add it to ChatGPT</h3>
             <ol className="cn-steps">
               <li>
-                In ChatGPT on the web, turn on Developer mode under Settings, then Apps, then Advanced settings. On a Business, Enterprise or Edu workspace an
-                admin allows it first, under Permissions &amp; roles. OpenAI changes these screens often, so look for Developer mode or custom MCP connectors.
+                In ChatGPT on the web, open chatgpt.com/plugins (the Plugins page itself, not Settings) and click the plus or Add button, then Create MCP app,
+                also called Add custom MCP server. OpenAI changes these names often. If you do not see it, look for Developer mode under Settings, then Security
+                and login. On a Business, Enterprise or Edu workspace an admin may need to allow custom MCP servers first, under Permissions &amp; roles.
               </li>
-              <li>Open chatgpt.com/plugins, click the plus button and choose Add custom MCP server.</li>
               <li>Give it a name such as SAWIS, paste the same address as above as the server address, and choose OAuth for sign-in.</li>
               <li>Tick the box that says you understand the risk, then create it. Sign in with your SAWIS email and password and choose Allow access.</li>
             </ol>
