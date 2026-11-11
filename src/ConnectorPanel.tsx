@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { disconnectAiApp, fetchConnector, switchConnector, TOOL_LABELS } from "./connectorApi";
+import { disconnectAiApp, fetchConnector, switchConnector, switchGroup, TOOL_LABELS } from "./connectorApi";
 import type { ConnectorState } from "./connectorApi";
 import { fmtSquareDateTime } from "./squareApi";
 import HelpLink from "./HelpLink";
@@ -17,6 +17,7 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [agree, setAgree] = useState(false);
+  const [agreeGroup, setAgreeGroup] = useState<Record<string, boolean>>({});
   const [confirmOff, setConfirmOff] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -75,7 +76,7 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
   const sharing = (
     <div className="cn-lists">
       <div>
-        <h3>Your AI app can read</h3>
+        <h3>Always included</h3>
         <ul>
           <li>Deliveries: supplier name, dates, items and quantities</li>
           <li>Stock levels: item, unit, amount on hand, par level</li>
@@ -155,6 +156,65 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
               Only Admins, Managers and Finance can connect, each with their own login, and each sees only their own locations.
               Switched on by {state.enabled_by || "an Admin"} on {fmtSquareDateTime(state.enabled_at)}.
             </p>
+          </div>
+
+          <div className="sq-sec">
+            <h3>Share more information</h3>
+            <p className="hint">
+              Each kind of information below is off until you switch it on, and you can switch it off again at any time. People may need to
+              start a new chat, or reconnect, in their AI app before it notices a change.
+            </p>
+            <div className="cn-groups">
+              {state.groups.map((g) => (
+                <div key={g.key} className="cn-group">
+                  <div className="cn-group-head">
+                    <h4>{g.label}</h4>
+                    <span className={`sq-pill ${g.enabled ? "good" : "test"}`}>{g.enabled ? "On" : "Off"}</span>
+                  </div>
+                  <ul>
+                    {g.summary.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                  {g.enabled ? (
+                    <>
+                      <p className="lnote" style={{ margin: "8px 0" }}>
+                        Switched on by {g.enabled_by || "an Admin"} on {fmtSquareDateTime(g.enabled_at)}.
+                      </p>
+                      <button
+                        type="button"
+                        className="btn-ghost small"
+                        disabled={busy === `g:${g.key}`}
+                        onClick={() => run(`g:${g.key}`, () => switchGroup(accessToken, g.key, false))}
+                      >
+                        Switch off
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <label className="cn-consent">
+                        <input
+                          type="checkbox"
+                          checked={!!agreeGroup[g.key]}
+                          onChange={(e) => setAgreeGroup((prev) => ({ ...prev, [g.key]: e.target.checked }))}
+                        />
+                        <span>{g.consent}</span>
+                      </label>
+                      <div className="sq-btns" style={{ marginTop: 10 }}>
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          disabled={!agreeGroup[g.key] || busy === `g:${g.key}`}
+                          onClick={() => run(`g:${g.key}`, () => switchGroup(accessToken, g.key, true, true))}
+                        >
+                          {busy === `g:${g.key}` ? "Switching on…" : "Switch on"}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="sq-sec">

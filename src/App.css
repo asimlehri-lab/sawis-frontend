@@ -3929,6 +3929,11 @@ button.rp-gcard:hover { border-color: var(--muted); }
 .cn-lists ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.55; }
 label.cn-consent { display: flex; flex-direction: row; gap: 10px; align-items: flex-start; font-size: 13px; font-weight: 400; line-height: 1.5; margin-top: 8px; color: var(--ink); text-transform: none; letter-spacing: 0; cursor: pointer; }
 label.cn-consent input { width: auto; margin: 3px 0 0; padding: 0; flex: none; }
+.cn-groups { display: grid; gap: 12px; margin-top: 10px; }
+.cn-group { border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; background: var(--bg); }
+.cn-group-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.cn-group h4 { margin: 0; font-size: 14px; }
+.cn-group ul { margin: 6px 0 0; padding-left: 18px; font-size: 13px; line-height: 1.55; }
 .cn-steps { margin: 6px 0 12px; padding-left: 20px; font-size: 13.5px; line-height: 1.6; }
 .cn-url { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 .cn-url code { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; overflow-wrap: anywhere; }

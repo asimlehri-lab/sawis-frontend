@@ -20,12 +20,23 @@ export interface AiActivity {
   ok: boolean;
 }
 
+export interface DataGroup {
+  key: string;
+  label: string;
+  summary: string[];
+  consent: string;
+  enabled: boolean;
+  enabled_by: string;
+  enabled_at: string | null;
+}
+
 export interface ConnectorState {
   enabled: boolean;
   enabled_at: string | null;
   enabled_by: string;
   allowed_roles: string[];
   mcp_url: string;
+  groups: DataGroup[];
   connections: AiConnection[];
   activity: AiActivity[];
 }
@@ -55,10 +66,14 @@ async function call(accessToken: string, method: "GET" | "POST", path: string, b
 export const fetchConnector = (token: string) => call(token, "GET", "/settings/");
 export const switchConnector = (token: string, enabled: boolean, accept = false) =>
   call(token, "POST", "/settings/", enabled ? { enabled: true, accept } : { enabled: false });
+export const switchGroup = (token: string, group: string, enabled: boolean, accept = false) =>
+  call(token, "POST", "/settings/", enabled ? { group, enabled: true, accept } : { group, enabled: false });
 export const disconnectAiApp = (token: string, id: string) => call(token, "POST", `/connections/${id}/revoke/`, {});
 
 export const TOOL_LABELS: Record<string, string> = {
   list_locations: "Looked up locations",
   get_deliveries: "Read deliveries",
   get_stock_levels: "Read stock levels",
+  get_waste: "Read the waste log",
+  get_stock_counts: "Read stock counts",
 };
