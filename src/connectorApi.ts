@@ -25,6 +25,7 @@ export interface SharedItem {
   label: string;
   summary: string;
   sensitive: boolean;
+  consent: string; // the agreement text for a money kind
   enabled: boolean;
   enabled_by: string;
   enabled_at: string | null;
@@ -65,10 +66,12 @@ async function call(accessToken: string, method: "GET" | "POST", path: string, b
 
 export const fetchConnector = (token: string) => call(token, "GET", "/settings/");
 // Switch on, sharing the chosen kinds of information (items = their keys); needs the Admin's agreement.
-export const switchConnector = (token: string, enabled: boolean, accept = false, items: string[] = []) =>
-  call(token, "POST", "/settings/", enabled ? { enabled: true, accept, items } : { enabled: false });
+// A money kind in items must also be in acceptItems (the Admin agreed to that kind's own text).
+export const switchConnector = (token: string, enabled: boolean, accept = false, items: string[] = [], acceptItems: string[] = []) =>
+  call(token, "POST", "/settings/", enabled ? { enabled: true, accept, items, accept_items: acceptItems } : { enabled: false });
 // Change what is shared while switched on. Takes effect on the next question; nobody is signed out.
-export const setSharedItems = (token: string, items: string[]) => call(token, "POST", "/settings/", { set_items: items });
+export const setSharedItems = (token: string, items: string[], acceptItems: string[] = []) =>
+  call(token, "POST", "/settings/", { set_items: items, accept_items: acceptItems });
 export const disconnectAiApp = (token: string, id: string) => call(token, "POST", `/connections/${id}/revoke/`, {});
 
 export const TOOL_LABELS: Record<string, string> = {
@@ -77,4 +80,9 @@ export const TOOL_LABELS: Record<string, string> = {
   get_stock_levels: "Read stock levels",
   get_waste: "Read the waste log",
   get_stock_counts: "Read stock counts",
+  get_purchases: "Read purchases and prices paid",
+  get_item_costs: "Read item costs",
+  get_stock_value: "Read stock value",
+  get_sales_summary: "Read sales and margin",
+  get_dishes: "Read recipes and dish costing",
 };

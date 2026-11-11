@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { disconnectAiApp, fetchConnector, setSharedItems, switchConnector, TOOL_LABELS } from "./connectorApi";
-import type { ConnectorState } from "./connectorApi";
+import type { ConnectorState, SharedItem } from "./connectorApi";
 import { fmtSquareDateTime } from "./squareApi";
 import HelpLink from "./HelpLink";
 
@@ -19,6 +19,9 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
   const [agree, setAgree] = useState(false);
   // What the Admin ticks before switching on. Once it is on, the toggles save straight away instead.
   const [choice, setChoice] = useState<Record<string, boolean>>({});
+  // Money kinds need the Admin's own agreement: which ones they have ticked, and (once switched on) which are waiting for it.
+  const [agreed, setAgreed] = useState<Record<string, boolean>>({});
+  const [pending, setPending] = useState<string[]>([]);
   const [confirmOff, setConfirmOff] = useState(false);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -75,17 +78,38 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
   }
 
   const cur: ConnectorState = state; // a plain constant, so the helpers below keep the 'not null' check
-  const shared = (key: string) => (cur.enabled ? !!cur.items.find((i) => i.key === key)?.enabled : !!choice[key]);
+  const shared = (key: string) =>
+    cur.enabled ? !!cur.items.find((i) => i.key === key)?.enabled || pending.includes(key) : !!choice[key];
   const allOn = cur.items.every((i) => shared(i.key));
   const anyOn = cur.items.some((i) => shared(i.key));
+  const chosenMoney = cur.items.filter((i) => i.sensitive && (cur.enabled ? pending.includes(i.key) : choice[i.key]));
+  const moneyAgreed = chosenMoney.every((i) => agreed[i.key]);
+  const askingFor = (key: string) => chosenMoney.some((i) => i.key === key);
+
+  function saveItems(keys: string[], acceptItems: string[]) {
+    run("items", async () => {
+      const next = await setSharedItems(accessToken, keys, acceptItems);
+      setPending([]);
+      setAgreed({});
+      return next;
+    });
+  }
 
   function toggleItem(key: string) {
+    const item = cur.items.find((i) => i.key === key);
+    if (!item) return;
     if (!cur.enabled) {
       setChoice((prev) => ({ ...prev, [key]: !prev[key] }));
       return;
     }
-    const next = cur.items.filter((i) => (i.key === key ? !i.enabled : i.enabled)).map((i) => i.key);
-    run(`i:${key}`, () => setSharedItems(accessToken, next));
+    if (item.enabled) {
+      saveItems(cur.items.filter((i) => i.enabled && i.key !== key).map((i) => i.key), []);
+    } else if (item.sensitive) {
+      // Money: ask for the Admin's agreement first, nothing is shared until they confirm.
+      setPending((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+    } else {
+      saveItems([...cur.items.filter((i) => i.enabled).map((i) => i.key), key], []);
+    }
   }
 
   function toggleAll() {
@@ -93,8 +117,30 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
       setChoice(Object.fromEntries(cur.items.map((i) => [i.key, !allOn])));
       return;
     }
-    run("i:all", () => setSharedItems(accessToken, allOn ? [] : cur.items.map((i) => i.key)));
+    if (allOn) {
+      setPending([]);
+      saveItems([], []);
+      return;
+    }
+    // Everything that needs no extra agreement is switched on now; money kinds wait for theirs.
+    const waiting = cur.items.filter((i) => i.sensitive && !i.enabled).map((i) => i.key);
+    const now = cur.items.filter((i) => !i.sensitive || i.enabled).map((i) => i.key);
+    run("items", async () => {
+      const next = await setSharedItems(accessToken, now, []);
+      setPending(waiting);
+      return next;
+    });
   }
+
+  const offMoney = cur.items.filter((i) => i.sensitive && !shared(i.key));
+  const consentBlock = (i: SharedItem) => (
+    <div className="cn-money-consent">
+      <label className="cn-consent">
+        <input type="checkbox" checked={!!agreed[i.key]} onChange={(e) => setAgreed((prev) => ({ ...prev, [i.key]: e.target.checked }))} />
+        <span>{i.consent}</span>
+      </label>
+    </div>
+  );
 
   const sharing = (
     <div className="cn-lists">
@@ -115,24 +161,47 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
               <strong>Select all</strong>
             </span>
           </li>
-          {cur.items.map((i) => (
-            <li key={i.key}>
-              <button
-                type="button"
-                role="switch"
-                className="switch"
-                aria-checked={shared(i.key)}
-                aria-label={i.label}
-                disabled={!!busy}
-                onClick={() => toggleItem(i.key)}
-              />
-              <span className="cn-toggle-text">
-                <strong>{i.label}</strong>
-                <span>{i.summary}</span>
-              </span>
-            </li>
+          {cur.items.map((i, n) => (
+            <Fragment key={i.key}>
+              {i.sensitive && !cur.items[n - 1]?.sensitive && (
+                <li className="cn-divider">
+                  <span>Money figures: each needs your own agreement</span>
+                </li>
+              )}
+              <li className={askingFor(i.key) ? "cn-asking" : ""}>
+                <button
+                  type="button"
+                  role="switch"
+                  className="switch"
+                  aria-checked={shared(i.key)}
+                  aria-label={i.label}
+                  disabled={!!busy}
+                  onClick={() => toggleItem(i.key)}
+                />
+                <span className="cn-toggle-text">
+                  <strong>{i.label}</strong>
+                  <span>{i.summary}</span>
+                  {askingFor(i.key) && consentBlock(i)}
+                </span>
+              </li>
+            </Fragment>
           ))}
         </ul>
+        {cur.enabled && pending.length > 0 && (
+          <div className="sq-btns" style={{ marginTop: 10 }}>
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={!moneyAgreed || !!busy}
+              onClick={() => saveItems([...cur.items.filter((i) => i.enabled).map((i) => i.key), ...pending], pending)}
+            >
+              {busy === "items" ? "Switching on…" : "Switch on the money figures I ticked"}
+            </button>
+            <button type="button" className="btn-ghost small" onClick={() => setPending([])}>
+              Cancel
+            </button>
+          </div>
+        )}
         <p className="lnote" style={{ margin: "10px 0 0" }}>
           Location names are always included, so your AI can answer by location.
           {cur.enabled && " Changes apply to the next question. People may need to start a new chat, or reconnect, in their AI app to see new tools."}
@@ -141,7 +210,11 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
       <div>
         <h3>It never sees or changes</h3>
         <ul>
-          <li>Prices, costs, sales or invoice totals</li>
+          {offMoney.length === cur.items.filter((i) => i.sensitive).length ? (
+            <li>Prices, costs, sales, margins or recipes</li>
+          ) : (
+            offMoney.length > 0 && <li>Money figures you have not switched on ({offMoney.map((i) => i.label.toLowerCase()).join(", ")})</li>
+          )}
           <li>Supplier contact details, staff details, invoice photos</li>
           <li>Anything for a location the person cannot open</li>
           <li>It is read-only: nothing can be changed from the AI app</li>
@@ -180,11 +253,12 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
             <span>{CONSENT}</span>
           </label>
           {!anyOn && <p className="hint" style={{ margin: "10px 0 0" }}>Choose at least one kind of information above.</p>}
+          {anyOn && !moneyAgreed && <p className="hint" style={{ margin: "10px 0 0" }}>Tick the agreement under each money figure you chose.</p>}
           <div className="sq-btns" style={{ marginTop: 12 }}>
             <button
               type="button"
               className="btn-primary"
-              disabled={!agree || !anyOn || busy === "on"}
+              disabled={!agree || !anyOn || !moneyAgreed || busy === "on"}
               onClick={() =>
                 run("on", () =>
                   switchConnector(
@@ -192,6 +266,7 @@ export default function ConnectorPanel({ accessToken }: { accessToken: string })
                     true,
                     true,
                     state.items.filter((i) => choice[i.key]).map((i) => i.key),
+                    chosenMoney.filter((i) => agreed[i.key]).map((i) => i.key),
                   ),
                 )
               }
