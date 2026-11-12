@@ -150,7 +150,7 @@ export default function MethodCook({ recipeName, steps, lineById, colorOf, finis
               {(step.note.trim() || step.arrow_photo?.url) && (
                 <div className="mt-ctip">
                   {step.arrow_photo?.url && <img src={step.arrow_photo.url} alt="" />}
-                  <div><b>Then:</b> {step.note}</div>
+                  <div><b>{i < n - 1 ? `Before step ${i + 2}:` : "Before finishing:"}</b> {step.note}</div>
                 </div>
               )}
               {finished?.url && (

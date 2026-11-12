@@ -207,7 +207,8 @@ export default function RecipeMethod({
   const left = (lineId: string): number => Number(lineById.get(lineId)?.qty ?? 0) - used(steps, lineId);
   const stepCost = (s: MethodStep): number =>
     s.lines.reduce((t, l) => t + num(l.qty) * Number(lineById.get(l.recipe_line)?.unit_cost ?? 0), 0);
-  const stillToPlace = lines.filter((l) => Number(l.qty) > 0 && left(l.id) > 0.0005).length;
+  const unplaced = lines.filter((l) => Number(l.qty) > 0 && left(l.id) > 0.0005);
+  const stillToPlace = unplaced.length;
   const stepNumber = (key: string): number => steps.findIndex((s) => s.key === key) + 1;
 
   // ---------- step actions ----------
@@ -476,6 +477,7 @@ export default function RecipeMethod({
 
   function StepOpen({ s, idx }: { s: MethodStep; idx: number }) {
     const last = idx === steps.length - 1;
+    const empty = !s.text.trim() && s.lines.length === 0;
     const cost = stepCost(s);
     return (
       <div
@@ -541,7 +543,14 @@ export default function RecipeMethod({
           ))}
           {s.photos.length < 6 && <label className="mt-ghost">📷 Photo{photoInput("step", s.key, true)}</label>}
           <span className="mt-grow" />
-          <button type="button" className="mt-btn p" onClick={() => nextStep(s.key)}>{last ? "Add next step" : "Next step"} →</button>
+          {last ? (
+            <>
+              <button type="button" className="mt-btn" disabled={empty} title={empty ? "Write this step or add an ingredient first" : "Add another step after this one"} onClick={() => nextStep(s.key)}>+ Add another step</button>
+              <button type="button" className="mt-btn p" title="This is the last step. Next: a photo of the finished dish" onClick={() => goStep("result", false)}>Finish: add the dish photo →</button>
+            </>
+          ) : (
+            <button type="button" className="mt-btn p" onClick={() => nextStep(s.key)}>Next step →</button>
+          )}
         </div>
       </div>
     );
@@ -586,21 +595,22 @@ export default function RecipeMethod({
   function Connector({ s, idx }: { s: MethodStep; idx: number }) {
     const last = idx === steps.length - 1;
     const open = noteOpen[s.key] || s.note || s.arrow_photo;
+    const tipLabel = last ? "Add a tip before finishing" : `Add a tip before Step ${idx + 2}`;
     return (
       <div className="mt-conn">
         <span className="mt-arr" aria-hidden>↓</span>
         {open ? (
           <div className="mt-cnote">
-            {s.arrow_photo?.url && <div className="mt-ph small"><img src={s.arrow_photo.url} alt="" /><button type="button" className="mt-phx" onClick={() => removePhoto(s.arrow_photo!, { step: s.key, role: "arrow" })} aria-label="Remove arrow picture">✕</button></div>}
-            <input value={s.note} maxLength={300} placeholder="A note for the move to the next step, e.g. pour slowly" aria-label="Note for the move to the next step" onChange={(e) => patchStep(s.key, { note: e.target.value })} />
-            <label className="mt-ibtn" title="Add a picture to this arrow" aria-label="Add a picture to this arrow">📷{photoInput("arrow", s.key, false)}</label>
+            {s.arrow_photo?.url && <div className="mt-ph small"><img src={s.arrow_photo.url} alt="" /><button type="button" className="mt-phx" onClick={() => removePhoto(s.arrow_photo!, { step: s.key, role: "arrow" })} aria-label="Remove tip picture">✕</button></div>}
+            <input value={s.note} maxLength={300} placeholder={last ? "A tip before finishing, e.g. wipe the rim of the cup" : `A tip before step ${idx + 2}, e.g. pour slowly`} aria-label={tipLabel} onChange={(e) => patchStep(s.key, { note: e.target.value })} />
+            <label className="mt-ibtn" title="Add a picture to this tip" aria-label="Add a picture to this tip">📷{photoInput("arrow", s.key, false)}</label>
             <button type="button" className="mt-ibtn" aria-label="Remove note" title="Remove note"
               onClick={() => { setNoteOpen((n) => ({ ...n, [s.key]: false })); patchStep(s.key, { note: "" }); if (s.arrow_photo) removePhoto(s.arrow_photo, { step: s.key, role: "arrow" }); }}>✕</button>
           </div>
         ) : (
-          <button type="button" className="mt-cbtn" onClick={() => setNoteOpen((n) => ({ ...n, [s.key]: true }))} title="Add a note or picture to this arrow">💬 Note or picture</button>
+          <button type="button" className="mt-cbtn" onClick={() => setNoteOpen((n) => ({ ...n, [s.key]: true }))} title="The cook sees this tip when moving on from this step">💬 {tipLabel}</button>
         )}
-        <button type="button" className="mt-cbtn" onClick={() => addStep(s.key)} title="Insert a step here">+{last ? " Add step" : ""}</button>
+        {!last && <button type="button" className="mt-cbtn" onClick={() => addStep(s.key)} title="Insert a step here">+</button>}
       </div>
     );
   }
@@ -695,7 +705,7 @@ export default function RecipeMethod({
           )}
           <div className="mt-foot">
             <span className={stillToPlace ? "mt-warn" : "mt-ok"}>
-              {lines.length === 0 ? "" : stillToPlace ? `${stillToPlace} ingredient${stillToPlace > 1 ? "s" : ""} not fully placed yet` : "Every ingredient is placed ✓ Totals match the Ingredients tab."}
+              {lines.length === 0 ? "" : stillToPlace ? `Not fully placed yet: ${unplaced.slice(0, 3).map((l) => `${lineName(l)} (${fmt(left(l.id))} ${l.unit} left)`).join(", ")}${stillToPlace > 3 ? ` and ${stillToPlace - 3} more` : ""}` : "Every ingredient is placed ✓ Totals match the Ingredients tab."}
             </span>
             <button type="button" className="mt-btn p" onClick={async () => { await flush(); setMode("cook"); }}>Preview in Cook view</button>
           </div>

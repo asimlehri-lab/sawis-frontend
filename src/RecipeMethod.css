@@ -204,3 +204,4 @@ textarea.mt-ins:focus, .mt-qin:focus, .mt-tin:focus, .mt-cnote:focus-within { bo
 .mt-usedin { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
 .mt-used { border: 1px solid var(--border); background: var(--brand-soft); color: var(--brand); border-radius: 100px; padding: 1px 9px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .mt-used:hover { border-color: var(--brand); }
+.mt-btn:disabled { opacity: .45; cursor: not-allowed; }
