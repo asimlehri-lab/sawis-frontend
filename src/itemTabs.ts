@@ -9,10 +9,11 @@ export const ITEM_TAB_LABELS: Record<ItemTab, string> = {
 };
 
 // The Recipe page's sections (History is only offered to managers and admins).
-export type RecipeTab = "ingredients" | "cost" | "allergens" | "history";
+export type RecipeTab = "ingredients" | "method" | "cost" | "allergens" | "history";
 
 export const RECIPE_TAB_LABELS: Record<RecipeTab, string> = {
   ingredients: "Ingredients",
+  method: "Method",
   cost: "Cost & margin",
   allergens: "Allergens",
   history: "History",

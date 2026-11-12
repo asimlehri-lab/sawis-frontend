@@ -2464,6 +2464,7 @@ export default function App() {
             locations={locations}
             initialTab={recipeTab}
             backLabel={recipeFromReports ? "Reports" : undefined}
+            entitlements={me.entitlements}
             onBack={() => {
               if (recipeFromReports) {
                 goToNav("Reports");

@@ -23,6 +23,9 @@ import SearchSelect from "./SearchSelect";
 import AllergenIcon from "./AllergenIcon";
 import { AllergenSheetBody } from "./AllergenPrintSheet";
 import RecipeHistory from "./RecipeHistory";
+import RecipeMethod from "./RecipeMethod";
+import { METHOD_FEATURE } from "./methodApi";
+import type { MethodStep } from "./methodApi";
 import { RECIPE_TAB_LABELS } from "./itemTabs";
 import type { RecipeTab } from "./itemTabs";
 
@@ -61,6 +64,8 @@ interface Props {
   initialTab?: RecipeTab;
   // Where "Back" goes when the recipe was opened from somewhere other than the Recipes list.
   backLabel?: string;
+  // The business's add-ons (me.entitlements); "recipe_method" turns the Method tab on.
+  entitlements?: string[];
 }
 
 // Set just before opening a freshly duplicated recipe, so the page that opens
@@ -87,7 +92,11 @@ export default function RecipeDetail({
   preselectSubId,
   initialTab,
   backLabel,
+  entitlements = [],
 }: Props) {
+  const hasMethod = entitlements.includes(METHOD_FEATURE);
+  // Where each ingredient line is used in the Method tab, filled in by the Method tab itself.
+  const [methodSteps, setMethodSteps] = useState<MethodStep[]>([]);
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [copiedFrom] = useState<string | null>(() => (justCopied && justCopied.id === recipeId ? justCopied.from : null));
   const [duplicating, setDuplicating] = useState(false);
@@ -460,7 +469,11 @@ export default function RecipeDetail({
 
       <div className="rp-tabs" role="tablist" aria-label="Recipe sections">
         {(readOnly
-          ? (["ingredients", "cost", "allergens"] as const)
+          ? hasMethod
+            ? (["ingredients", "method", "cost", "allergens"] as const)
+            : (["ingredients", "cost", "allergens"] as const)
+          : hasMethod
+          ? (["ingredients", "method", "cost", "allergens", "history"] as const)
           : (["ingredients", "cost", "allergens", "history"] as const)
         ).map((t) => (
           <button
@@ -564,9 +577,41 @@ export default function RecipeDetail({
         <AllergenSheetBody recipes={[recipe]} allergens={allergens} venue={venue} includeMay variant="card" />
       </div>
 
-      <fieldset className="ro-fieldset" disabled={readOnly} hidden={tab === "history"}>
+      {/* Outside the read-only fieldset on purpose: staff follow the method in Cook view, which has buttons. */}
+      {hasMethod && (
+        <RecipeMethod
+          recipe={recipe}
+          accessToken={accessToken}
+          readOnly={readOnly}
+          items={items}
+          allRecipes={allRecipes}
+          currency={currency}
+          contains={recipeAllergens.map((a) => a.name)}
+          mayContain={recipeMay.map((a) => a.name)}
+          onRecipeChanged={() => {
+            reload();
+            onChanged();
+          }}
+          onStepsChange={setMethodSteps}
+          hidden={tab !== "method"}
+        />
+      )}
 
-      {error && <p className="error">{error}</p>}
+      <fieldset className="ro-fieldset" disabled={readOnly} hidden={tab === "history" || tab === "method"}>
+
+      {error && (
+        <p className="error">
+          {error}
+          {hasMethod && /Method tab/.test(error) && (
+            <>
+              {" "}
+              <button type="button" className="row-btn" onClick={() => { setEditLineId(null); setError(null); setTab("method"); }}>
+                Open the Method tab
+              </button>
+            </>
+          )}
+        </p>
+      )}
 
       <div className={`det-grid single${tab === "cost" ? " cost" : ""}`}>
         <div className="card" hidden={tab !== "ingredients"}>
@@ -595,6 +640,17 @@ export default function RecipeDetail({
                 {recipe.lines.map((line) => (
                   <tr key={line.id}>
                     <td>
+                      {hasMethod && methodSteps.some((st) => st.lines.some((l) => l.recipe_line === line.id)) && (
+                        <span className="mt-usedin">
+                          {methodSteps.flatMap((st, ix) =>
+                            st.lines.filter((l) => l.recipe_line === line.id).map((l) => (
+                              <button type="button" key={`${st.key}`} className="mt-used" onClick={() => setTab("method")} title="Open the Method tab">
+                                Step {ix + 1} · {parseFloat(Number(l.qty).toFixed(3))} {line.unit}
+                              </button>
+                            ))
+                          )}
+                        </span>
+                      )}
                       {line.line_type === "recipe" ? (
                         <>
                           <span

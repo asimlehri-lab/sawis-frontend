@@ -67,8 +67,18 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "Open the recipe and tap its History tab (managers and admins only). It lists what people changed, with the effect on cost per portion: ingredients added, removed or re-measured, the menu price (with the food cost before and after), the batch yield and other details. Lines marked Automatic are cost moves nobody typed into the recipe: the price an ingredient is costed at went up or down (or you changed its default supplier), or a sub-recipe it uses got cheaper or dearer. The chart at the top shows how cost per portion has stepped over the last 30 days. Entries can't be edited or deleted.",
       },
       {
+        id: "recipe-method",
+        q: "What is the Method tab on a recipe, and how do I build one?",
+        a: "Method is an add-on (included in the Layer and Sky plans) that shows as a tab between Ingredients and Cost & margin. It is a step-by-step guide for making the dish. Managers and admins open the recipe, tap Method and build it: the shelf at the top lists the recipe's ingredients, and you drag an ingredient onto a step (or tap Add ingredient inside the step) and set the amount. Write what the cook does in the box, add an optional timer and photos, then tap Next step. Between steps, Note or picture adds a tip for the move to the next step, and the Finished dish row at the bottom holds a photo of how it should look. Everything saves by itself. Everyone on the team, staff included, can follow the method in Cook view: one step at a time, big text, tick-off ingredients, a timer and photos, with no costs shown.",
+        fact: "💡 Amounts you place in a step are parts of the recipe's own ingredient amounts, so cost and allergens never change. If you type more than the recipe has, the recipe's amount on the Ingredients tab is raised to match.",
+      },
+      {
+        q: "Why can't I lower an ingredient's amount on the Ingredients tab?",
+        a: "When a recipe has a method (the Method add-on), its steps already use some of each ingredient. SAWIS won't let the recipe's amount drop below what the steps use, because then the steps and the cost would disagree. The message names the amount the steps use. Open the Method tab, lower the amount in the step that uses it (or take the ingredient out of that step), and the recipe's amount can then be lowered on the Ingredients tab.",
+      },
+      {
         q: "Where is everything on the recipe page?",
-        a: "The recipe page is split into tabs. Ingredients has the batch recipe lines and the danger zone. Cost & margin has the batch yield, the menu price, cost per portion and food cost. Allergens shows what the dish contains and may contain, and the print button for the allergen card; an orange dot on that tab means some ingredients' allergens haven't been confirmed yet. History (managers and admins only) shows who changed what and what it did to cost. Staff see the first three tabs.",
+        a: "The recipe page is split into tabs. Ingredients has the batch recipe lines and the danger zone. Cost & margin has the batch yield, the menu price, cost per portion and food cost. Allergens shows what the dish contains and may contain, and the print button for the allergen card; an orange dot on that tab means some ingredients' allergens haven't been confirmed yet. Method (only with the Method add-on) is the step-by-step guide for making the dish. History (managers and admins only) shows who changed what and what it did to cost. Staff see the first three tabs, plus Method if your business has it.",
       },
       {
         q: "Where is everything on the item page?",
