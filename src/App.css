@@ -3022,7 +3022,8 @@ input[type="file"] {
 .ar-tag-suggest { border-style: dashed; color: var(--brand); background: transparent; cursor: pointer; }
 .ar-tag-suggest:hover { border-color: var(--brand); }
 .ar-none { font-size: 12px; color: var(--muted); font-style: italic; }
-.ar-reason { font-size: 12px; color: var(--muted); }
+.ar-reason { font-size: 13px; color: var(--ink); opacity: 0.85; line-height: 1.4; }
+.ar-why { color: var(--muted); }
 .ar-actions { display: flex; gap: 6px; flex: none; }
 .ar-pill { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
 .ar-pill-good { background: var(--good-soft); color: var(--good); }
@@ -3039,8 +3040,7 @@ input[type="file"] {
 .ar-bulk-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .ar-pick .ar-tag { cursor: pointer; }
 .ar-pick .ar-tag:hover { border-color: var(--brand); }
-.ar-pick .ar-tag.on { background: var(--brand); border-color: var(--brand); color: #fff; }
-.ar-pick .ar-tag.on svg { color: #fff; }
+.ar-pick .ar-tag.on { background: var(--brand-soft); border-color: var(--brand); color: var(--brand); }
 .ar-bar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .ar-bar-link { background: none; border: none; color: inherit; opacity: 0.8; font: inherit; font-size: 12.5px; font-weight: 600; text-decoration: underline; cursor: pointer; padding: 4px; }
 .ar-bar-btn { background: transparent; color: var(--surface); border-color: rgba(255, 255, 255, 0.4); }
@@ -4010,3 +4010,38 @@ label.cn-consent input { width: auto; margin: 3px 0 0; padding: 0; flex: none; }
 .cn-gem-more { margin-top: 12px; font-size: 13px; }
 .cn-gem-more summary { cursor: pointer; color: var(--brand); font-weight: 600; }
 @media (max-width: 640px) { .cn-gem-label { width: 100%; } }
+
+/* Review allergens: calmer header, filter chips, one list */
+.ar-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.ar-linkbtn { background: none; border: none; padding: 6px 0; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--brand); cursor: pointer; }
+.ar-linkbtn:hover { text-decoration: underline; }
+.ar-linkbtn:disabled { opacity: 0.5; cursor: default; text-decoration: none; }
+.ar-prog { display: flex; align-items: center; gap: 12px; margin-top: 2px; }
+.ar-prog .ar-progress { flex: 1; margin-top: 0; }
+.ar-prog-text { font-size: 13.5px; color: var(--muted); white-space: nowrap; }
+.ar-prog-text b { color: var(--ink); }
+.ar-info { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none; width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--muted); font-size: 12px; font-weight: 700; cursor: help; }
+.ar-tip { display: none; position: absolute; right: -6px; top: 26px; z-index: 6; width: 260px; padding: 10px 12px; border-radius: 10px; background: #211F1B; color: #fff; font-size: 12.5px; font-weight: 400; line-height: 1.4; text-align: left; }
+.ar-info:hover .ar-tip, .ar-info:focus .ar-tip { display: block; }
+.ar-note { margin: 8px 0 0; }
+.ar-filters { display: flex; align-items: center; justify-content: space-between; gap: 10px 16px; flex-wrap: wrap; margin: 14px 0 12px; }
+.ar-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.ar-fchip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 13px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer; }
+.ar-fchip b { font-weight: 700; }
+.ar-fchip:hover { border-color: var(--brand); }
+.ar-fchip.on { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+.ar-pill-sug { background: var(--brand-soft); color: var(--brand); }
+.ar-recent { margin-top: 16px; }
+.ar-row { padding: 14px 16px; }
+.ar-tag svg { flex: none; }
+.chip.active .al-ico, .ar-bar .al-ico { background: #fff; border-radius: 50%; padding: 1.5px; box-sizing: content-box; }
+@media (max-width: 640px) {
+  .ar-line { flex-wrap: wrap; }
+  .ar-actions { width: 100%; flex-wrap: wrap; padding-left: 30px; }
+  .ar-prog { flex-wrap: wrap; }
+  .ar-prog .ar-progress { flex: 1 1 100%; order: 2; }
+  .ar-prog-text { white-space: normal; }
+}
+@media print {
+  .al-ico { filter: grayscale(1) contrast(1.15); }
+}

@@ -31,6 +31,21 @@ function toggle(list: string[], id: string): string[] {
   return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
 }
 
+// Suggestions that still wait for a person: pending, and not already a tag.
+function openSuggestions(it: CatalogItem) {
+  return it.allergen_suggestions.filter(
+    (s) => s.status === "pending" && !(s.level === "contains" ? it.allergens : it.may_contain_allergens).includes(s.allergen)
+  );
+}
+
+// Short, lower-case allergen names for button labels ("Add gluten & confirm").
+function shortName(a?: Allergen): string {
+  if (!a) return "allergen";
+  if (a.code === "gluten") return "gluten";
+  if (a.code === "sulphites") return "sulphites";
+  return a.name.toLowerCase();
+}
+
 function ReviewRow({
   item,
   allergens,
@@ -45,6 +60,7 @@ function ReviewRow({
   onDraft,
   onToggleEdit,
   onConfirm,
+  onAcceptConfirm,
   onOpen,
 }: {
   item: CatalogItem;
@@ -60,6 +76,7 @@ function ReviewRow({
   onDraft: (d: Draft) => void;
   onToggleEdit: () => void;
   onConfirm: () => void;
+  onAcceptConfirm: () => void;
   onOpen: () => void;
 }) {
   const mayOnly = draft.may.filter((id) => !draft.contains.includes(id));
@@ -67,13 +84,20 @@ function ReviewRow({
   const pending = item.allergen_suggestions.filter(
     (s) => s.status === "pending" && !(s.level === "contains" ? draft.contains : draft.may).includes(s.allergen)
   );
-  const reason = item.allergen_suggestions
+  const nameOf = (id: string) => allergens.find((x) => x.id === id);
+  // Why each tag or suggestion is there: shown on hover for tags, and as one
+  // short line under a suggestion that still waits for a person.
+  const reasonOf = new Map(item.allergen_suggestions.map((s) => [s.allergen, s.reason]));
+  const why = pending
     .map((s) => {
-      const a = allergens.find((x) => x.id === s.allergen);
-      return a ? `${a.name}: ${s.source === "ai" ? "AI: " : ""}${s.reason}` : null;
+      const a = nameOf(s.allergen);
+      if (!a) return null;
+      return pending.length > 1 ? `${shortName(a)}: ${s.reason}` : s.reason;
     })
     .filter((r): r is string => !!r);
+  const notSure = pending.length > 0 && pending.every((s) => s.confidence === "low");
   const nothingTagged = draft.contains.length === 0 && mayOnly.length === 0;
+  const addWhat = pending.length === 1 ? shortName(nameOf(pending[0].allergen)) : `${pending.length} allergens`;
 
   function flip(level: "contains" | "may", id: string) {
     let contains = draft.contains;
@@ -110,13 +134,16 @@ function ReviewRow({
               {usage > 0 ? `used in ${usage} ${usage === 1 ? "recipe" : "recipes"}` : "not used in a recipe yet"}
             </span>
             {!needsReview && <span className="ar-pill ar-pill-good">✓ Confirmed</span>}
+            {needsReview && pending.length > 0 && (
+              <span className="ar-pill ar-pill-sug">{notSure ? "SAWIS is not sure" : "SAWIS suggests"}</span>
+            )}
           </div>
           {!compact && (
             <div className="ar-tags">
               {allergens
                 .filter((a) => draft.contains.includes(a.id))
                 .map((a) => (
-                  <span key={a.id} className="ar-tag" title={a.name}>
+                  <span key={a.id} className="ar-tag" title={reasonOf.get(a.id) ?? a.name}>
                     <AllergenIcon code={a.code} size={14} />
                     {a.name}
                   </span>
@@ -137,7 +164,7 @@ function ReviewRow({
                     key={s.id}
                     type="button"
                     className="ar-tag ar-tag-suggest"
-                    title={s.source === "ai" ? `AI suggests: ${s.reason}` : s.reason}
+                    title={s.reason}
                     disabled={busy}
                     onClick={() =>
                       s.level === "contains"
@@ -146,18 +173,41 @@ function ReviewRow({
                     }
                   >
                     + {s.level === "may_contain" ? "May contain " : ""}
-                    {a.name}?{s.source === "ai" ? " (AI)" : ""}
+                    {a.name}?
                   </button>
                 );
               })}
-              {nothingTagged && pending.length === 0 && <span className="ar-none">No allergens ticked</span>}
+              {nothingTagged && pending.length === 0 && (
+                <span className="ar-none">
+                  {needsReview ? "Nothing found from the name. Please check the label." : "No allergens"}
+                </span>
+              )}
             </div>
           )}
-          {!compact && reason.length > 0 && needsReview && <div className="ar-reason">{reason.join(" · ")}</div>}
+          {!compact && why.length > 0 && needsReview && (
+            <div className="ar-reason">
+              <span className="ar-why">Why:</span> {why.join(" · ")}
+            </div>
+          )}
         </div>
         <div className="ar-actions">
-          {needsReview && !compact && (
-            <button type="button" className="btn-primary small" disabled={busy} onClick={onConfirm}>
+          {needsReview && !compact && pending.length > 0 && (
+            <>
+              <button type="button" className="btn-primary small" disabled={busy} onClick={onAcceptConfirm}>
+                Add {addWhat} &amp; confirm
+              </button>
+              <button type="button" className="btn-ghost small" disabled={busy} onClick={onConfirm}>
+                {nothingTagged ? "No allergens" : "Confirm as is"}
+              </button>
+            </>
+          )}
+          {needsReview && !compact && pending.length === 0 && (
+            <button
+              type="button"
+              className={nothingTagged ? "btn-ghost small" : "btn-primary small"}
+              disabled={busy}
+              onClick={onConfirm}
+            >
               {nothingTagged ? "No allergens" : "Looks right"}
             </button>
           )}
@@ -254,11 +304,11 @@ export default function AllergenReview({
   const [drafts, setDrafts] = useState<Record<string, Draft>>({});
   const [editing, setEditing] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [ticked, setTicked] = useState<Set<string>>(new Set());
+  const [filter, setFilter] = useState<"all" | "ready" | "sug" | "none">("all");
+  const [showRecent, setShowRecent] = useState(false);
   const [recent, setRecent] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [limitA, setLimitA] = useState(PAGE);
-  const [limitB, setLimitB] = useState(PAGE);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dishId, setDishId] = useState<string | null>(null);
@@ -288,8 +338,8 @@ export default function AllergenReview({
       }
       setCheckNote(
         (r.items_changed === 0
-          ? `Checked ${r.items} item names against the word list. None matched, so every item below needs a person's check.`
-          : `Checked ${r.items} item names against the word list: ${r.items_changed} matched (${r.tags_added} tag${r.tags_added === 1 ? "" : "s"} added, ${r.suggestions} suggestion${r.suggestions === 1 ? "" : "s"} to look at). Nothing is confirmed until you confirm it.`) +
+          ? `Checked ${r.items} item names. Nothing new matched, so every item below needs a person's check.`
+          : `Checked ${r.items} item names: ${r.items_changed} matched (${r.tags_added} tag${r.tags_added === 1 ? "" : "s"} added, ${r.suggestions} suggestion${r.suggestions === 1 ? "" : "s"} to look at). Nothing is confirmed until you confirm it.`) +
           aiAllergenSentence(r.ai)
       );
       onChanged();
@@ -348,7 +398,6 @@ export default function AllergenReview({
         setLocal((prev) => ({ ...prev, ...Object.fromEntries(out.map((o) => [o.id, o])) }));
         setDrafts((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => !ids.has(id))));
         setSelected((prev) => new Set([...prev].filter((id) => !ids.has(id))));
-        setTicked((prev) => new Set([...prev].filter((id) => !ids.has(id))));
         setRecent((prev) => [...ids, ...prev.filter((id) => !ids.has(id))].slice(0, 8));
       }
       setEditing(null);
@@ -365,6 +414,16 @@ export default function AllergenReview({
     return confirm([
       { id: it.id, allergens: d.contains, may_contain_allergens: d.may.filter((id) => !d.contains.includes(id)) },
     ]);
+  }
+
+  // Adds what SAWIS suggests for this item to what is already shown, then confirms.
+  function acceptConfirm(it: CatalogItem) {
+    const d = draftOf(it);
+    const contains = new Set(d.contains);
+    const may = new Set(d.may);
+    openSuggestions(it).forEach((s) => (s.level === "contains" ? contains : may).add(s.allergen));
+    contains.forEach((id) => may.delete(id));
+    return confirm([{ id: it.id, allergens: [...contains], may_contain_allergens: [...may] }]);
   }
 
   function renderRow(it: CatalogItem, opts: { showSelect: boolean; compact: boolean; selected: boolean; onSelect: (c: boolean, shift: boolean) => void }) {
@@ -384,6 +443,7 @@ export default function AllergenReview({
         onDraft={(d) => setDrafts((prev) => ({ ...prev, [it.id]: d }))}
         onToggleEdit={() => setEditing(editing === it.id ? null : it.id)}
         onConfirm={() => confirmRow(it)}
+        onAcceptConfirm={() => acceptConfirm(it)}
         onOpen={() => onOpenItem(it.id)}
       />
     );
@@ -398,31 +458,27 @@ export default function AllergenReview({
     .map(view)
     .filter((it) => it.allergen_needs_review);
   const matches = (it: CatalogItem) => !q || it.name.toLowerCase().includes(q);
-  const hasSuggestion = (it: CatalogItem) =>
+  const hasTags = (it: CatalogItem) =>
     it.allergens.length > 0 || it.may_contain_allergens.length > 0 || it.allergen_suggestions.length > 0;
-  const suggested = needing.filter(hasSuggestion).filter(matches).sort(byUsage);
-  const nothing = needing.filter((it) => !hasSuggestion(it)).filter(matches).sort(byUsage);
-  const shownA = suggested.slice(0, limitA);
-  const shownB = nothing.slice(0, limitB);
+  const found = needing.filter(matches);
+  // Three kinds of row, shown in one list: SAWIS suggests something that waits
+  // for a person, tags were found from the name, or nothing was found at all.
+  const sugList = found.filter((it) => openSuggestions(it).length > 0).sort(byUsage);
+  const readyList = found.filter((it) => openSuggestions(it).length === 0 && hasTags(it)).sort(byUsage);
+  const noneList = found.filter((it) => !hasTags(it)).sort(byUsage);
+  const queue =
+    filter === "sug" ? sugList : filter === "ready" ? readyList : filter === "none" ? noneList : [...sugList, ...readyList, ...noneList];
+  const shown = queue.slice(0, limitA);
 
-  function selectA(id: string, checked: boolean) {
+  // Shift-click selects everything between the last click and this one, so a
+  // long run of obviously-fine items (salt, sugar, water ...) isn't a hundred
+  // separate clicks.
+  function pick(id: string, checked: boolean, shift: boolean) {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (checked) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  }
-
-  // Shift-click ticks everything between the last tick and this one, so a
-  // long run of obviously-fine items (salt, sugar, water ...) isn't a
-  // hundred separate clicks.
-  function tickB(id: string, checked: boolean, shift: boolean) {
-    setTicked((prev) => {
-      const next = new Set(prev);
-      const ids = shownB.map((i) => i.id);
+      const ids = shown.map((i) => i.id);
       const from = shift && lastTicked ? ids.indexOf(lastTicked) : -1;
-      if (from >= 0) {
+      if (from >= 0 && ids.indexOf(id) >= 0) {
         const [lo, hi] = [Math.min(from, ids.indexOf(id)), Math.max(from, ids.indexOf(id))];
         ids.slice(lo, hi + 1).forEach((x) => (checked ? next.add(x) : next.delete(x)));
       } else if (checked) next.add(id);
@@ -432,18 +488,31 @@ export default function AllergenReview({
     setLastTicked(id);
   }
 
-  // Ticks everything currently shown, so after searching "syrup" the whole
-  // run is one click. Only what is on screen is ticked, never what a
-  // person can't see.
-  function tickAllShown() {
-    setTicked((prev) => new Set([...prev, ...shownB.map((i) => i.id)]));
+  // "Select all shown" picks the rows that have tags or a suggestion. Rows with
+  // nothing found are only picked this way after a search (say "syrup"), so a
+  // person never ticks a hundred unknown items without looking at them.
+  const selectable = shown.filter((i) => hasTags(i) || q !== "");
+  const allSelected = selectable.length > 0 && selectable.every((i) => selected.has(i.id));
+  function toggleAllShown() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      selectable.forEach((i) => (allSelected ? next.delete(i.id) : next.add(i.id)));
+      return next;
+    });
   }
 
-  // Adds the chosen allergen(s) to every ticked item and confirms them.
+  const pickedItems = [...selected]
+    .map((id) => itemsById.get(id))
+    .filter((it): it is CatalogItem => !!it)
+    .map(view);
+  const pickedTagged = pickedItems.filter(hasTags);
+  const pickedNone = pickedItems.filter((it) => !hasTags(it));
+
+  // Adds the chosen allergen(s) to every selected item and confirms them.
   // Anything already tagged on the item is kept.
   function applyBulkAllergen() {
     if (bulkPick.length === 0) return;
-    const reviews = [...ticked].map((id) => {
+    const reviews = [...selected].map((id) => {
       const it = itemsById.get(id);
       const cur = it ? view(it) : null;
       const contains = new Set(cur?.allergens ?? []);
@@ -458,7 +527,7 @@ export default function AllergenReview({
     });
   }
 
-  const hiddenTicked = [...ticked].filter((id) => !shownB.some((i) => i.id === id)).length;
+  const hiddenSelected = [...selected].filter((id) => !shown.some((i) => i.id === id)).length;
 
   const recentItems = recent
     .map((id) => itemsById.get(id))
@@ -486,35 +555,46 @@ export default function AllergenReview({
       <button className="back-link" onClick={onBack}>
         ← All items
       </button>
-      <div className="content-head" style={{ marginBottom: 6 }}>
+      <div className="content-head ar-head">
         <h1 className="page-title">Review allergens</h1>
-      </div>
-      <p className="muted" style={{ marginTop: 0 }}>
-        {needing.length === 0
-          ? "Every item's allergens have been confirmed."
-          : `${doneCount} of ${total} items confirmed — ${needing.length} still to check.`}{" "}
-        A confirmed item with no tags means “reviewed, no allergens”. An item you haven't confirmed is never treated as
-        allergen-free.
-      </p>
-      <div className="ar-progress" aria-hidden="true">
-        <span style={{ width: `${total ? Math.round((doneCount / total) * 100) : 0}%` }} />
-      </div>
-      {(needing.length > 0 || checkNote) && (
-        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginTop: 10 }}>
-          <button className="btn-ghost small" onClick={() => void runCheck()} disabled={checking}>
-            {checking ? "Checking item names…" : "Suggest from item names"}
+        {(needing.length > 0 || checkNote) && (
+          <button
+            type="button"
+            className="ar-linkbtn"
+            onClick={() => void runCheck()}
+            disabled={checking}
+            title="Reads every item name again and suggests anything new"
+          >
+            {checking ? "Checking names…" : "Check names again"}
           </button>
-          <span className="hint" style={{ margin: 0, flex: "1 1 260px" }}>
-            {checking
-              ? "Reading every item name against the word list…"
-              : (checkNote ?? "Reads every item name and suggests allergens it recognises, such as milk in “Milk Syrup”.")}
-          </span>
+        )}
+      </div>
+      <div className="ar-prog">
+        <div className="ar-progress" aria-hidden="true">
+          <span style={{ width: `${total ? Math.round((doneCount / total) * 100) : 0}%` }} />
         </div>
-      )}
+        <span className="ar-prog-text">
+          {needing.length === 0 ? (
+            "Every item's allergens are confirmed"
+          ) : (
+            <>
+              <b>{doneCount}</b> of {total} confirmed · <b>{needing.length}</b> to check
+            </>
+          )}
+        </span>
+        <span className="ar-info" tabIndex={0} role="note" aria-label="What confirmed means">
+          i
+          <span className="ar-tip">
+            A confirmed item with no tags means “reviewed, no allergens”. An item you haven't confirmed is never
+            treated as allergen-free.
+          </span>
+        </span>
+      </div>
+      {checkNote && <p className="hint ar-note">{checking ? "Reading every item name…" : checkNote}</p>}
 
       <div className="rtabs" style={{ marginTop: 14 }}>
         <button className={`rtab ${tab === "queue" ? "on" : ""}`} onClick={() => setTab("queue")}>
-          Queue ({needing.length})
+          To check ({needing.length})
         </button>
         <button className={`rtab ${tab === "dish" ? "on" : ""}`} onClick={() => setTab("dish")}>
           By dish
@@ -538,209 +618,203 @@ export default function AllergenReview({
             </div>
           )}
 
-          {suggested.length > 0 && (
-            <section className="ar-section">
-              <div className="ar-section-head">
-                <h2>Found from the item name ({suggested.length})</h2>
-                <label className="ar-all">
-                  <input
-                    type="checkbox"
-                    checked={shownA.length > 0 && shownA.every((i) => selected.has(i.id))}
-                    onChange={(e) => setSelected(e.target.checked ? new Set(shownA.map((i) => i.id)) : new Set())}
-                  />
-                  Select all shown
-                </label>
-              </div>
-              <p className="hint">
-                Tags came from the word list; a suggestion marked (AI) came from the AI. Tap “Looks right” if they're correct, tap a “+ …?” suggestion to add it,
-                or open Edit. Tick several and confirm them together.
-              </p>
-              <div className="ar-list">
-                {shownA.map((it) =>
-                  renderRow(it, {
-                    showSelect: true,
-                    compact: false,
-                    selected: selected.has(it.id),
-                    onSelect: (c) => selectA(it.id, c),
-                  })
-                )}
-              </div>
-              {suggested.length > shownA.length && (
-                <button type="button" className="btn-ghost small" onClick={() => setLimitA(limitA + PAGE)}>
-                  Show {Math.min(PAGE, suggested.length - shownA.length)} more
-                </button>
-              )}
-              {selected.size > 0 && (
-                <div className="ar-bar">
-                  <span>{selected.size} ticked</span>
+          {needing.length > 0 && (
+            <div className="ar-filters">
+              <div className="ar-chips" role="group" aria-label="Show">
+                {(
+                  [
+                    ["all", "All", sugList.length + readyList.length + noneList.length],
+                    ["ready", "Ready to confirm", readyList.length],
+                    ["sug", "SAWIS suggests", sugList.length],
+                    ["none", "Nothing found", noneList.length],
+                  ] as const
+                ).map(([key, label, n]) => (
                   <button
+                    key={key}
                     type="button"
-                    className="btn-primary small"
-                    disabled={busy}
+                    className={`ar-fchip${filter === key ? " on" : ""}`}
+                    aria-pressed={filter === key}
                     onClick={() => {
-                      const picked = suggested.filter((i) => selected.has(i.id));
-                      confirm(
-                        picked.map((it) => {
-                          const d = draftOf(it);
-                          return {
-                            id: it.id,
-                            allergens: d.contains,
-                            may_contain_allergens: d.may.filter((id) => !d.contains.includes(id)),
-                          };
-                        })
-                      );
+                      setFilter(key);
+                      setLimitA(PAGE);
                     }}
                   >
-                    {busy ? "Saving…" : `Confirm ${selected.size} as shown`}
+                    {label}
+                    <b>{n}</b>
                   </button>
-                </div>
-              )}
-            </section>
-          )}
-
-          {nothing.length > 0 && (
-            <section className="ar-section">
-              <div className="ar-section-head">
-                <h2>Nothing found from the name ({nothing.length})</h2>
-                {q && shownB.length > 0 && (
-                  <button type="button" className="btn-ghost small" onClick={tickAllShown} disabled={busy}>
-                    Tick all {shownB.length} shown
-                  </button>
-                )}
+                ))}
               </div>
-              <p className="hint">
-                These names didn't match the word list. That does <b>not</b> mean they're allergen-free — you know the
-                product, SAWIS doesn't. Tick the ones you want to handle together (shift-click ticks a run; search for a
-                word like “syrup” to tick everything matching it). Then confirm them as “no allergens”, or add an
-                allergen to all of them. Or open Edit to tag one on its own.
-              </p>
-              <div className="ar-list">
-                {shownB.map((it) =>
-                  renderRow(it, {
-                    showSelect: true,
-                    compact: true,
-                    selected: ticked.has(it.id),
-                    onSelect: (c, shift) => tickB(it.id, c, shift),
-                  })
-                )}
-              </div>
-              {nothing.length > shownB.length && (
-                <button type="button" className="btn-ghost small" onClick={() => setLimitB(limitB + PAGE)}>
-                  Show {Math.min(PAGE, nothing.length - shownB.length)} more
+              {selectable.length > 0 && (
+                <button type="button" className="ar-linkbtn" onClick={toggleAllShown}>
+                  {allSelected ? "Clear selection" : "Select all shown"}
                 </button>
               )}
-              {ticked.size > 0 && (
-                <div className="ar-bulk-wrap">
-                  {bulkOpen && (
-                    <div className="ar-bulk" role="group" aria-label="Add an allergen to the ticked items">
-                      <div className="ar-bulk-title">
-                        Add to {ticked.size} ticked {ticked.size === 1 ? "item" : "items"}
-                      </div>
-                      <div className="ar-bulk-level">
-                        <label className="check-row">
-                          <input
-                            type="radio"
-                            name="ar-bulk-level"
-                            checked={bulkLevel === "contains"}
-                            onChange={() => setBulkLevel("contains")}
-                          />
-                          Contains
-                        </label>
-                        <label className="check-row">
-                          <input
-                            type="radio"
-                            name="ar-bulk-level"
-                            checked={bulkLevel === "may"}
-                            onChange={() => setBulkLevel("may")}
-                          />
-                          May contain
-                        </label>
-                      </div>
-                      <div className="ar-tags ar-pick">
-                        {allergens.map((a) => (
-                          <button
-                            key={a.id}
-                            type="button"
-                            className={`ar-tag ${bulkPick.includes(a.id) ? "on" : ""}`}
-                            aria-pressed={bulkPick.includes(a.id)}
-                            disabled={busy}
-                            onClick={() => setBulkPick(toggle(bulkPick, a.id))}
-                          >
-                            <AllergenIcon code={a.code} size={14} />
-                            {a.name}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="ar-bulk-actions">
-                        <button type="button" className="btn-ghost small" onClick={() => setBulkOpen(false)}>
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-primary small"
-                          disabled={busy || bulkPick.length === 0}
-                          onClick={applyBulkAllergen}
-                        >
-                          {busy ? "Saving…" : `Add and confirm ${ticked.size}`}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                  <div className="ar-bar">
-                    <span>
-                      {ticked.size} ticked
-                      {hiddenTicked > 0 && ` (${hiddenTicked} hidden by your search)`}
-                    </span>
-                    <div className="ar-bar-actions">
+            </div>
+          )}
+
+          {filter === "none" && noneList.length > 0 && (
+            <p className="hint">
+              These names didn't match anything. That does <b>not</b> mean they're allergen-free: you know the product,
+              SAWIS doesn't. Tick several to confirm or tag them together (shift-click ticks a run; search for a word
+              like “syrup” first to tick everything matching it).
+            </p>
+          )}
+
+          {needing.length > 0 && queue.length === 0 && <p className="muted">Nothing matches.</p>}
+
+          {shown.length > 0 && (
+            <div className="ar-list">
+              {shown.map((it) =>
+                renderRow(it, {
+                  showSelect: true,
+                  compact: false,
+                  selected: selected.has(it.id),
+                  onSelect: (c, shift) => pick(it.id, c, shift),
+                })
+              )}
+            </div>
+          )}
+          {queue.length > shown.length && (
+            <button type="button" className="btn-ghost small" onClick={() => setLimitA(limitA + PAGE)}>
+              Show {Math.min(PAGE, queue.length - shown.length)} more
+            </button>
+          )}
+
+          {selected.size > 0 && (
+            <div className="ar-bulk-wrap">
+              {bulkOpen && (
+                <div className="ar-bulk" role="group" aria-label="Add an allergen to the selected items">
+                  <div className="ar-bulk-title">
+                    Add to {selected.size} selected {selected.size === 1 ? "item" : "items"}
+                  </div>
+                  <div className="ar-bulk-level">
+                    <label className="check-row">
+                      <input
+                        type="radio"
+                        name="ar-bulk-level"
+                        checked={bulkLevel === "contains"}
+                        onChange={() => setBulkLevel("contains")}
+                      />
+                      Contains
+                    </label>
+                    <label className="check-row">
+                      <input
+                        type="radio"
+                        name="ar-bulk-level"
+                        checked={bulkLevel === "may"}
+                        onChange={() => setBulkLevel("may")}
+                      />
+                      May contain
+                    </label>
+                  </div>
+                  <div className="ar-tags ar-pick">
+                    {allergens.map((a) => (
                       <button
+                        key={a.id}
                         type="button"
-                        className="ar-bar-link"
+                        className={`ar-tag ${bulkPick.includes(a.id) ? "on" : ""}`}
+                        aria-pressed={bulkPick.includes(a.id)}
                         disabled={busy}
-                        onClick={() => {
-                          setTicked(new Set());
-                          setBulkOpen(false);
-                        }}
+                        onClick={() => setBulkPick(toggle(bulkPick, a.id))}
                       >
-                        Clear
+                        <AllergenIcon code={a.code} size={14} />
+                        {a.name}
                       </button>
-                      <button
-                        type="button"
-                        className="btn-ghost small ar-bar-btn"
-                        disabled={busy}
-                        onClick={() => setBulkOpen(!bulkOpen)}
-                      >
-                        Add allergen…
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-primary small"
-                        disabled={busy}
-                        onClick={() =>
-                          confirm(
-                            [...ticked].map((id) => ({ id, allergens: [], may_contain_allergens: [] }))
-                          )
-                        }
-                      >
-                        {busy ? "Saving…" : `Confirm ${ticked.size}: no allergens`}
-                      </button>
-                    </div>
+                    ))}
+                  </div>
+                  <div className="ar-bulk-actions">
+                    <button type="button" className="btn-ghost small" onClick={() => setBulkOpen(false)}>
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-primary small"
+                      disabled={busy || bulkPick.length === 0}
+                      onClick={applyBulkAllergen}
+                    >
+                      {busy ? "Saving…" : `Add and confirm ${selected.size}`}
+                    </button>
                   </div>
                 </div>
               )}
-            </section>
+              <div className="ar-bar">
+                <span>
+                  {selected.size} selected
+                  {hiddenSelected > 0 && ` (${hiddenSelected} hidden by your filter)`}
+                </span>
+                <div className="ar-bar-actions">
+                  <button
+                    type="button"
+                    className="ar-bar-link"
+                    disabled={busy}
+                    onClick={() => {
+                      setSelected(new Set());
+                      setBulkOpen(false);
+                    }}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-ghost small ar-bar-btn"
+                    disabled={busy}
+                    onClick={() => setBulkOpen(!bulkOpen)}
+                  >
+                    Add allergen…
+                  </button>
+                  {pickedTagged.length > 0 && (
+                    <button
+                      type="button"
+                      className="btn-primary small"
+                      disabled={busy}
+                      onClick={() =>
+                        confirm(
+                          pickedTagged.map((it) => {
+                            const d = draftOf(it);
+                            return {
+                              id: it.id,
+                              allergens: d.contains,
+                              may_contain_allergens: d.may.filter((id) => !d.contains.includes(id)),
+                            };
+                          })
+                        )
+                      }
+                    >
+                      {busy ? "Saving…" : `Confirm ${pickedTagged.length} as shown`}
+                    </button>
+                  )}
+                  {pickedNone.length > 0 && (
+                    <button
+                      type="button"
+                      className="btn-primary small"
+                      disabled={busy}
+                      onClick={() =>
+                        confirm(pickedNone.map((it) => ({ id: it.id, allergens: [], may_contain_allergens: [] })))
+                      }
+                    >
+                      {busy ? "Saving…" : `Confirm ${pickedNone.length}: no allergens`}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
 
           {recentItems.length > 0 && (
-            <section className="ar-section">
-              <div className="ar-section-head">
-                <h2>Just confirmed</h2>
-              </div>
-              <p className="hint">Made a mistake? Open Edit to change it.</p>
-              <div className="ar-list">
-                {recentItems.map((it) =>
-                  renderRow(it, { showSelect: false, compact: true, selected: false, onSelect: () => undefined })
-                )}
-              </div>
+            <section className="ar-recent">
+              <button type="button" className="ar-linkbtn" onClick={() => setShowRecent(!showRecent)}>
+                Recently confirmed ({recentItems.length}) {showRecent ? "▾" : "▸"}
+              </button>
+              {showRecent && (
+                <>
+                  <p className="hint">Made a mistake? Open Edit to change it.</p>
+                  <div className="ar-list">
+                    {recentItems.map((it) =>
+                      renderRow(it, { showSelect: false, compact: true, selected: false, onSelect: () => undefined })
+                    )}
+                  </div>
+                </>
+              )}
             </section>
           )}
         </>

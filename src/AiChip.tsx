@@ -1,6 +1,6 @@
 import type { AiMatch } from "./api";
 
-// One "AI suggests" chip. Shown beside "Did you mean". Tapping it only fills the picker, exactly
+// One "SAWIS suggests" chip. Shown beside "Did you mean". Tapping it only fills the picker, exactly
 // like the other chips; a person still confirms.
 export default function AiChip({
   match,
@@ -15,7 +15,7 @@ export default function AiChip({
   const unsure = match.confidence === "low";
   return (
     <span className="ai-sugg">
-      <span className="ai-tag">{unsure ? "AI is not sure" : "AI suggests"}</span>
+      <span className="ai-tag">{unsure ? "SAWIS is not sure" : "SAWIS suggests"}</span>
       <button
         type="button"
         className={`sq-chip ai-chip${unsure ? " ai-unsure" : ""}`}

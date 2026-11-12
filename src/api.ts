@@ -1464,10 +1464,10 @@ export interface SuggestAllergensResult {
 // business does not have the AI allergen check.
 export function aiAllergenSentence(ai: SuggestAllergensResult["ai"]): string {
   if (!ai) return "";
-  if (ai.failed) return " The AI could not be reached just now, so press the button again in a minute.";
-  const found = `The AI looked at ${ai.checked} more name${ai.checked === 1 ? "" : "s"} and suggested ${ai.suggestions} allergen${ai.suggestions === 1 ? "" : "s"}.`;
+  if (ai.failed) return " SAWIS could not finish checking just now, so press the button again in a minute.";
+  const found = `SAWIS looked at ${ai.checked} more name${ai.checked === 1 ? "" : "s"} and suggested ${ai.suggestions} allergen${ai.suggestions === 1 ? "" : "s"}.`;
   const more = ai.capped
-    ? " This month's AI limit is reached, so the rest wait until next month."
+    ? " This month's limit is reached, so the rest wait until next month."
     : ai.left > 0
       ? ` ${ai.left} more are still waiting; press the button again.`
       : "";
