@@ -192,7 +192,14 @@ textarea.mt-ins:focus, .mt-qin:focus, .mt-tin:focus, .mt-cnote:focus-within { bo
 
 @media (max-width: 900px) {
   .mt-shelf { position: static; }
-  .mt-chips { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; max-height: none; padding-bottom: 6px; }
+  /* Phone: all the ingredients are visible at once. No sideways scrolling; they wrap, and "Add item" sits underneath. */
+  .mt-shrow { flex-direction: column; align-items: stretch; gap: 10px; }
+  .mt-chips { flex-wrap: wrap; overflow: visible; max-height: none; padding: 0; gap: 8px; }
+  .mt-sitem { max-width: 100%; white-space: normal; cursor: pointer; }
+  .mt-sitem b { overflow-wrap: anywhere; }
+  .mt-sitem small { white-space: nowrap; flex: none; }
+  .mt-addwrap { align-self: flex-start; }
+  .mt-addpill { padding: 9px 18px; }
   .mt-addwrap .mt-picker { position: fixed; left: 14px; right: 14px; top: auto; bottom: 14px; width: auto; }
   .mt-scap { display: none; }
   .mt-cright .mt-mi { display: none; }
