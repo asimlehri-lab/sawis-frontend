@@ -57,6 +57,7 @@ export default function RecipeMethod({
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastAct, setToastAct] = useState<{ label: string; run: () => void } | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [mode, setMode] = useState<"build" | "cook">(readOnly ? "cook" : "build");
   const [active, setActive] = useState<Active>(null);
@@ -94,10 +95,11 @@ export default function RecipeMethod({
   const lineById = useMemo(() => new Map(lines.map((l) => [l.id, l])), [lines]);
   const colorOf = (id: string): string => COLORS[Math.max(0, lines.findIndex((l) => l.id === id)) % COLORS.length];
 
-  function say(msg: string) {
+  function say(msg: string, action?: { label: string; run: () => void }) {
     setToast(msg);
+    setToastAct(action ?? null);
     if (toastRef.current) window.clearTimeout(toastRef.current);
-    toastRef.current = window.setTimeout(() => setToast(null), 3200);
+    toastRef.current = window.setTimeout(() => { setToast(null); setToastAct(null); }, action ? 7000 : 3200);
   }
 
   // ---------- loading and saving ----------
@@ -209,6 +211,8 @@ export default function RecipeMethod({
     s.lines.reduce((t, l) => t + num(l.qty) * Number(lineById.get(l.recipe_line)?.unit_cost ?? 0), 0);
   const unplaced = lines.filter((l) => Number(l.qty) > 0 && left(l.id) > 0.0005);
   const stillToPlace = unplaced.length;
+  const partial = unplaced.filter((l) => used(steps, l.id) > 0.0005); // some of it is in a step, the rest is not
+  const untouched = unplaced.filter((l) => used(steps, l.id) <= 0.0005);
   const stepNumber = (key: string): number => steps.findIndex((s) => s.key === key) + 1;
 
   // ---------- step actions ----------
@@ -318,6 +322,35 @@ export default function RecipeMethod({
       onRecipeChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not add the ingredient.");
+    }
+  }
+  // "Use 16 g in total": lower the recipe's amount to what the steps use. Only ever happens when the user presses it.
+  async function trimTotal(line: RecipeLine) {
+    const u = used(stepsRef.current, line.id);
+    if (u <= 0) return;
+    const before = line.qty;
+    try {
+      if (!(await flush())) return;
+      const updated = await updateRecipeLine(accessToken, line.id, { qty: fmt(u) });
+      setExtraLines((prev) => prev.map((p) => (p.id === line.id ? { ...p, qty: updated.qty } : p)));
+      onRecipeChanged();
+      say(`${lineName(line)} total is now ${fmt(u)} ${line.unit}. The Ingredients tab and the cost are updated.`, {
+        label: "Undo",
+        run: () => {
+          void (async () => {
+            try {
+              const back = await updateRecipeLine(accessToken, line.id, { qty: before });
+              setExtraLines((prev) => prev.map((p) => (p.id === line.id ? { ...p, qty: back.qty } : p)));
+              onRecipeChanged();
+              say(`${lineName(line)} is back to ${fmt(Number(before))} ${line.unit} in total`);
+            } catch (e) {
+              setError(e instanceof Error ? e.message : "Could not undo that.");
+            }
+          })();
+        },
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not change the amount.");
     }
   }
   async function removeFromRecipe(lineId: string) {
@@ -656,8 +689,9 @@ export default function RecipeMethod({
                   const rest = left(l.id), total = Number(l.qty);
                   const done = total > 0 && rest <= 0.0005;
                   return (
-                    <div key={l.id} className={`mt-sitem${done ? " done" : ""}`} draggable onDragStart={(e) => onDragStart(e, l.id)} onDragEnd={() => { dragLineRef.current = null; setOverStep(null); }}
-                      style={cv(colorOf(l.id))} title={`Drag onto a step. ${fmt(total)} ${l.unit} in total`}>
+                    <div key={l.id} className={`mt-sitem${done ? " done" : ""}${partial.some((x) => x.id === l.id) ? " rest" : ""}`} draggable onDragStart={(e) => onDragStart(e, l.id)} onDragEnd={() => { dragLineRef.current = null; setOverStep(null); }}
+                      style={cv(colorOf(l.id))} title={`Drag onto a step. ${fmt(total)} ${l.unit} in total`}
+                      onClick={(e) => { if (partial.some((x) => x.id === l.id) && !(e.target as HTMLElement).closest("button")) document.querySelector("[data-mt-left]")?.scrollIntoView({ block: "center", behavior: "smooth" }); }}>
                       <i className="mt-dot" /><b>{lineName(l)}</b>
                       <small>{!total ? "no amount yet" : done ? "✓ placed" : `${fmt(rest)} ${l.unit} left`}</small>
                       {confirmRemove === l.id ? (
@@ -703,15 +737,44 @@ export default function RecipeMethod({
               </button>
             </div>
           )}
+          {partial.length > 0 && (
+            <div className="mt-left" data-mt-left role="group" aria-label="Ingredients with some left over">
+              {partial.map((l) => {
+                const u = used(steps, l.id);
+                const rest = Number(l.qty) - u;
+                const drop = rest * Number(l.unit_cost ?? 0);
+                return (
+                  <div className="mt-leftrow" key={l.id}>
+                    <span className="mt-lico" aria-hidden>!</span>
+                    <div className="mt-lbody">
+                      <h4>{fmt(rest)} {l.unit} of {lineName(l)} is not in any step</h4>
+                      <p>The recipe says {fmt(Number(l.qty))} {l.unit} in total (Ingredients tab). Your steps use {fmt(u)} {l.unit}.</p>
+                      <button type="button" className="mt-btn p" onClick={() => void trimTotal(l)}>
+                        Use {fmt(u)} {l.unit} in total{drop > 0.005 && <small>cost drops by {formatMoney(drop, currency)}</small>}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              <p className="mt-lhint">{partial.length === 1 ? `Or use the ${fmt(Number(partial[0].qty) - used(steps, partial[0].id))} ${partial[0].unit} in your steps.` : "Or use the rest in your steps."}</p>
+            </div>
+          )}
           <div className="mt-foot">
             <span className={stillToPlace ? "mt-warn" : "mt-ok"}>
-              {lines.length === 0 ? "" : stillToPlace ? `Not fully placed yet: ${unplaced.slice(0, 3).map((l) => `${lineName(l)} (${fmt(left(l.id))} ${l.unit} left)`).join(", ")}${stillToPlace > 3 ? ` and ${stillToPlace - 3} more` : ""}` : "Every ingredient is placed ✓ Totals match the Ingredients tab."}
+              {lines.length === 0 ? "" : untouched.length > 0
+                ? `Not in any step yet: ${untouched.slice(0, 3).map((l) => lineName(l)).join(", ")}${untouched.length > 3 ? ` and ${untouched.length - 3} more` : ""}`
+                : partial.length > 0 ? "" : "Every ingredient is placed ✓ Totals match the Ingredients tab."}
             </span>
             <button type="button" className="mt-btn p" onClick={async () => { await flush(); setMode("cook"); }}>Preview in Cook view</button>
           </div>
         </div>
       )}
-      {toast && <div className="mt-toast" role="status">{toast}</div>}
+      {toast && (
+        <div className={`mt-toast${toastAct ? " act" : ""}`} role="status">
+          {toast}
+          {toastAct && <button type="button" onClick={() => { const run = toastAct.run; setToast(null); setToastAct(null); run(); }}>{toastAct.label}</button>}
+        </div>
+      )}
     </div>
   );
 }

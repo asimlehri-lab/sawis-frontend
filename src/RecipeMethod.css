@@ -205,3 +205,16 @@ textarea.mt-ins:focus, .mt-qin:focus, .mt-tin:focus, .mt-cnote:focus-within { bo
 .mt-used { border: 1px solid var(--border); background: var(--brand-soft); color: var(--brand); border-radius: 100px; padding: 1px 9px; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .mt-used:hover { border-color: var(--brand); }
 .mt-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+/* Some of an ingredient is not in any step: one clear way to fix it. */
+.mt-sitem.rest { border-color: var(--caution); cursor: grab; }
+.mt-sitem.rest:hover { box-shadow: 0 0 0 3px var(--caution-soft); }
+.mt-left { margin-top: 16px; border: 1px solid var(--caution); background: var(--surface); border-radius: 14px; padding: 14px 16px; display: grid; gap: 14px; }
+.mt-leftrow { display: flex; gap: 10px; align-items: flex-start; }
+.mt-lico { width: 24px; height: 24px; border-radius: 50%; background: var(--caution-soft); color: var(--caution); display: grid; place-items: center; font-weight: 800; flex: none; font-size: 14px; }
+.mt-lbody h4 { margin: 0; font-size: 15px; }
+.mt-lbody p { margin: 2px 0 10px; color: var(--muted); font-size: 14px; }
+.mt-lbody .mt-btn small { font-weight: 500; opacity: .85; margin-left: 8px; }
+.mt-lhint { margin: 0; color: var(--muted); font-size: 14px; }
+.mt-toast.act { pointer-events: auto; display: flex; gap: 14px; align-items: center; }
+.mt-toast button { background: none; border: 0; color: var(--brand-soft); font-weight: 700; padding: 0; text-decoration: underline; }
