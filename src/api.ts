@@ -2348,7 +2348,7 @@ export async function aiMatchNames(
     body: JSON.stringify({ kind, names, ...(onlyIds ? { only_ids: onlyIds } : {}) }),
   });
   if (res.status === 503) throw new AiMatchOff();
-  if (!res.ok) throw new Error("Could not ask the AI.");
+  if (!res.ok) throw new Error("Could not ask SAWIS.");
   return res.json();
 }
 

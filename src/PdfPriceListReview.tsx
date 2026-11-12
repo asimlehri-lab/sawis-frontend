@@ -75,7 +75,7 @@ export default function PdfPriceListReview({ fileName, data, currency, existing,
         <h2 style={{ marginTop: 0 }}>Check the price list</h2>
         <div className="im-note">
           ✓ <b>{data.rows.length} products</b> read from {fileName}
-          {data.valid_from ? `, valid from ${data.valid_from}` : ""}. The AI can misread a line, so check the names, units and
+          {data.valid_from ? `, valid from ${data.valid_from}` : ""}. SAWIS can misread a line, so check the names, units and
           prices against the original file. Prices are the case or unit price as printed, before VAT.
         </div>
         {data.truncated && (

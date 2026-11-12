@@ -3503,9 +3503,9 @@ export default function App() {
                 accept=".csv,text/csv,.xlsx,.xls,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                 onChange={handleImportFile}
               />
-              {pdfReading && <p className="hint">Reading the file with AI. This can take up to a minute.</p>}
+              {pdfReading && <p className="hint">SAWIS is reading the file. This can take up to a minute.</p>}
               <div className="vhint">
-                CSV, Excel or PDF. The template layout is used as it is; any other layout is read by AI for you to check.
+                CSV, Excel or PDF. The template layout is used as it is; any other layout is read by SAWIS for you to check.
                 <HelpLink topic="suppliers" ask="price-list-format" />
                 <br />
                 <button type="button" className="mini" style={{ marginTop: 6 }} onClick={() => downloadSupplierListTemplate()}>

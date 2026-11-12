@@ -369,13 +369,13 @@ export default function SupplierList({
                     ⇩ Template
                   </button>
                 </div>
-                <p className="vhint">Did they send you a list? Add it now: name, unit, price, as Excel or CSV (a different layout, or a PDF, is read by AI for you to check). It goes onto their Price list tab.</p>
+                <p className="vhint">Did they send you a list? Add it now: name, unit, price, as Excel or CSV (a different layout, or a PDF, is read by SAWIS for you to check). It goes onto their Price list tab.</p>
                 <input
                   type="file"
                   accept=".csv,text/csv,.xlsx,.xls,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                   onChange={handleListFile}
                 />
-                {pdfReading && <p className="hint">Reading the file with AI. This can take up to a minute.</p>}
+                {pdfReading && <p className="hint">SAWIS is reading the file. This can take up to a minute.</p>}
                 {pdfReview && (
                   <PdfPriceListReview
                     fileName={pdfReview.fileName}
