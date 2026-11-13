@@ -1255,7 +1255,55 @@ export interface PurchasesOrder {
   net: string;
   vat: string;
   gross: string;
+  // The whole invoice value, and whether the order has lines at more than one
+  // VAT rate (matters when the report is narrowed to some rates).
+  whole_gross: string;
+  split: boolean;
   missing_vat_lines: number;
+}
+
+// One purchased line, shown under its VAT group. rate is null when no rate is set.
+export interface PurchasesLine {
+  order_id: string;
+  received_date: string;
+  po_number: string;
+  invoice_number: string;
+  supplier: string;
+  location: string;
+  item: string;
+  qty: string;
+  unit: string;
+  unit_price: string;
+  rate: string | null;
+  net: string;
+  split: boolean;
+}
+
+// A VAT group is a rate ("20", "10", "5") or "other": 0% and a line with no rate.
+export interface PurchasesRateBlock {
+  rate: string;
+  net: string;
+  vat: string;
+  gross: string;
+  orders: number;
+  lines: PurchasesLine[];
+}
+
+export interface PurchasesRateTotals {
+  currency: string;
+  net: string;
+  vat: string;
+  gross: string;
+  lines: number;
+  orders: number;
+  unset_lines: number;
+  unset_net: string;
+}
+
+// What a VAT group holds in the whole period, whatever is ticked on the report.
+export interface PurchasesRateGroup {
+  rate: string;
+  totals: PurchasesRateTotals[];
 }
 
 export interface PurchasesGroup {
@@ -1269,12 +1317,15 @@ export interface PurchasesGroup {
   by_rate: { rate: string; net: string; vat: string; gross: string }[];
   by_supplier: { supplier: string; orders: number; net: string; vat: string; gross: string }[];
   orders: PurchasesOrder[];
+  lines_by_rate?: PurchasesRateBlock[]; // only when asked for (lines view, print with lines)
 }
 
 export interface PurchasesReportData {
   date_from: string;
   date_to: string;
   orders_count: number;
+  rates: string[] | null; // the VAT groups the report is narrowed to, null for all
+  rate_groups: PurchasesRateGroup[];
   groups: PurchasesGroup[];
   checks: {
     orders_without_invoice: number;
@@ -1292,12 +1343,14 @@ export interface PurchasesQuery {
   date_to: string;
   location: string; // "all" or a location id
   supplier: string; // "all" or a supplier id
+  vat_rates?: string[] | null; // VAT groups to show ("20", "10", "other"); null or empty for all
 }
 
 function purchasesParams(q: PurchasesQuery, extra: Record<string, string> = {}): string {
   const p = new URLSearchParams({ date_from: q.date_from, date_to: q.date_to, ...extra });
   if (q.location && q.location !== "all") p.set("location", q.location);
   if (q.supplier && q.supplier !== "all") p.set("supplier", q.supplier);
+  if (q.vat_rates && q.vat_rates.length > 0) p.set("vat_rates", q.vat_rates.join(","));
   return p.toString();
 }
 
@@ -1308,8 +1361,12 @@ async function purchasesError(res: Response, fallback: string): Promise<Error> {
   return new Error((Array.isArray(detail) ? detail.join(" ") : detail) || fallback);
 }
 
-export async function fetchPurchasesReport(accessToken: string, q: PurchasesQuery): Promise<PurchasesReportData> {
-  const res = await fetch(`${API_URL}/api/procurement/purchase-orders/purchases_report/?${purchasesParams(q)}`, {
+export async function fetchPurchasesReport(
+  accessToken: string,
+  q: PurchasesQuery,
+  opts: { lines?: boolean } = {}
+): Promise<PurchasesReportData> {
+  const res = await fetch(`${API_URL}/api/procurement/purchase-orders/purchases_report/?${purchasesParams(q, opts.lines ? { lines: "1" } : {})}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) throw await purchasesError(res, "Could not load the purchases report.");
