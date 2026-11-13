@@ -97,6 +97,8 @@ export default function RecipeDetail({
   const hasMethod = entitlements.includes(METHOD_FEATURE);
   // Where each ingredient line is used in the Method tab, filled in by the Method tab itself.
   const [methodSteps, setMethodSteps] = useState<MethodStep[]>([]);
+  // True while the Method tab is showing Cook view (the phone layout then drops the recipe header).
+  const [cooking, setCooking] = useState(false);
   const [recipe, setRecipe] = useState<Recipe | null>(null);
   const [copiedFrom] = useState<string | null>(() => (justCopied && justCopied.id === recipeId ? justCopied.from : null));
   const [duplicating, setDuplicating] = useState(false);
@@ -410,7 +412,7 @@ export default function RecipeDetail({
   }
 
   return (
-    <div>
+    <div className={tab === "method" && cooking ? "rd-cooking" : undefined}>
       {returnTo && onReturn ? (
         <button className="back-link" onClick={onReturn}>
           ← Back to {returnTo.name}
@@ -481,10 +483,18 @@ export default function RecipeDetail({
             type="button"
             role="tab"
             aria-selected={tab === t}
+            aria-label={RECIPE_TAB_LABELS[t]}
             className={`rp-tab ${tab === t ? "on" : ""}`}
             onClick={() => setTab(t)}
           >
-            {RECIPE_TAB_LABELS[t]}
+            {t === "cost" ? (
+              <>
+                <span className="rp-lbl-long">{RECIPE_TAB_LABELS[t]}</span>
+                <span className="rp-lbl-short" aria-hidden>Cost</span>
+              </>
+            ) : (
+              RECIPE_TAB_LABELS[t]
+            )}
             {t === "allergens" && unchecked > 0 && (
               <span
                 className="it-tab-dot"
@@ -593,6 +603,7 @@ export default function RecipeDetail({
             onChanged();
           }}
           onStepsChange={setMethodSteps}
+          onModeChange={(m) => setCooking(m === "cook")}
           hidden={tab !== "method"}
         />
       )}
@@ -866,131 +877,38 @@ export default function RecipeDetail({
         </div>
 
         <div className="card" hidden={tab !== "cost"}>
-          <div className="yield-row">
-            <label>Batch yields</label>
-            <input
-              className="yield-in"
-              type="number"
-              min="1"
-              step="1"
-              value={recipe.yield_qty}
-              onChange={(e) => setRecipe({ ...recipe, yield_qty: e.target.value })}
-              onBlur={(e) => saveField({ yield_qty: e.target.value })}
-            />
-            <select
-              className="yunit"
-              value={recipe.yield_unit}
-              onChange={(e) => {
-                setRecipe({ ...recipe, yield_unit: e.target.value });
-                saveField({ yield_unit: e.target.value });
-              }}
-            >
-              {YIELD_UNITS.map((u) => (
-                <option key={u} value={u}>
-                  {u}
-                </option>
-              ))}
-            </select>
-          </div>
-
           {isSub ? (
-            <>
-              <div className="metric big-m">
-                <span className="ml">Ingredient cost of the batch</span>
-                <span className="mv">{formatMoney(recipe.batch_cost, currency)}</span>
-              </div>
-              <div className="metric big-m">
-                <span className="ml">Ingredient cost per {recipe.yield_unit}</span>
-                <span className="mv violet-text">{formatMoney(recipe.per_portion_cost, currency)}</span>
+            <div className="cs-result">
+              <div className="cs-tiles">
+                <div className="cs-tile">
+                  <span className="cs-tl">Ingredient cost of the batch</span>
+                  <span className="cs-tv">{formatMoney(recipe.batch_cost, currency)}</span>
+                </div>
+                <div className="cs-tile">
+                  <span className="cs-tl">Ingredient cost per {recipe.yield_unit}</span>
+                  <span className="cs-tv violet-text">{formatMoney(recipe.per_portion_cost, currency)}</span>
+                </div>
               </div>
               <div className="perplate">
                 Change an ingredient here and every dish using this sub-recipe re-costs automatically —
                 no double entry. These are ingredient costs only; overhead is not included.
               </div>
-            </>
+            </div>
           ) : (
-            <>
-              <div className="price-row">
-                <label>Menu price / {recipe.yield_unit}</label>
-                <input
-                  className="price-in"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={recipe.menu_price ?? ""}
-                  onChange={(e) => setRecipe({ ...recipe, menu_price: e.target.value })}
-                  onBlur={(e) => saveField({ menu_price: e.target.value })}
-                />
-              </div>
-              <div className="price-row">
-                <label>Food or drink?</label>
-                <select
-                  className="price-in"
-                  style={{ textAlign: "left" }}
-                  value={recipe.menu_group}
-                  onChange={(e) => {
-                    const menu_group = e.target.value as "food" | "drink";
-                    setRecipe({ ...recipe, menu_group });
-                    saveField({ menu_group });
-                  }}
-                >
-                  <option value="food">Food</option>
-                  <option value="drink">Drink</option>
-                </select>
-              </div>
-              <p className="hint" style={{ marginTop: -8 }}>
-                Only used to split End of day's Champions ranking into Dishes/Drinks — doesn't affect costing.
-              </p>
-              <div className="price-row">
-                <label>POS ID</label>
-                <input
-                  className="price-in"
-                  style={{ textAlign: "left" }}
-                  value={recipe.pos_id ?? ""}
-                  onChange={(e) => setRecipe({ ...recipe, pos_id: e.target.value })}
-                  onBlur={(e) => saveField({ pos_id: e.target.value })}
-                  placeholder="optional"
-                />
-              </div>
-              <div className="price-row">
-                <label>Menu category</label>
-                <input
-                  className="price-in"
-                  style={{ textAlign: "left" }}
-                  value={recipe.menu_category ?? ""}
-                  onChange={(e) => setRecipe({ ...recipe, menu_category: e.target.value })}
-                  onBlur={(e) => saveField({ menu_category: e.target.value })}
-                  placeholder="optional"
-                />
-              </div>
-              <p className="hint" style={{ marginTop: -8 }}>
-                POS ID is the number from your till system — lets a sale import match this dish automatically.
-                Menu category is just for grouping/browsing a long menu — doesn't affect costing.
-              </p>
-              <div className="price-row">
-                <label>Cost target %</label>
-                <input
-                  className="price-in"
-                  type="number"
-                  min="1"
-                  max="100"
-                  step="0.5"
-                  value={recipe.target_cost_pct ?? ""}
-                  placeholder={String(generalTarget)}
-                  onChange={(e) => setRecipe({ ...recipe, target_cost_pct: e.target.value === "" ? null : e.target.value })}
-                  onBlur={(e) => saveField({ target_cost_pct: e.target.value.trim() === "" ? null : e.target.value.trim() })}
-                />
-              </div>
-              <p className="hint" style={{ marginTop: -8 }}>
-                {recipe.target_cost_pct
-                  ? `This dish has its own target. Clear the box to follow the general ${recipe.menu_group} target of ${generalTarget}% from Settings.`
-                  : `Following the general ${recipe.menu_group} target of ${generalTarget}% from Settings. Type a number to set one for this dish only.`}
-              </p>
+            <div className="cs-result">
               <div className="fc-hero">
                 <div className={`big ${fcBand === "good" ? "good" : fcBand === "caution" ? "over" : "danger"}`}>
                   {recipe.plate_food_cost_pct !== null ? `${recipe.plate_food_cost_pct.toFixed(1)}%` : "—"}
                 </div>
                 <div className="tgt">food cost / {recipe.yield_unit} · target {target}%</div>
+                {recipe.plate_food_cost_pct !== null ? (
+                  <span className={`cs-status ${fcBand}`}>
+                    <span aria-hidden>{fcBand === "good" ? "✓" : "!"}</span>{" "}
+                    {fcBand === "good" ? "Within target" : fcBand === "caution" ? "Slightly over target" : "Well over target"}
+                  </span>
+                ) : (
+                  <span className="cs-status none">Add a menu price below to see the food cost</span>
+                )}
                 <div className="meter">
                   <div
                     className="fill"
@@ -1005,21 +923,29 @@ export default function RecipeDetail({
                   <div className="tgtm" style={{ left: `${Math.min(target, 100)}%` }} />
                 </div>
               </div>
-              <div className="metric">
-                <span className="ml">
-                  Ingredient cost of the batch ({recipe.yield_qty} {recipe.yield_unit}
-                  {yieldNum > 1 ? "s" : ""})
-                </span>
-                <span className="mv">{formatMoney(recipe.batch_cost, currency)}</span>
+              <div className="cs-tiles">
+                <div className="cs-tile">
+                  <span className="cs-tl">Ingredient cost / {recipe.yield_unit}</span>
+                  <span className="cs-tv">{formatMoney(recipe.per_portion_cost, currency)}</span>
+                </div>
+                <div className="cs-tile">
+                  <span className="cs-tl">Menu price / {recipe.yield_unit}</span>
+                  <span className="cs-tv">{menuPriceNum > 0 ? formatMoney(menuPriceNum, currency) : "Not set"}</span>
+                </div>
+                <div className="cs-tile">
+                  <span className="cs-tl">Gross profit / {recipe.yield_unit}</span>
+                  <span className="cs-tv">{menuPriceNum > 0 ? formatMoney(menuPriceNum - recipe.per_portion_cost, currency) : "—"}</span>
+                  <span className="cs-tn">Before overheads</span>
+                </div>
               </div>
-              <div className="metric big-m">
-                <span className="ml">Ingredient cost per {recipe.yield_unit}</span>
-                <span className="mv">{formatMoney(recipe.per_portion_cost, currency)}</span>
-              </div>
-              <div className="metric">
-                <span className="ml">Gross profit / {recipe.yield_unit}</span>
-                <span className="mv">{formatMoney(menuPriceNum - recipe.per_portion_cost, currency)}</span>
-              </div>
+              {yieldNum > 1 && (
+                <div className="metric">
+                  <span className="ml">
+                    Ingredient cost of the batch ({recipe.yield_qty} {recipe.yield_unit}s)
+                  </span>
+                  <span className="mv">{formatMoney(recipe.batch_cost, currency)}</span>
+                </div>
+              )}
               <div className="perplate">
                 One batch makes <b>{recipe.yield_qty} {recipe.yield_unit}{yieldNum > 1 ? "s" : ""}</b> at{" "}
                 <b>{formatMoney(menuPriceNum, currency)}</b> each — batch sales value{" "}
@@ -1027,8 +953,119 @@ export default function RecipeDetail({
                 <b>{formatMoney(menuPriceNum * yieldNum - recipe.batch_cost, currency)}</b>. Costs and profit here are
                 after ingredients only; overhead (rent, staff, energy) is not included.
               </div>
-            </>
+            </div>
           )}
+
+          <div className="cs-settings">
+            <h3 className="cs-sh">Pricing and portion settings</h3>
+            <div className="yield-row">
+              <label>Batch yields</label>
+              <input
+                className="yield-in"
+                type="number"
+                min="1"
+                step="1"
+                value={recipe.yield_qty}
+                onChange={(e) => setRecipe({ ...recipe, yield_qty: e.target.value })}
+                onBlur={(e) => saveField({ yield_qty: e.target.value })}
+              />
+              <select
+                className="yunit"
+                value={recipe.yield_unit}
+                onChange={(e) => {
+                  setRecipe({ ...recipe, yield_unit: e.target.value });
+                  saveField({ yield_unit: e.target.value });
+                }}
+              >
+                {YIELD_UNITS.map((u) => (
+                  <option key={u} value={u}>
+                    {u}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {!isSub && (
+              <>
+                <div className="price-row">
+                  <label>Menu price / {recipe.yield_unit}</label>
+                  <input
+                    className="price-in"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={recipe.menu_price ?? ""}
+                    onChange={(e) => setRecipe({ ...recipe, menu_price: e.target.value })}
+                    onBlur={(e) => saveField({ menu_price: e.target.value })}
+                  />
+                </div>
+                <div className="price-row">
+                  <label>Cost target %</label>
+                  <input
+                    className="price-in"
+                    type="number"
+                    min="1"
+                    max="100"
+                    step="0.5"
+                    value={recipe.target_cost_pct ?? ""}
+                    placeholder={String(generalTarget)}
+                    onChange={(e) => setRecipe({ ...recipe, target_cost_pct: e.target.value === "" ? null : e.target.value })}
+                    onBlur={(e) => saveField({ target_cost_pct: e.target.value.trim() === "" ? null : e.target.value.trim() })}
+                  />
+                </div>
+                <p className="hint" style={{ marginTop: 6 }}>
+                  {recipe.target_cost_pct
+                    ? `This dish has its own target. Clear the box to follow the general ${recipe.menu_group} target of ${generalTarget}% from Settings.`
+                    : `Following the general ${recipe.menu_group} target of ${generalTarget}% from Settings. Type a number to set one for this dish only.`}
+                </p>
+                <div className="price-row">
+                  <label>Food or drink?</label>
+                  <select
+                    className="price-in"
+                    style={{ textAlign: "left" }}
+                    value={recipe.menu_group}
+                    onChange={(e) => {
+                      const menu_group = e.target.value as "food" | "drink";
+                      setRecipe({ ...recipe, menu_group });
+                      saveField({ menu_group });
+                    }}
+                  >
+                    <option value="food">Food</option>
+                    <option value="drink">Drink</option>
+                  </select>
+                </div>
+                <p className="hint" style={{ marginTop: 6 }}>
+                  Only used to split End of day's Champions ranking into Dishes/Drinks — doesn't affect costing.
+                </p>
+                <div className="price-row">
+                  <label>POS ID</label>
+                  <input
+                    className="price-in"
+                    style={{ textAlign: "left" }}
+                    value={recipe.pos_id ?? ""}
+                    onChange={(e) => setRecipe({ ...recipe, pos_id: e.target.value })}
+                    onBlur={(e) => saveField({ pos_id: e.target.value })}
+                    placeholder="optional"
+                  />
+                </div>
+                <div className="price-row">
+                  <label>Menu category</label>
+                  <input
+                    className="price-in"
+                    style={{ textAlign: "left" }}
+                    value={recipe.menu_category ?? ""}
+                    onChange={(e) => setRecipe({ ...recipe, menu_category: e.target.value })}
+                    onBlur={(e) => saveField({ menu_category: e.target.value })}
+                    placeholder="optional"
+                  />
+                </div>
+                <p className="hint" style={{ marginTop: 6 }}>
+                  POS ID is the number from your till system — lets a sale import match this dish automatically.
+                  Menu category is just for grouping/browsing a long menu — doesn't affect costing.
+                </p>
+              </>
+            )}
+          </div>
         </div>
       </div>
 

@@ -13,6 +13,8 @@ interface Props {
   finished: MethodPhoto | null;
   contains: string[];
   mayContain: string[];
+  // Staff follow the method but cannot change it: a small cue says so.
+  readOnly?: boolean;
 }
 
 const SCALES = [0.5, 1, 2, 4];
@@ -20,7 +22,7 @@ const fmt = (n: number): string => String(parseFloat((Math.round(n * 100) / 100)
 const mmss = (n: number): string => `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
 const cv = (c: string): CSSProperties => ({ "--c": c } as CSSProperties);
 
-export default function MethodCook({ recipeName, steps, lineById, colorOf, finished, contains, mayContain }: Props) {
+export default function MethodCook({ recipeName, steps, lineById, colorOf, finished, contains, mayContain, readOnly }: Props) {
   const [i, setI] = useState(0); // steps.length means the finish screen
   const [scale, setScale] = useState(1);
   const [ticks, setTicks] = useState<Record<string, boolean>>({});
@@ -78,17 +80,23 @@ export default function MethodCook({ recipeName, steps, lineById, colorOf, finis
     <div className="mt-cookwrap">
       <div className="mt-phone">
         <div className="mt-ptop">
-          <div className="mt-ptitle">{recipeName}</div>
-          <div className="mt-psub">{finish ? "All done" : `Step ${i + 1} of ${n}`}</div>
+          <div className="mt-prow">
+            <div className="mt-ptitle">{recipeName}</div>
+            <div className="mt-psub">{finish ? "All done" : `Step ${i + 1} of ${n}`}</div>
+          </div>
+          {readOnly && <div className="mt-cue">View only · managers edit</div>}
           <div className="mt-dots" aria-hidden>
             {steps.map((s, ix) => <i key={s.key} className={ix < i ? "dn" : ix === i ? "on" : ""} />)}
           </div>
-          <div className="mt-scale" role="group" aria-label="Scale the amounts">
-            {SCALES.map((s) => (
-              <button type="button" key={s} className={scale === s ? "on" : ""} onClick={() => setScale(s)} aria-pressed={scale === s}>
-                {s === 0.5 ? "×½" : `×${s}`}
-              </button>
-            ))}
+          <div className="mt-portions">
+            <span className="mt-psub">Portions</span>
+            <div className="mt-scale" role="group" aria-label="Scale the amounts">
+              {SCALES.map((s) => (
+                <button type="button" key={s} className={scale === s ? "on" : ""} onClick={() => setScale(s)} aria-pressed={scale === s}>
+                  {s === 0.5 ? "×½" : `×${s}`}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

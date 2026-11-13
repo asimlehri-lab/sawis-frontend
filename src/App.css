@@ -4045,3 +4045,36 @@ label.cn-consent input { width: auto; margin: 3px 0 0; padding: 0; flex: none; }
 @media print {
   .al-ico { filter: grayscale(1) contrast(1.15); }
 }
+
+/* Cost & margin: the answer first, the settings underneath */
+.cs-result { display: flex; flex-direction: column; gap: 14px; }
+.cs-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 10px; }
+.cs-tile { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.cs-tl { font-size: 12px; color: var(--muted); font-weight: 600; }
+.cs-tv { font-family: monospace; font-size: 20px; font-weight: 600; overflow-wrap: anywhere; }
+.cs-tn { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted); }
+.cs-status { display: inline-block; margin-top: 10px; padding: 5px 12px; border-radius: 100px; font-size: 13px; font-weight: 700; }
+.cs-status.good { background: var(--good-soft); color: var(--good); }
+.cs-status.caution { background: var(--caution-soft); color: var(--caution); }
+.cs-status.danger { background: var(--brick-soft); color: var(--brick); }
+.cs-status.none { background: var(--bg); color: var(--muted); font-weight: 600; }
+.cs-settings { margin-top: 22px; border-top: 1px solid var(--border); }
+.cs-sh { margin: 16px 0 2px; font-size: 14px; font-weight: 700; }
+
+.rp-lbl-short { display: none; }
+/* Phone: the recipe tabs fit on one row when they can, and fade at the edge when they cannot */
+@media (max-width: 600px) {
+  .rp-tabs { gap: 10px; background:
+    linear-gradient(to right, var(--bg) 30%, transparent) left center / 24px 100% no-repeat local,
+    linear-gradient(to left, var(--bg) 30%, transparent) right center / 24px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(0, 0, 0, 0.2), transparent) left center / 10px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(0, 0, 0, 0.2), transparent) right center / 10px 100% no-repeat scroll; }
+  .rp-tab { font-size: 13px; }
+  .rp-lbl-long { display: none; }
+  .rp-lbl-short { display: inline; }
+  .cs-tiles { gap: 8px; }
+  .cs-tile { padding: 10px; }
+  .cs-tv { font-size: 17px; }
+}
+.cs-settings .yield-row { flex-wrap: nowrap; }
+.cs-settings .yunit { width: auto; flex: 0 0 auto; }

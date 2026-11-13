@@ -34,6 +34,8 @@ interface Props {
   onRecipeChanged: () => void;
   // Every time the steps change, so the Ingredients tab can say where each ingredient is used.
   onStepsChange: (steps: MethodStep[]) => void;
+  // Tells the page which mode is showing, so the phone layout can give Cook view the whole screen.
+  onModeChange?: (mode: "build" | "cook") => void;
   // Asks the Ingredients tab to open (from the "Used in" links the other way round).
   hidden?: boolean;
 }
@@ -50,7 +52,7 @@ const newKey = (): string => `new-${Date.now().toString(36)}-${++keyCounter}`;
 const blankStep = (): MethodStep => ({ key: newKey(), text: "", timer_minutes: 0, note: "", lines: [], photos: [], arrow_photo: null });
 
 export default function RecipeMethod({
-  recipe, accessToken, readOnly, items, allRecipes, currency, contains, mayContain, onRecipeChanged, onStepsChange, hidden,
+  recipe, accessToken, readOnly, items, allRecipes, currency, contains, mayContain, onRecipeChanged, onStepsChange, onModeChange, hidden,
 }: Props) {
   const [steps, setSteps] = useState<MethodStep[]>([]);
   const [finished, setFinished] = useState<MethodPhoto | null>(null);
@@ -194,6 +196,11 @@ export default function RecipeMethod({
     onStepsChange(steps);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [steps]);
+
+  useEffect(() => {
+    onModeChange?.(mode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
 
   function commit(next: MethodStep[]) {
     stepsRef.current = next;
@@ -674,6 +681,7 @@ export default function RecipeMethod({
           finished={finished}
           contains={contains}
           mayContain={mayContain}
+          readOnly={readOnly}
         />
       ) : (
         <div className="mt-build">
