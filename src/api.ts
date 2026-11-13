@@ -3532,6 +3532,37 @@ export async function fetchStockMovements(accessToken: string): Promise<StockMov
   return authedFetchAllPages<StockMovementRow>("/api/ledger/stock-movements/", accessToken);
 }
 
+// What the Actions tab and the notification bell show about stock, worked out
+// on the server in one request (below-par items, and which locations have
+// logged waste today). They used to download the whole stock ledger, 50 rows
+// at a time, and add it up in the browser, which took about 20 seconds with a
+// long history and showed wrong counts until it finished.
+export interface BelowParRow {
+  id: string;
+  item: string;
+  item_name: string;
+  location: string;
+  location_name: string;
+  department: "kitchen" | "bar" | "foh";
+  base_unit: string;
+  on_hand: number;
+  par_level: number;
+}
+
+export interface StockStatus {
+  below_par: BelowParRow[];
+  waste_locations: string[];
+}
+
+// `wasteSince` is the start of the person's own day (an ISO date-time), so
+// "waste logged today" follows their clock, not the server's.
+export async function fetchStockStatus(accessToken: string, wasteSince: string): Promise<StockStatus> {
+  return authedFetch(
+    `/api/ledger/stock-movements/stock_status/?waste_since=${encodeURIComponent(wasteSince)}`,
+    accessToken
+  );
+}
+
 export interface NewStockMovementInput {
   location: string;
   item: string;

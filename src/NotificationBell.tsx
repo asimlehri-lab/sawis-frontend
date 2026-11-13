@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchNotifications } from "./api";
-import type { AppNotification, CatalogItem, Location, StockMovementRow, Supplier } from "./api";
+import type { AppNotification, StockStatus, Supplier } from "./api";
 import NotificationCalendar from "./NotificationCalendar";
 
 // How far past/future of today a persisted Notification (Phase 3 — delivery
@@ -33,9 +33,9 @@ function fmtRelativeDay(dateStr: string): string {
 }
 
 interface Props {
-  items: CatalogItem[];
-  locations: Location[];
-  stockMovements: StockMovementRow[];
+  // Worked out on the server (see fetchStockStatus). null while the first
+  // answer is still on its way, so the bell never shows a guessed count.
+  stockStatus: StockStatus | null;
   suppliers: Supplier[];
   accessToken: string;
   onViewReorder: () => void;
@@ -98,9 +98,7 @@ interface ReorderAlert {
 // clickable straight through to its PurchaseOrder (onOpenPO); an
 // inventory-check-due row has no PO to jump to, so it's plain text.
 export default function NotificationBell({
-  items,
-  locations,
-  stockMovements,
+  stockStatus,
   suppliers,
   accessToken,
   onViewReorder,
@@ -132,30 +130,15 @@ export default function NotificationBell({
       .catch(() => {});
   }, [accessToken]);
 
-  function locationName(id: string): string {
-    return locations.find((l) => l.id === id)?.name ?? "Unknown location";
-  }
-
-  function onHandFor(itemId: string, locationId: string, department: string): number {
-    return stockMovements
-      .filter((m) => m.item === itemId && m.location === locationId && m.department === department)
-      .reduce((sum, m) => sum + Number(m.qty_delta), 0);
-  }
-
-  const alerts: ReorderAlert[] = items
-    .filter((it) => !it.archived)
-    .flatMap((it) =>
-      it.holdings
-        .map((h) => ({
-          key: h.id,
-          itemName: it.name,
-          locationName: locationName(h.location),
-          onHand: onHandFor(it.id, h.location, h.department),
-          parLevel: Number(h.par_level),
-          baseUnit: it.base_unit,
-        }))
-        .filter((a) => a.onHand < a.parLevel)
-    );
+  const checkingStock = stockStatus === null;
+  const alerts: ReorderAlert[] = (stockStatus?.below_par ?? []).map((a) => ({
+    key: a.id,
+    itemName: a.item_name,
+    locationName: a.location_name,
+    onHand: a.on_hand,
+    parLevel: a.par_level,
+    baseUnit: a.base_unit,
+  }));
 
   const scheduled = notifications
     .filter((n) => daysFromToday(n.relevant_date) >= -NOTIF_WINDOW_PAST_DAYS)
@@ -196,11 +179,17 @@ export default function NotificationBell({
       {open && (
         <div className="notif-panel">
           <div className="notif-panel-head">
-            <b>{totalCount === 0 ? "All caught up" : `${totalCount} notification${totalCount === 1 ? "" : "s"}`}</b>
+            <b>
+              {totalCount > 0
+                ? `${totalCount} notification${totalCount === 1 ? "" : "s"}`
+                : checkingStock
+                  ? "Checking stock levels…"
+                  : "All caught up"}
+            </b>
           </div>
           {totalCount === 0 ? (
             <p className="muted" style={{ margin: "10px 14px 14px", fontSize: 12.5 }}>
-              Nothing needs attention right now.
+              {checkingStock ? "Looking for items below par." : "Nothing needs attention right now."}
             </p>
           ) : (
             <>

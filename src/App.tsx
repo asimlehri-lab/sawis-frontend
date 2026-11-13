@@ -36,6 +36,7 @@ import {
   createOwnBusinessName,
   fetchWasteEvents,
   fetchStockMovements,
+  fetchStockStatus,
   fetchSections,
   fetchStockCounts,
   fetchMemberships,
@@ -64,6 +65,7 @@ import type {
   OwnBusinessName,
   WasteEventRow,
   StockMovementRow,
+  StockStatus,
   Section,
   StockCountRow,
   Membership,
@@ -1076,6 +1078,10 @@ export default function App() {
   const [wasteEvents, setWasteEvents] = useState<WasteEventRow[] | null>(null);
   const [wasteError, setWasteError] = useState<string | null>(null);
   const [stockMovements, setStockMovements] = useState<StockMovementRow[]>([]);
+  // Below-par items and today's waste, worked out on the server (see
+  // fetchStockStatus): what the bell and the Actions tab show. null until the
+  // first answer arrives.
+  const [stockStatus, setStockStatus] = useState<StockStatus | null>(null);
 
   const [sections, setSections] = useState<Section[]>([]);
   const [sectionsError, setSectionsError] = useState<string | null>(null);
@@ -1111,6 +1117,15 @@ export default function App() {
       .then(setWasteEvents)
       .catch((err) => setWasteError(err instanceof Error ? err.message : "Could not load waste log."));
     fetchStockMovements(token).then(setStockMovements).catch(() => {});
+    loadStockStatus(token);
+  }
+
+  function loadStockStatus(token: string) {
+    const now = new Date();
+    const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    fetchStockStatus(token, dayStart)
+      .then(setStockStatus)
+      .catch(() => {});
   }
 
   function loadSections(token: string) {
@@ -1220,21 +1235,27 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken, activePage]);
 
-  // Powers the notification bell (NotificationBell.tsx) -- loaded once per
-  // session, independent of which page happens to be open. Without this,
-  // the bell would only have real stock-movement data after visiting
-  // Waste log or Inventory (the only two pages that otherwise fetch it),
-  // and would misread an empty ledger as everything being below par on a
-  // fresh sign-in. The activePage effect above keeps these fresh as the
-  // user navigates; this just guarantees a first load regardless of where
-  // they land.
+  // Powers the notification bell (NotificationBell.tsx) and the Actions tab --
+  // loaded once per session, independent of which page happens to be open, so
+  // they have real data wherever the person lands. The items list is still
+  // needed by other screens.
   useEffect(() => {
     if (!accessToken) return;
     if (!items) fetchItems(accessToken).then(setItems).catch(() => {});
     fetchLocations(accessToken).then(setLocations).catch(() => {});
-    fetchStockMovements(accessToken).then(setStockMovements).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
+
+  // Below-par items and today's waste come from one small server request
+  // (fetchStockStatus), not from adding up the whole stock ledger in the
+  // browser. Cheap enough to refresh on every page change and once a minute,
+  // so the bell follows what was just received, counted or wasted.
+  useEffect(() => {
+    if (!accessToken) return;
+    loadStockStatus(accessToken);
+    const timer = window.setInterval(() => loadStockStatus(accessToken), 60000);
+    return () => window.clearInterval(timer);
+  }, [accessToken, activePage]);
 
   // Keep localStorage in sync with whatever page is open, so a refresh
   // (see the ACTIVE_PAGE_KEY lazy initializer above) picks it back up.
@@ -2388,9 +2409,7 @@ export default function App() {
                 ?
               </button>
               <NotificationBell
-                items={items ?? []}
-                locations={locations}
-                stockMovements={stockMovements}
+                stockStatus={stockStatus}
                 suppliers={suppliers}
                 accessToken={accessToken}
                 canReorder={canManage(me)}
@@ -3106,7 +3125,7 @@ export default function App() {
                 recipes={liveRecipes}
                 items={items ?? []}
                 itemSupplierLinks={itemSupplierLinks}
-                stockMovements={stockMovements}
+                stockStatus={stockStatus}
                 initialTab={eodInitialTab}
                 onOpenRecipe={(id, tab) => {
                   goToNav("Recipes");

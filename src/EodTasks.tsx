@@ -26,7 +26,7 @@ import type {
   Recipe,
   Section,
   StockCountRow,
-  StockMovementRow,
+  StockStatus,
 } from "./api";
 
 interface Props {
@@ -36,7 +36,7 @@ interface Props {
   locations: Location[];
   recipes: Recipe[];
   items: CatalogItem[];
-  stockMovements: StockMovementRow[];
+  stockStatus: StockStatus | null;
   onOpenRecipe: (id: string, tab?: "history") => void;
   onOpenPO: (id: string) => void;
   onOpenItem: (id: string, tab?: "history") => void;
@@ -174,7 +174,7 @@ export default function EodTasks({
   locations,
   recipes,
   items,
-  stockMovements,
+  stockStatus,
   onOpenRecipe,
   onOpenPO,
   onOpenItem,
@@ -203,7 +203,7 @@ export default function EodTasks({
       location={location}
       recipes={recipes}
       items={items}
-      stockMovements={stockMovements}
+      stockStatus={stockStatus}
       notifications={notifications}
       onOpenRecipe={onOpenRecipe}
       onOpenPO={onOpenPO}
@@ -220,7 +220,7 @@ export default function EodTasks({
       accessToken={accessToken}
       location={location}
       locations={locations}
-      stockMovements={stockMovements}
+      stockStatus={stockStatus}
       notifications={notifications}
       onNavigateApp={onNavigateApp}
     />
@@ -233,7 +233,7 @@ function ManagerTasks({
   locations,
   recipes,
   items,
-  stockMovements,
+  stockStatus,
   notifications,
   onOpenRecipe,
   onOpenPO,
@@ -249,7 +249,7 @@ function ManagerTasks({
   locations: Location[];
   recipes: Recipe[];
   items: CatalogItem[];
-  stockMovements: StockMovementRow[];
+  stockStatus: StockStatus | null;
   notifications: AppNotification[];
   onOpenRecipe: (id: string, tab?: "history") => void;
   onOpenPO: (id: string) => void;
@@ -289,32 +289,11 @@ function ManagerTasks({
     .filter((r) => r.over > 0)
     .sort((a, b) => b.over - a.over);
 
-  // Identical math to NotificationBell.tsx's onHandFor/alerts -- on-hand
-  // derived client-side from the stock_movement ledger (sum of qty_delta
-  // per item/location/department) rather than a per-holding API call.
-  // Kept as a literal copy, not a shared import, so this tab and the bell
-  // can each evolve independently without one refactor risking the other.
-  function onHandFor(itemId: string, locId: string, department: string): number {
-    return stockMovements
-      .filter((m) => m.item === itemId && m.location === locId && m.department === department)
-      .reduce((sum, m) => sum + Number(m.qty_delta), 0);
-  }
-
-  const belowPar = items
-    .filter((it) => !it.archived)
-    .flatMap((it) =>
-      it.holdings
-        .map((h) => ({
-          key: h.id,
-          itemName: it.name,
-          locationName: locationNameOf(locations, h.location),
-          onHand: onHandFor(it.id, h.location, h.department),
-          parLevel: Number(h.par_level),
-          baseUnit: it.base_unit,
-        }))
-        .filter((a) => a.onHand < a.parLevel)
-    )
-    .sort((a, b) => a.onHand - a.parLevel - (b.onHand - b.parLevel));
+  // Below-par items come from the server (fetchStockStatus), already worked
+  // out and sorted most-short first. null means the first answer is still on
+  // its way: the tile says so rather than showing a guessed count.
+  const stockChecked = stockStatus !== null;
+  const belowPar = stockStatus?.below_par ?? [];
 
   // Live data for the Overview tiles + Latest updates list below. Polled
   // once a minute while this tab is open so it reads as a live board; the
@@ -538,15 +517,17 @@ function ManagerTasks({
 
           <button
             type="button"
-            className={`ov-tile ov-tile-button ${belowPar.length ? "ov-bad" : "ov-good"}`}
+            className={`ov-tile ov-tile-button ${!stockChecked ? "" : belowPar.length ? "ov-bad" : "ov-good"}`}
             onClick={onViewReorder}
           >
             <div className="ov-head">
               <span className="ov-icon">📦</span>
               <span className="ov-title">Below par</span>
-              <span className="ov-count">{belowPar.length}</span>
+              {stockChecked && <span className="ov-count">{belowPar.length}</span>}
             </div>
-            {belowPar.length === 0 ? (
+            {!stockChecked ? (
+              <p className="ov-empty">Checking stock levels…</p>
+            ) : belowPar.length === 0 ? (
               <p className="ov-empty">Everything is at or above par.</p>
             ) : (
               <>
@@ -557,7 +538,7 @@ function ManagerTasks({
                 <div className="ov-line-sub">
                   {belowPar
                     .slice(0, 3)
-                    .map((a) => a.itemName)
+                    .map((a) => a.item_name)
                     .join(", ")}
                   {belowPar.length > 3 ? ` +${belowPar.length - 3} more` : ""}
                 </div>
@@ -891,7 +872,7 @@ function StaffTasks({
   accessToken,
   location,
   locations,
-  stockMovements,
+  stockStatus,
   notifications,
   onNavigateApp,
 }: {
@@ -899,7 +880,7 @@ function StaffTasks({
   accessToken: string;
   location: string;
   locations: Location[];
-  stockMovements: StockMovementRow[];
+  stockStatus: StockStatus | null;
   notifications: AppNotification[];
   onNavigateApp: (label: string) => void;
 }) {
@@ -925,11 +906,8 @@ function StaffTasks({
   // whichever location this tab (End of day) currently has selected if
   // they somehow have no staff membership on file.
   const myStaffLocation = me.memberships.find((m) => m.role === "staff")?.location ?? location;
-  const today = new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  const wasteLoggedToday = stockMovements.some(
-    (m) => m.movement_type === "waste" && m.location === myStaffLocation && m.occurred_at.slice(0, 10) === todayStr
-  );
+  const wasteChecked = stockStatus !== null;
+  const wasteLoggedToday = stockStatus?.waste_locations.includes(myStaffLocation) ?? false;
 
   // The location-wide scheduled reminder (Settings > Locations >
   // Inventory check day), not a specific person's assignment -- that's
@@ -1020,11 +998,13 @@ function StaffTasks({
       <section className="card task-section">
         <div className="task-section-head">
           <h2 style={sectionHeadStyle}>Waste log</h2>
-          <span className={`tag ${wasteLoggedToday ? "good" : "warn"}`}>
-            {wasteLoggedToday ? "Done for today" : "Not logged yet"}
+          <span className={`tag ${!wasteChecked ? "" : wasteLoggedToday ? "good" : "warn"}`}>
+            {!wasteChecked ? "Checking…" : wasteLoggedToday ? "Done for today" : "Not logged yet"}
           </span>
         </div>
-        {wasteLoggedToday ? (
+        {!wasteChecked ? (
+          <p className="task-empty">Checking whether waste has been logged today…</p>
+        ) : wasteLoggedToday ? (
           <p className="task-empty">Waste has been logged today — nothing more to do here.</p>
         ) : (
           <button type="button" className="btn-ghost small" style={{ marginTop: 10 }} onClick={() => onNavigateApp("Waste log")}>

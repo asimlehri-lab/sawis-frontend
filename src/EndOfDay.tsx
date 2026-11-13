@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { fetchLastImportDate, formatMoney, importSales } from "./api";
-import type { CatalogItem, ItemSupplierRow, Location, Me, Recipe, StockMovementRow } from "./api";
+import type { CatalogItem, ItemSupplierRow, Location, Me, Recipe, StockStatus } from "./api";
 import Reorder from "./Reorder";
 import EodReport from "./EodReport";
 import LocationTabs from "./LocationTabs";
@@ -22,7 +22,8 @@ interface Props {
   recipes: Recipe[];
   items: CatalogItem[];
   itemSupplierLinks: ItemSupplierRow[];
-  stockMovements: StockMovementRow[];
+  // Below-par items and today's waste, from the server; null until the first answer.
+  stockStatus: StockStatus | null;
   // Which tab to mount on -- defaults to "overview" (the normal nav-click
   // behavior). The notification bell's "View reorder list" button passes
   // "reorder" so it lands directly there. This component only exists while
@@ -190,7 +191,7 @@ export default function EndOfDay({
   recipes,
   items,
   itemSupplierLinks,
-  stockMovements,
+  stockStatus,
   initialTab,
   onOpenRecipe,
   onOpenPO,
@@ -980,7 +981,7 @@ export default function EndOfDay({
           locations={locations}
           recipes={recipes}
           items={items}
-          stockMovements={stockMovements}
+          stockStatus={stockStatus}
           onOpenRecipe={onOpenRecipe}
           onOpenPO={onOpenPO}
           onOpenItem={onOpenItem}
