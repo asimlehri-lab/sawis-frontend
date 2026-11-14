@@ -640,7 +640,24 @@ export const HELP_TOPICS: HelpTopic[] = [
       },
       {
         q: "How do I add a team member?",
-        a: "Go to Team in the sidebar and click + Add team member, top right. Enter their email, role, and location — they can sign in once their account is set up.",
+        a: "Go to Team in the sidebar and click + Add team member, top right. Enter their email, pick a role (one of the built-in roles or one you made yourself) and a location — they can sign in once their account is set up.",
+      },
+      {
+        id: "custom-roles",
+        q: "How do I create or change a role?",
+        a: "An Admin opens Settings and the Roles tab. Press + New role, name it (for example Sous chef or Accountant) and choose what to start from: a blank role or a copy of Manager, Finance or Staff. Then switch things on or off in the groups (End of day, Items, Recipes, Procurement and so on). Switching something on also switches on what it needs, and switching it off also switches off what depends on it; a note tells you when that happens. Use the search box to find a permission by word, and the All, On, Off and Changed buttons to review. Money marks permissions that show costs, prices or sales figures, and Delete marks ones that remove records. The menu preview on the right shows what the role will see. Press Save changes: everyone with that role sees the change the next time they open SAWIS. You can make as many roles as you like. Then give people their role on the Team screen. Built-in roles can be changed too (Reset to default puts one back), except Admin, which always has everything.",
+      },
+      {
+        q: "How do I give one person different access from everyone else?",
+        a: "Roles, not per-person switches, decide access. On Team, click Edit on the person and press Make a role for them. SAWIS creates a role named after them, starting with the switches of the role they have now, and gives it to them. Then open Settings, Roles, and switch things on or off for that role.",
+      },
+      {
+        q: "How do I delete a role?",
+        a: "Open Settings, Roles and press Delete on a role you made. If people have it, choose another role to move them to first, so nobody is left without access. Deleting a role never deletes people or their history. The built-in roles cannot be deleted. Adding, removing and editing people, the Roles screen, billing and account, and switching on Connect your AI can only ever be done by an Admin.",
+      },
+      {
+        q: "Why can't my staff see costs?",
+        a: "The built-in Staff role starts with item costs and recipe costs and margins switched off, so staff see menu prices, quantities and the method but not what things cost. To change it, open Settings, Roles, choose the role and switch on Item costs or Recipe costs and margins. Waste value stays on for Staff so they can see what logged waste was worth.",
       },
       {
         q: "How do I change which location a team member works at?",
