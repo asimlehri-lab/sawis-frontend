@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import HelpLink from "./HelpLink";
 import SquarePanel from "./SquarePanel";
 import ConnectorPanel from "./ConnectorPanel";
+import RolesPanel from "./Roles";
 import type { SquareReturn } from "./squareApi";
 import {
   bulkImportRecipes,
@@ -53,6 +54,8 @@ interface Props {
   squareReturn?: SquareReturn;
   // Feature keys the business has; "ai_connector" adds the Connect your AI tab.
   entitlements?: string[];
+  // The permission keys the signed-in person holds (see permissions.ts); each Settings tab needs one.
+  permissions?: string[];
   // App.tsx caches `items`/`recipes` and only reloads them on demand — a
   // bulk import here changes them server-side (new items, new or
   // backfilled ItemHoldings, new recipes) without App.tsx knowing, so
@@ -166,25 +169,31 @@ function cleanNumeric(raw: string | null): string {
   return cleaned;
 }
 
-type SettingsTab = "locations" | "catalogue" | "import" | "integrations" | "ai" | "account";
-const SETTINGS_TABS: { key: SettingsTab; label: string }[] = [
-  { key: "locations", label: "Locations" },
-  { key: "catalogue", label: "Catalogue" },
-  { key: "import", label: "Import" },
-  { key: "integrations", label: "Integrations" },
-  { key: "ai", label: "Connect your AI" },
-  { key: "account", label: "Account" },
+type SettingsTab = "locations" | "catalogue" | "import" | "integrations" | "ai" | "roles" | "account";
+// Each tab is shown only to people whose role has its switch on.
+const SETTINGS_TABS: { key: SettingsTab; label: string; perm: string }[] = [
+  { key: "locations", label: "Locations", perm: "set.locations" },
+  { key: "catalogue", label: "Catalogue", perm: "set.catalogue" },
+  { key: "import", label: "Import", perm: "set.catalogue" },
+  { key: "integrations", label: "Integrations", perm: "set.pos" },
+  { key: "ai", label: "Connect your AI", perm: "set.ai" },
+  { key: "roles", label: "Roles", perm: "set.roles" },
+  { key: "account", label: "Account", perm: "set.account" },
 ];
 
-export default function Settings({ accessToken, items, recipes, allergens, locations, org, onFreshDaysChanged, onAskAfterChanged, squareReturn = null, entitlements = [], onItemsChanged, onRecipesChanged, onCategoriesChanged }: Props) {
+export default function Settings({ accessToken, items, recipes, allergens, locations, org, onFreshDaysChanged, onAskAfterChanged, squareReturn = null, entitlements = [], permissions = [], onItemsChanged, onRecipesChanged, onCategoriesChanged }: Props) {
   // Coming back from Square's sign-in page lands straight on Integrations.
-  const [tab, setTab] = useState<SettingsTab>(squareReturn ? "integrations" : "locations");
+  const visibleTabs = SETTINGS_TABS.filter((t) => permissions.includes(t.perm) && (t.key !== "ai" || entitlements.includes("ai_connector")));
+  const [chosenTab, setTab] = useState<SettingsTab>(squareReturn ? "integrations" : "locations");
+  // If the chosen tab is not one this person may open, fall back to the first they may.
+  const tab: SettingsTab = visibleTabs.some((t) => t.key === chosenTab) ? chosenTab : (visibleTabs[0]?.key ?? "account");
+  const show = (key: SettingsTab) => visibleTabs.some((t) => t.key === key);
   // Every pane stays mounted and is only hidden when it is not the open tab,
   // so a half-filled form or an import in progress survives a tab switch.
   return (
     <>
       <div className="rp-tabs" role="tablist" aria-label="Settings sections">
-        {SETTINGS_TABS.filter((t) => t.key !== "ai" || entitlements.includes("ai_connector")).map((t) => (
+        {visibleTabs.map((t) => (
           <button
             key={t.key}
             type="button"
@@ -198,12 +207,15 @@ export default function Settings({ accessToken, items, recipes, allergens, locat
         ))}
       </div>
 
+      {show("locations") && (
       <div hidden={tab !== "locations"}>
         <LocationSettingsPanel accessToken={accessToken} locations={locations} />
         <div style={{ height: 20 }} />
         <NotificationSettingsPanel accessToken={accessToken} locations={locations} />
       </div>
+      )}
 
+      {show("catalogue") && (
       <div hidden={tab !== "catalogue"}>
         <CategorySettingsPanel accessToken={accessToken} onCategoriesChanged={onCategoriesChanged} />
         <div style={{ height: 20 }} />
@@ -213,7 +225,9 @@ export default function Settings({ accessToken, items, recipes, allergens, locat
         <div style={{ height: 20 }} />
         <OwnNamesPanel accessToken={accessToken} />
       </div>
+      )}
 
+      {show("import") && (
       <div hidden={tab !== "import"}>
         <p className="muted" style={{ fontSize: 13, marginTop: 0, marginBottom: 16 }}>
           Bulk-import a customer's existing menu and stock catalogue from a spreadsheet, instead of adding everything
@@ -240,20 +254,31 @@ export default function Settings({ accessToken, items, recipes, allergens, locat
           </button>
         </div>
       </div>
+      )}
 
-      <div hidden={tab !== "integrations"}>
-        <SquarePanel accessToken={accessToken} recipes={recipes} locations={locations} squareReturn={squareReturn} />
-      </div>
+      {show("integrations") && (
+        <div hidden={tab !== "integrations"}>
+          <SquarePanel accessToken={accessToken} recipes={recipes} locations={locations} squareReturn={squareReturn} />
+        </div>
+      )}
 
-      {entitlements.includes("ai_connector") && (
+      {show("ai") && (
         <div hidden={tab !== "ai"}>
           <ConnectorPanel accessToken={accessToken} />
         </div>
       )}
 
-      <div hidden={tab !== "account"}>
-        <ChangePasswordPanel accessToken={accessToken} />
-      </div>
+      {show("roles") && (
+        <div hidden={tab !== "roles"}>
+          <RolesPanel accessToken={accessToken} />
+        </div>
+      )}
+
+      {show("account") && (
+        <div hidden={tab !== "account"}>
+          <ChangePasswordPanel accessToken={accessToken} />
+        </div>
+      )}
     </>
   );
 }

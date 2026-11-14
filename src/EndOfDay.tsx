@@ -13,6 +13,7 @@ import { confidentGuess, rankNames } from "./dishMatch";
 import AiChip from "./AiChip";
 import { useAiMatches } from "./useAiMatches";
 import ScanEodSales from "./ScanEodSales";
+import { can } from "./permissions";
 import { fetchSquareStatus, fmtSquareDate, fmtSquareDateTime, type SquareConnection } from "./squareApi";
 
 interface Props {
@@ -203,19 +204,24 @@ export default function EndOfDay({
 }: Props) {
   // Sales (and importing sales) is manager-only data -- the backend 403s it
   // for staff, so staff land on Actions and never see the Sales tab at all.
-  const isManagerOrAbove = me.memberships.some(
-    (m) => m.role === "admin" || m.role === "manager" || m.role === "finance"
-  );
-  const [tab, setTab] = useState<"overview" | "reorder" | "tasks">(
-    isManagerOrAbove ? (initialTab ?? "overview") : "tasks"
-  );
+  const canSales = can(me, "sales.view");
+  const canReorderTab = can(me, "reorder.use");
+  // Anyone with a manager-style tab sees the location tabs and tab bar; people with none land on Actions only.
+  const isManagerOrAbove = canSales || canReorderTab || can(me, "actions.overview", "sales.enter");
+  const startTab: "overview" | "reorder" | "tasks" =
+    initialTab === "reorder" && canReorderTab ? "reorder"
+    : initialTab === "overview" && canSales ? "overview"
+    : initialTab === "tasks" ? "tasks"
+    : canSales ? "overview"
+    : "tasks";
+  const [tab, setTab] = useState<"overview" | "reorder" | "tasks">(startTab);
   const [location, setLocation] = useState(locations[0]?.id ?? "");
   // Square connection (managers only; the endpoint is manager-gated). Stays
   // null when Square is not connected or cannot be reached, which just keeps
   // the "manual CSV upload" wording below.
   const [square, setSquare] = useState<SquareConnection | null>(null);
   useEffect(() => {
-    if (!isManagerOrAbove) return;
+    if (!can(me, "pos.sync")) return;
     let cancelled = false;
     fetchSquareStatus(accessToken)
       .then((s) => {
@@ -225,7 +231,7 @@ export default function EndOfDay({
     return () => {
       cancelled = true;
     };
-  }, [accessToken, isManagerOrAbove]);
+  }, [accessToken, me]);
   // "all" is the All tab: every location added up. Only the Sales tab can
   // show that; importing, Actions and Reorder belong to one location.
   const isAll = location === ALL_LOCATIONS;
@@ -843,7 +849,7 @@ export default function EndOfDay({
       {isManagerOrAbove && isAll && (
         <p className="lnote">Importing and scanning sales work one location at a time. Pick a location to use them.</p>
       )}
-      {isManagerOrAbove && !isAll && (
+      {can(me, "sales.enter") && !isAll && (
       <div className="eod-head">
         <div className="eod-import">
           <div
@@ -942,7 +948,7 @@ export default function EndOfDay({
       )}
 
       <div className="rtabs" style={{ marginBottom: 16 }}>
-        {isManagerOrAbove && (
+        {canSales && (
           <button className={`rtab ${tab === "overview" ? "on" : ""}`} onClick={() => setTab("overview")}>
             Sales
           </button>
@@ -950,18 +956,18 @@ export default function EndOfDay({
         <button className={`rtab ${tab === "tasks" ? "on" : ""}`} onClick={() => setTab("tasks")}>
           Actions
         </button>
-        {isManagerOrAbove && (
+        {canReorderTab && (
           <button className={`rtab ${tab === "reorder" ? "on" : ""}`} onClick={() => setTab("reorder")}>
             Reorder
           </button>
         )}
       </div>
 
-      {tab === "overview" && isManagerOrAbove && <EodReport
+      {tab === "overview" && canSales && <EodReport
           accessToken={accessToken}
           locations={locations}
           location={location}
-          isAdmin={me.memberships.some((m) => m.role === "admin")}
+          isAdmin={can(me, "sales.recost")}
         />}
 
       {tab === "tasks" && isAll && (
@@ -993,7 +999,7 @@ export default function EndOfDay({
         />
       )}
 
-      {tab === "reorder" && isManagerOrAbove && isAll && (
+      {tab === "reorder" && canReorderTab && isAll && (
         <PickLocationPrompt
           title="Reorder works one location at a time"
           text="Stock levels and orders belong to a location."
@@ -1002,7 +1008,7 @@ export default function EndOfDay({
         />
       )}
 
-      {tab === "reorder" && isManagerOrAbove && !isAll && (
+      {tab === "reorder" && canReorderTab && !isAll && (
         <Reorder
           key={location}
           accessToken={accessToken}

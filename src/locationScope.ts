@@ -3,14 +3,11 @@ import type { Location, Me } from "./api";
 // "All locations": the value the location tabs use for every location added up.
 export const ALL_LOCATIONS = "all";
 
-const MANAGER_ROLES = ["admin", "manager", "finance"];
-
-// The All tab is for managers who can look at more than one location: either
-// an admin, a manager role that is not tied to a single location, or manager
-// roles at two or more locations. Staff never see it.
+// The All tab is for people whose role includes "See all locations together" and who can look at more than one
+// location: an admin, such a role that is not tied to a single location, or such roles at two or more locations.
 export function canSeeAllLocations(me: Me, locations: Location[]): boolean {
   if (locations.length < 2) return false;
-  const mine = me.memberships.filter((m) => MANAGER_ROLES.includes(m.role));
+  const mine = me.memberships.filter((m) => m.permissions?.includes("rep.all"));
   if (mine.some((m) => m.role === "admin" || m.location === null)) return true;
   return new Set(mine.map((m) => m.location)).size > 1;
 }

@@ -13,6 +13,8 @@ interface Props {
   wasteError: string | null;
   stockMovements: StockMovementRow[];
   onChanged: () => void;
+  // False for a role without "See the value of waste": amounts in money are left out.
+  showValue?: boolean;
 }
 
 const REASONS = [
@@ -65,6 +67,7 @@ export default function WasteLog({
   wasteError,
   stockMovements,
   onChanged,
+  showValue = true,
 }: Props) {
   const [selectedItem, setSelectedItem] = useState("");
   const [selectedLocation, setSelectedLocation] = useState(locations[0]?.id ?? "");
@@ -212,20 +215,26 @@ export default function WasteLog({
   return (
     <>
       <div className="kpi-grid">
-        <div className="kpi-card">
-          <div className="kpi-label">Waste value (7 days)</div>
-          <div className="kpi-value">{formatMoney(wasteValue7d, currency)}</div>
-          <div className="kpi-sub">
-            {last7.length} event{last7.length === 1 ? "" : "s"} logged
+        {showValue && (
+          <div className="kpi-card">
+            <div className="kpi-label">Waste value (7 days)</div>
+            <div className="kpi-value">{formatMoney(wasteValue7d, currency)}</div>
+            <div className="kpi-sub">
+              {last7.length} event{last7.length === 1 ? "" : "s"} logged
+            </div>
           </div>
-        </div>
+        )}
         <div className="kpi-card">
           <div className="kpi-label">Top reason (7 days)</div>
           <div className="kpi-value" style={{ fontSize: 18 }}>
             {topReason7d ? reasonLabel(topReason7d) : "—"}
           </div>
           <div className="kpi-sub">
-            {topReason7d ? `${formatMoney(reasonTotals7d[topReason7d] ?? 0, currency)} of last 7 days' waste` : "No waste logged yet"}
+            {topReason7d
+              ? showValue
+                ? `${formatMoney(reasonTotals7d[topReason7d] ?? 0, currency)} of last 7 days' waste`
+                : "Most common in the last 7 days"
+              : "No waste logged yet"}
           </div>
         </div>
         <div className="kpi-card">
@@ -248,7 +257,7 @@ export default function WasteLog({
                 aria-label="Item"
                 options={activeItems.map((it) => ({ value: it.id, label: it.name }))}
               />
-              {selectedItem && (
+              {selectedItem && showValue && (
                 <div className="waste-cost-hint">
                   {unitCost !== null ? `${formatMoney(unitCost, currency)} / ${selectedItemObj?.base_unit}` : "No supplier price recorded"}
                 </div>
@@ -358,7 +367,7 @@ export default function WasteLog({
                       <th>Item</th>
                       <th>Reason</th>
                       <th className="num">Qty</th>
-                      <th className="num">Value</th>
+                      {showValue && <th className="num">Value</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -368,7 +377,7 @@ export default function WasteLog({
                         <td>{r.itemName}</td>
                         <td className="muted">{reasonLabel(r.reason)}</td>
                         <td className="num">{r.qty.toFixed(2)}</td>
-                        <td className="num">{formatMoney(r.value, currency)}</td>
+                        {showValue && <td className="num">{formatMoney(r.value, currency)}</td>}
                       </tr>
                     ))}
                   </tbody>
@@ -387,7 +396,7 @@ export default function WasteLog({
               <div className="bar-track">
                 <div className="bar-fill" style={{ width: `${maxBreakdown ? (total / maxBreakdown) * 100 : 0}%` }} />
               </div>
-              <div className="bar-val">{formatMoney(total, currency)}</div>
+              {showValue && <div className="bar-val">{formatMoney(total, currency)}</div>}
             </div>
           ))}
         </div>

@@ -58,6 +58,8 @@ interface Props {
   // View-only (staff): every field/button inside is disabled; the backend
   // refuses the writes regardless.
   readOnly?: boolean;
+  // False for a role without "See costs and prices on items": the Suppliers tab (prices, target cost) is left out.
+  showCosts?: boolean;
   categories: Category[];
   allergens: Allergen[];
   locations: Location[];
@@ -170,6 +172,7 @@ export default function ItemDetail({
   accessToken,
   userEmail,
   readOnly = false,
+  showCosts = true,
   categories,
   allergens,
   locations,
@@ -187,7 +190,9 @@ export default function ItemDetail({
 }: Props) {
   const [item, setItem] = useState<CatalogItem | null>(null);
   // History is for managers and admins only; everyone else just sees the details.
-  const [tab, setTab] = useState<ItemTab>(initialTab === "history" && readOnly ? "details" : initialTab ?? "details");
+  const [tab, setTab] = useState<ItemTab>(
+    (initialTab === "history" && readOnly) || (initialTab === "suppliers" && !showCosts) ? "details" : initialTab ?? "details"
+  );
   const [error, setError] = useState<string | null>(null);
   // Unsaved edits to the Contains / May contain chips. Nothing is saved
   // until a person presses Confirm -- tagging is a review decision, not an
@@ -958,7 +963,9 @@ export default function ItemDetail({
       </fieldset>
 
       <div className="rp-tabs" role="tablist" aria-label="Item sections">
-        {(readOnly ? (["details", "stock", "suppliers"] as const) : (["details", "stock", "suppliers", "history"] as const)).map((t) => (
+        {(readOnly ? (["details", "stock", "suppliers"] as const) : (["details", "stock", "suppliers", "history"] as const))
+          .filter((t) => showCosts || t !== "suppliers")
+          .map((t) => (
           <button
             key={t}
             type="button"
@@ -1591,6 +1598,7 @@ export default function ItemDetail({
         )}
       </div>
 
+      {showCosts && (
       <div className="card" hidden={tab !== "suppliers"}>
         <h2>Suppliers &amp; last prices</h2>
         <p className="hint">
@@ -1927,6 +1935,7 @@ export default function ItemDetail({
           </>
         )}
       </div>
+      )}
 
       <div className="card dz-card" hidden={tab !== "details"}>
         <h2 className="dz-h2">Danger zone</h2>

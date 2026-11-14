@@ -51,6 +51,9 @@ interface Props {
   // photo), but not place, edit, send, re-source or delete it. The backend
   // enforces the same split.
   readOnly?: boolean;
+  // "Receive deliveries" and "Reopen a received order" are their own permissions (default true so older callers keep working).
+  canReceive?: boolean;
+  canReopen?: boolean;
   items: CatalogItem[];
   suppliers: Supplier[];
   itemSupplierLinks: ItemSupplierRow[];
@@ -190,6 +193,8 @@ export default function ProcurementDetail({
   accessToken,
   isAdmin,
   readOnly = false,
+  canReceive = true,
+  canReopen = true,
   items,
   suppliers,
   itemSupplierLinks,
@@ -1232,7 +1237,7 @@ export default function ProcurementDetail({
             </div>
           ))}
         </div>
-        {nextStatus && (!readOnly || nextStatus === "received") && (
+        {nextStatus && (nextStatus === "received" ? canReceive : !readOnly) && (
           <button className="btn-primary small" onClick={handleAdvance} disabled={advancing}>
             {advancing ? "Saving…" : nextStatus === "received" ? "Receive delivery" : `Mark as ${STATUS_LABEL[nextStatus]}`}
           </button>
@@ -1276,7 +1281,7 @@ export default function ProcurementDetail({
             )}
           </div>
         )}
-        {po.status === "received" && !readOnly && (
+        {po.status === "received" && !readOnly && canReopen && (
           <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px dashed var(--border)" }}>
             {!showReopenConfirm ? (
               <button className="btn-ghost" onClick={() => setShowReopenConfirm(true)}>

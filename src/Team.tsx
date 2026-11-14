@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { createMember, deleteMembership, resetMemberPassword, updateMembership } from "./api";
-import type { Location, Me, Membership } from "./api";
+import { useEffect, useState } from "react";
+import { createMember, createRole, deleteMembership, fetchRoles, resetMemberPassword, updateMembership } from "./api";
+import type { Location, Me, Membership, RoleRow } from "./api";
+import { can } from "./permissions";
 
 interface Props {
   accessToken: string;
@@ -11,13 +12,6 @@ interface Props {
   onChanged: () => void;
 }
 
-const ROLES: { value: "admin" | "manager" | "finance" | "staff"; label: string; desc: string }[] = [
-  { value: "admin", label: "Admin", desc: "Full control + billing" },
-  { value: "manager", label: "Manager", desc: "Branch ops — costs" },
-  { value: "finance", label: "Finance", desc: "Money + reports" },
-  { value: "staff", label: "Staff", desc: "Entry, no costs" },
-];
-
 const DEPARTMENTS = [
   { value: "", label: "All departments" },
   { value: "kitchen", label: "Kitchen" },
@@ -25,8 +19,46 @@ const DEPARTMENTS = [
   { value: "foh", label: "Front of house" },
 ];
 
-function roleLabel(v: string): string {
-  return ROLES.find((r) => r.value === v)?.label ?? v;
+const BUILTIN_LABELS: Record<string, string> = { admin: "Admin", manager: "Manager", finance: "Finance", staff: "Staff" };
+
+// The role a person has: the Admin's own name for it, or the built-in label.
+function roleLabel(m: Membership): string {
+  return m.role_name || BUILTIN_LABELS[m.role] || "Custom role";
+}
+
+// One select for every role of the business, built-in ones first, then the Admin's own.
+function RoleSelect({ roles, value, onChange }: { roles: RoleRow[] | null; value: string; onChange: (id: string) => void }) {
+  if (!roles) {
+    return (
+      <select disabled>
+        <option>Loading roles…</option>
+      </select>
+    );
+  }
+  const builtin = roles.filter((r) => r.is_builtin);
+  const custom = roles.filter((r) => !r.is_builtin);
+  return (
+    <select value={value} onChange={(e) => onChange(e.target.value)}>
+      <optgroup label="Built in">
+        {builtin.map((r) => (
+          <option key={r.id} value={r.id}>
+            {r.name}
+            {r.description ? ` — ${r.description}` : ""}
+          </option>
+        ))}
+      </optgroup>
+      {custom.length > 0 && (
+        <optgroup label="Your roles">
+          {custom.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.name}
+              {r.description ? ` — ${r.description}` : ""}
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </select>
+  );
 }
 
 // Days-ago phrasing rather than a raw timestamp, since "was this person
@@ -46,7 +78,21 @@ function lastActive(iso: string | null): { text: string; recent: boolean } {
 }
 
 export default function Team({ accessToken, me, memberships, membershipsError, locations, onChanged }: Props) {
-  const isAdmin = me.memberships.some((m) => m.role === "admin");
+  const isAdmin = can(me, "team.manage");
+  // Only people who may manage the team pick roles, and only they may read the role list.
+  const [roles, setRoles] = useState<RoleRow[] | null>(null);
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    fetchRoles(accessToken)
+      .then((r) => {
+        if (!cancelled) setRoles(r);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, isAdmin]);
 
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -87,7 +133,7 @@ export default function Team({ accessToken, me, memberships, membershipsError, l
                   </td>
                   <td className="muted">{m.job_title || "—"}</td>
                   <td>
-                    <span className={`badge role-${m.role}`}>{roleLabel(m.role)}</span>
+                    <span className={`badge role-${m.role}`}>{roleLabel(m)}</span>
                   </td>
                   <td className="muted">{m.location_name ?? "All locations"}</td>
                   <td className="muted">{m.department ? m.department.charAt(0).toUpperCase() + m.department.slice(1) : "All"}</td>
@@ -143,6 +189,7 @@ export default function Team({ accessToken, me, memberships, membershipsError, l
         <AddMemberModal
           accessToken={accessToken}
           locations={locations}
+          roles={roles}
           onClose={() => setShowAdd(false)}
           onSaved={() => {
             setShowAdd(false);
@@ -155,6 +202,7 @@ export default function Team({ accessToken, me, memberships, membershipsError, l
         <EditMemberModal
           accessToken={accessToken}
           locations={locations}
+          roles={roles}
           membership={memberships.find((m) => m.id === editingId)!}
           onClose={() => setEditingId(null)}
           onSaved={() => {
@@ -178,11 +226,13 @@ export default function Team({ accessToken, me, memberships, membershipsError, l
 function AddMemberModal({
   accessToken,
   locations,
+  roles,
   onClose,
   onSaved,
 }: {
   accessToken: string;
   locations: Location[];
+  roles: RoleRow[] | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -190,7 +240,9 @@ function AddMemberModal({
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [jobTitle, setJobTitle] = useState("");
-  const [role, setRole] = useState<"admin" | "manager" | "finance" | "staff">("staff");
+  const [chosenRole, setRole] = useState("");
+  // Until the person picks one, Staff is the starting choice.
+  const role = chosenRole || roles?.find((r) => r.key === "staff")?.id || "";
   const [location, setLocation] = useState("");
   const [department, setDepartment] = useState("");
   const [saving, setSaving] = useState(false);
@@ -201,6 +253,10 @@ function AddMemberModal({
       setErr("Email is required.");
       return;
     }
+    if (!role) {
+      setErr("Choose a role.");
+      return;
+    }
     setSaving(true);
     setErr(null);
     try {
@@ -208,7 +264,7 @@ function AddMemberModal({
         email: email.trim(),
         name: name.trim(),
         password: password || undefined,
-        role,
+        role_id: role,
         location: location || null,
         department: (department || null) as "kitchen" | "bar" | "foh" | null,
         job_title: jobTitle.trim(),
@@ -255,13 +311,7 @@ function AddMemberModal({
           </div>
           <div className="field">
             <label>Permission role</label>
-            <select value={role} onChange={(e) => setRole(e.target.value as typeof role)}>
-              {ROLES.map((r) => (
-                <option key={r.value} value={r.value}>
-                  {r.label} — {r.desc}
-                </option>
-              ))}
-            </select>
+            <RoleSelect roles={roles} value={role} onChange={setRole} />
           </div>
         </div>
         <div className="fgrid fgrid-2">
@@ -304,18 +354,22 @@ function AddMemberModal({
 function EditMemberModal({
   accessToken,
   locations,
+  roles,
   membership,
   onClose,
   onSaved,
 }: {
   accessToken: string;
   locations: Location[];
+  roles: RoleRow[] | null;
   membership: Membership;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const [jobTitle, setJobTitle] = useState(membership.job_title);
-  const [role, setRole] = useState(membership.role);
+  const [role, setRole] = useState(membership.role_id);
+  // Set once the Admin has made a role just for this person (see makeRoleForThem).
+  const [made, setMade] = useState<RoleRow | null>(null);
   const [department, setDepartment] = useState(membership.department ?? "");
   const [location, setLocation] = useState(membership.location ?? "");
   const [saving, setSaving] = useState(false);
@@ -327,7 +381,7 @@ function EditMemberModal({
     try {
       await updateMembership(accessToken, membership.id, {
         job_title: jobTitle.trim(),
-        role,
+        role_id: role,
         location: location || null,
         department: (department || null) as "kitchen" | "bar" | "foh" | null,
       });
@@ -337,6 +391,45 @@ function EditMemberModal({
     } finally {
       setSaving(false);
     }
+  }
+
+  // A role of their own, starting from the role they have now, given to them straight away.
+  async function makeRoleForThem() {
+    if (!roles) return;
+    setSaving(true);
+    setErr(null);
+    try {
+      const first = (membership.name || membership.email.split("@")[0]).trim().split(/\s+/)[0];
+      const taken = new Set(roles.map((r) => r.name.toLowerCase()));
+      let name = `${first}'s role`;
+      for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${first}'s role ${n}`;
+      const created = await createRole(accessToken, { name, start_from: role });
+      await updateMembership(accessToken, membership.id, { role_id: created.id });
+      setMade(created);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not make a role for this person.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (made) {
+    return (
+      <div className="modal-backdrop">
+        <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <h2>Role made for {membership.name || membership.email}</h2>
+          <p className="muted" style={{ fontSize: 13 }}>
+            “{made.name}” starts with the same switches as before and is now their role. Open Settings, then Roles, to switch
+            things on or off for it. They see the change the next time they open SAWIS.
+          </p>
+          <div className="modal-actions">
+            <button type="button" className="btn-primary" onClick={onSaved}>
+              Done
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -369,13 +462,7 @@ function EditMemberModal({
         <div className="fgrid fgrid-2">
           <div className="field">
             <label>Permission role</label>
-            <select value={role} onChange={(e) => setRole(e.target.value as typeof role)}>
-              {ROLES.map((r) => (
-                <option key={r.value} value={r.value}>
-                  {r.label} — {r.desc}
-                </option>
-              ))}
-            </select>
+            <RoleSelect roles={roles} value={role} onChange={setRole} />
           </div>
           <div className="field">
             <label>Department</label>
@@ -388,6 +475,12 @@ function EditMemberModal({
             </select>
           </div>
         </div>
+        <p className="muted" style={{ fontSize: 12.5, margin: "0 0 10px" }}>
+          Needs something different for just this person?{" "}
+          <button type="button" className="link-btn" onClick={makeRoleForThem} disabled={saving || !roles}>
+            Make a role for them →
+          </button>
+        </p>
         {err && <p className="error">{err}</p>}
         <div className="modal-actions">
           <button type="button" className="btn-ghost" onClick={onClose} disabled={saving}>

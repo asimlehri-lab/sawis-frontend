@@ -28,6 +28,7 @@ import type {
   StockCountRow,
   StockStatus,
 } from "./api";
+import { can } from "./permissions";
 
 interface Props {
   me: Me;
@@ -184,9 +185,7 @@ export default function EodTasks({
   onNavigateApp,
   onOpenPriceCheck,
 }: Props) {
-  const isManagerOrAbove = me.memberships.some(
-    (m) => m.role === "admin" || m.role === "manager" || m.role === "finance"
-  );
+  const isManagerOrAbove = can(me, "actions.overview");
 
   // Fetched once here (not per-role-view) since only one of the two views
   // below ever mounts at a time, and this is the same small org-wide list
@@ -905,7 +904,10 @@ function StaffTasks({
   // A staff member's own membership carries their location; fall back to
   // whichever location this tab (End of day) currently has selected if
   // they somehow have no staff membership on file.
-  const myStaffLocation = me.memberships.find((m) => m.role === "staff")?.location ?? location;
+  const myStaffLocation =
+    me.memberships.find((m) => m.role === "staff" || m.role === "custom")?.location ??
+    me.memberships.find((m) => m.location)?.location ??
+    location;
   const wasteChecked = stockStatus !== null;
   const wasteLoggedToday = stockStatus?.waste_locations.includes(myStaffLocation) ?? false;
 

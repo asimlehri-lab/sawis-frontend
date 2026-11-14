@@ -34,6 +34,9 @@ interface Props {
   // View-only (staff): every field/button inside is disabled; the backend
   // refuses the writes regardless.
   readOnly?: boolean;
+  // False for a role without "See recipe costs and margins": the Cost & margin tab, the cost columns and the totals are
+  // left out; the menu price still shows.
+  showCosts?: boolean;
   accessToken: string;
   // The signed-in account's email, used to re-check the password before a
   // permanent delete (same as ItemDetail).
@@ -75,6 +78,7 @@ let justCopied: { id: string; from: string } | null = null;
 export default function RecipeDetail({
   recipeId,
   readOnly = false,
+  showCosts = true,
   accessToken,
   userEmail,
   items,
@@ -105,7 +109,11 @@ export default function RecipeDetail({
   const nameRef = useRef<HTMLInputElement>(null);
   // History is for managers and admins only; everyone else just sees the details.
   const [tab, setTab] = useState<RecipeTab>(
-    copiedFrom ? "ingredients" : initialTab === "history" && readOnly ? "ingredients" : initialTab ?? "ingredients"
+    copiedFrom
+      ? "ingredients"
+      : (initialTab === "history" && readOnly) || (initialTab === "cost" && !showCosts)
+      ? "ingredients"
+      : initialTab ?? "ingredients"
   );
   const [error, setError] = useState<string | null>(null);
   // Recipe cost/menu price are org-wide, not tied to one location — falls
@@ -462,7 +470,11 @@ export default function RecipeDetail({
         )}
       </div>
       <p className="muted detail-sub">
-        {isSub
+        {!showCosts
+          ? menuPriceNum > 0
+            ? `Menu price ${formatMoney(menuPriceNum, currency)}`
+            : ""
+          : isSub
           ? "In-house prep used inside other recipes — costed per portion."
           : "Ingredient costs pull live from inventory and any sub-recipes used."}
       </p>
@@ -477,7 +489,9 @@ export default function RecipeDetail({
           : hasMethod
           ? (["ingredients", "method", "cost", "allergens", "history"] as const)
           : (["ingredients", "cost", "allergens", "history"] as const)
-        ).map((t) => (
+        )
+          .filter((t) => showCosts || t !== "cost")
+          .map((t) => (
           <button
             key={t}
             type="button"
@@ -504,7 +518,7 @@ export default function RecipeDetail({
               />
             )}
           </button>
-        ))}
+          ))}
       </div>
       {!readOnly && tab === "history" && (
         <RecipeHistory recipeId={recipe.id} accessToken={accessToken} currency={currency} />
@@ -627,7 +641,11 @@ export default function RecipeDetail({
       <div className={`det-grid single${tab === "cost" ? " cost" : ""}`}>
         <div className="card" hidden={tab !== "ingredients"}>
           <h2>Batch recipe — makes {recipe.yield_qty} {recipe.yield_unit}{yieldNum > 1 ? "s" : ""}</h2>
-          <p className="hint">Enter quantities for one full batch. Cost per {recipe.yield_unit} = batch ÷ yield.</p>
+          <p className="hint">
+            {showCosts
+              ? `Enter quantities for one full batch. Cost per ${recipe.yield_unit} = batch ÷ yield.`
+              : "Enter quantities for one full batch."}
+          </p>
 
           <div className="table-scroll">
             <table className="ing-tbl">
@@ -635,15 +653,15 @@ export default function RecipeDetail({
                 <tr>
                   <th>Ingredient</th>
                   <th className="num">Qty</th>
-                  <th className="num">Unit cost</th>
-                  <th className="num">Line cost</th>
+                  {showCosts && <th className="num">Unit cost</th>}
+                  {showCosts && <th className="num">Line cost</th>}
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {recipe.lines.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="muted empty-row">
+                    <td colSpan={showCosts ? 5 : 3} className="muted empty-row">
                       No ingredients yet — add items or a sub-recipe below.
                     </td>
                   </tr>
@@ -675,7 +693,7 @@ export default function RecipeDetail({
                       ) : (
                         <>
                           {line.item_name}
-                          {line.cost_source === "target" && (
+                          {showCosts && line.cost_source === "target" && (
                             <span className="sub-tag" title="No supplier price is recorded yet, so this uses the item's target cost.">
                               target cost
                             </span>
@@ -711,12 +729,14 @@ export default function RecipeDetail({
                         </>
                       )}
                     </td>
-                    <td className="num">{formatMoney(Number(line.unit_cost), currency)}</td>
-                    <td className="num">
-                      {editLineId === line.id
-                        ? formatMoney((Number(editQty) || 0) * Number(line.unit_cost), currency)
-                        : formatMoney(Number(line.line_cost), currency)}
-                    </td>
+                    {showCosts && <td className="num">{formatMoney(Number(line.unit_cost), currency)}</td>}
+                    {showCosts && (
+                      <td className="num">
+                        {editLineId === line.id
+                          ? formatMoney((Number(editQty) || 0) * Number(line.unit_cost), currency)
+                          : formatMoney(Number(line.line_cost), currency)}
+                      </td>
+                    )}
                     <td className="ing-actions">
                       {editLineId === line.id ? (
                         <>
@@ -739,7 +759,7 @@ export default function RecipeDetail({
                   </tr>
                 ))}
               </tbody>
-              {recipe.lines.length > 0 && (
+              {showCosts && recipe.lines.length > 0 && (
                 <tfoot>
                   <tr className="ing-total">
                     <td colSpan={3}>
@@ -760,10 +780,10 @@ export default function RecipeDetail({
               )}
             </table>
           </div>
-          <p className="hint ing-note">
+          {showCosts && <p className="hint ing-note">
             Ingredient cost only. Rent, staff and energy are not included; they are covered by your monthly overhead
             in Settings and the break-even on Reports.
-          </p>
+          </p>}
 
           <div className="add-block">
             <div className="add-col">
@@ -848,7 +868,7 @@ export default function RecipeDetail({
                     options={subRecipeChoices.map((r) => ({
                       value: r.id,
                       label: r.name,
-                      sublabel: `${formatMoney(r.per_portion_cost, currency)}/${r.yield_unit}`,
+                      sublabel: showCosts ? `${formatMoney(r.per_portion_cost, currency)}/${r.yield_unit}` : undefined,
                     }))}
                   />
                   <div className="addrow-bottom">
@@ -876,6 +896,7 @@ export default function RecipeDetail({
           </div>
         </div>
 
+        {showCosts && (
         <div className="card" hidden={tab !== "cost"}>
           {isSub ? (
             <div className="cs-result">
@@ -1067,6 +1088,7 @@ export default function RecipeDetail({
             )}
           </div>
         </div>
+        )}
       </div>
 
       <div className="card dz-card" hidden={tab !== "ingredients"}>

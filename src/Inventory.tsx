@@ -37,6 +37,7 @@ import type {
   PurchaseOrder,
   StockMovementRow,
 } from "./api";
+import { can } from "./permissions";
 
 interface Props {
   accessToken: string;
@@ -356,7 +357,7 @@ export default function Inventory({
   const staffHere = memberships.filter((m) => m.location === activeLocation || m.location === null);
   // Managing sections (create/rename/delete, which items live in each) is a
   // manager job; staff just count. The backend enforces the same split.
-  const canManage = me.memberships.some((m) => m.role === "admin" || m.role === "manager" || m.role === "finance");
+  const canManage = can(me, "sections.manage");
 
   function refreshOnHand() {
     setRefreshTick((t) => t + 1);

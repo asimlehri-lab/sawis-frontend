@@ -116,14 +116,8 @@ import type { FilterFacet, FilterValues } from "./FilterBar";
 import HelpChat from "./HelpChat";
 import { OPEN_HELP_EVENT } from "./helpBus";
 import HelpLink from "./HelpLink";
+import { can, canOpenSettings } from "./permissions";
 import "./App.css";
-
-// admin / manager / finance -- everyone except plain staff. Mirrors the
-// backend's IsManagerOrAbove (the real enforcement); used here only to stop
-// showing staff pages and buttons the server would refuse anyway.
-function canManage(me: { memberships: { role: string }[] }): boolean {
-  return me.memberships.some((m) => m.role === "admin" || m.role === "manager" || m.role === "finance");
-}
 
 // "Allergen status" filter, shared by Items and Recipes. Four buckets that
 // are deliberately not collapsed into "allergen / non-allergen": an item
@@ -158,6 +152,17 @@ const NAV_ITEMS = [
   "Reports",
   "Team",
 ];
+
+// The permission each menu item needs (End of day is open to everyone: it always shows a person their own tasks).
+const NAV_PERMISSION: Record<string, string> = {
+  Inventory: "stock.view",
+  Procurement: "po.view",
+  Items: "items.view",
+  Recipes: "rec.view",
+  "Waste log": "waste.log",
+  Reports: "rep.view",
+  Team: "team.view",
+};
 
 // Session persistence — see the restore-on-load effect in App(). Before
 // this, accessToken lived only in React state, so any page reload (or a
@@ -744,7 +749,7 @@ export default function App() {
       key: "category",
       label: "Category",
       options: categories.map((c) => ({ value: c.id, label: c.name })),
-      footerAction: me && canManage(me) ? { label: "Manage categories", onClick: () => setShowCategoryManager(true) } : undefined,
+      footerAction: me && can(me, "cats.manage") ? { label: "Manage categories", onClick: () => setShowCategoryManager(true) } : undefined,
     },
     { key: "supplier", label: "Supplier", options: suppliers.map((s) => ({ value: s.id, label: s.name })) },
     { key: "allergens", label: "Allergens", options: allergens.map((a) => ({ value: a.id, label: a.name })) },
@@ -1152,7 +1157,7 @@ export default function App() {
   // Price list column and dot on Procurement's Suppliers tab: refreshed on
   // arrival and whenever a list is uploaded or a link is made or removed.
   useEffect(() => {
-    if (!accessToken || activePage !== "Procurement" || !me || !canManage(me)) return;
+    if (!accessToken || activePage !== "Procurement" || !me || !can(me, "sup.edit", "po.edit")) return;
     let cancelled = false;
     fetchPriceListOverview(accessToken)
       .then((rows) => {
@@ -2356,7 +2361,7 @@ export default function App() {
           </div>
         </div>
         <nav>
-          {NAV_ITEMS.filter((label) => label !== "Reports" || canManage(me)).map((label) => (
+          {NAV_ITEMS.filter((label) => !NAV_PERMISSION[label] || can(me, NAV_PERMISSION[label])).map((label) => (
             <button
               key={label}
               className={`nav-btn ${activePage === label ? "active" : ""}`}
@@ -2382,7 +2387,7 @@ export default function App() {
         >
           {theme === "dark" ? "☀ Light theme" : "🌙 Dark theme"}
         </button>
-        {me.memberships.some((m) => m.role === "admin") && (
+        {canOpenSettings(me) && (
           <button
             className={`nav-btn ${activePage === "Settings" ? "active" : ""}`}
             style={{ marginBottom: 4 }}
@@ -2412,7 +2417,7 @@ export default function App() {
                 stockStatus={stockStatus}
                 suppliers={suppliers}
                 accessToken={accessToken}
-                canReorder={canManage(me)}
+                canReorder={can(me, "reorder.use")}
                 onViewReorder={() => goToNav("End of day", { eodTab: "reorder" })}
                 onOpenPO={(id) => {
                   goToNav("Procurement");
@@ -2473,7 +2478,8 @@ export default function App() {
           <RecipeDetail
             key={selectedRecipeId}
             recipeId={selectedRecipeId}
-            readOnly={!canManage(me)}
+            readOnly={!can(me, "rec.edit")}
+            showCosts={can(me, "rec.costs")}
             accessToken={accessToken}
             userEmail={me.email}
             items={items ?? []}
@@ -2522,7 +2528,8 @@ export default function App() {
             itemId={selectedItemId}
             accessToken={accessToken}
             userEmail={me.email}
-            readOnly={!canManage(me)}
+            readOnly={!can(me, "items.edit")}
+            showCosts={can(me, "items.costs")}
             categories={categories}
             allergens={allergens}
             locations={locations}
@@ -2551,7 +2558,7 @@ export default function App() {
             }}
             onRecipesChanged={() => loadRecipes(accessToken)}
           />
-        ) : activePage === "Procurement" && showPurchases && !selectedPOId && accessToken && canManage(me) ? (
+        ) : activePage === "Procurement" && showPurchases && !selectedPOId && accessToken && can(me, "pur.report") ? (
           <PurchasesReport
             accessToken={accessToken}
             businessName={me.org.name}
@@ -2565,8 +2572,10 @@ export default function App() {
           <ProcurementDetail
             poId={selectedPOId}
             accessToken={accessToken}
-            isAdmin={me.memberships.some((m) => m.role === "admin")}
-            readOnly={!canManage(me)}
+            isAdmin={can(me, "po.delete")}
+            readOnly={!can(me, "po.edit")}
+            canReceive={can(me, "po.receive")}
+            canReopen={can(me, "po.reopen")}
             items={items ?? []}
             suppliers={suppliers}
             itemSupplierLinks={itemSupplierLinks}
@@ -2601,7 +2610,7 @@ export default function App() {
           <SupplierDeliveries
             key={`${selectedSupplierId}-${supplierTab ?? ""}-${supplierCheckLine ?? ""}`}
             supplierId={selectedSupplierId}
-            readOnly={!canManage(me)}
+            readOnly={!can(me, "sup.edit")}
             accessToken={accessToken}
             suppliers={suppliers}
             purchaseOrders={purchaseOrders ?? []}
@@ -2629,7 +2638,7 @@ export default function App() {
               setSupplierNotice(null);
             }}
             notice={supplierNotice}
-            backLabel={showPurchases ? "← Purchases report" : procTab === "suppliers" && canManage(me) ? "← All suppliers" : "← Procurement"}
+            backLabel={showPurchases ? "← Purchases report" : procTab === "suppliers" && can(me, "sup.edit", "po.edit") ? "← All suppliers" : "← Procurement"}
             onOpenPO={(id) => setSelectedPOId(id)}
             onNewPO={openNewPOForSupplier}
             onSupplierUpdated={(updated) =>
@@ -2653,7 +2662,7 @@ export default function App() {
                     values={itemFilters}
                     onChange={(key, next) => setItemFilters((prev) => ({ ...prev, [key]: next }))}
                   />
-                  {canManage(me) && (
+                  {can(me, "items.edit", "allergens.review") && (
                     <>
                       <button className="btn-ghost small" onClick={() => setShowAllergenReview(true)}>
                         ⚠ Review allergens
@@ -2676,7 +2685,7 @@ export default function App() {
                     placeholder="Search by name or POS ID…"
                   />
                   <FilterBar
-                    facets={recipeFacets}
+                    facets={recipeFacets.filter((f) => f.key !== "cost" || can(me, "rec.costs"))}
                     values={recipeFilters}
                     onChange={(key, next) => setRecipeFilters((prev) => ({ ...prev, [key]: next }))}
                   />
@@ -2687,7 +2696,7 @@ export default function App() {
                   >
                     🖨 Print sheet
                   </button>
-                  {canManage(me) && (
+                  {can(me, "rec.edit") && (
                     <button className="btn-primary small" onClick={() => setShowNewRecipe(true)}>
                       + New recipe
                     </button>
@@ -2696,12 +2705,12 @@ export default function App() {
               )}
               {activePage === "Procurement" && (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {canManage(me) && procTab === "suppliers" && (
+                  {can(me, "sup.edit") && procTab === "suppliers" && (
                     <button className="btn-primary small" onClick={() => setShowNewSupplierForm(true)}>
                       + New supplier
                     </button>
                   )}
-                  {canManage(me) && procTab === "orders" && (
+                  {can(me, "po.edit") && procTab === "orders" && (
                     <>
                       <button className="btn-ghost small" onClick={() => setShowPurchases(true)}>
                         Purchases report
@@ -2718,7 +2727,7 @@ export default function App() {
               )}
             </div>
 
-            {activePage === "Procurement" && canManage(me) && (
+            {activePage === "Procurement" && can(me, "sup.edit", "po.edit") && (
               <div className="rp-tabs" role="tablist" aria-label="Procurement sections">
                 <button
                   type="button"
@@ -2752,7 +2761,7 @@ export default function App() {
               </div>
             )}
 
-            {activePage === "Procurement" && canManage(me) && procTab === "suppliers" && accessToken && (
+            {activePage === "Procurement" && can(me, "sup.edit", "po.edit") && procTab === "suppliers" && accessToken && (
               <SupplierList
                 suppliers={suppliers}
                 locations={locations}
@@ -2802,7 +2811,7 @@ export default function App() {
                     </button>
                   </div>
                 )}
-                {canManage(me) && pickedItems.length > 0 && (
+                {can(me, "rec.edit") && pickedItems.length > 0 && (
                   <div className="sad-bar">
                     <span>
                       <b>{pickedItems.length} {pickedItems.length === 1 ? "item" : "items"} selected</b>
@@ -2820,7 +2829,7 @@ export default function App() {
                     <table className="tbl">
                       <thead>
                         <tr>
-                          {canManage(me) && (
+                          {can(me, "rec.edit") && (
                             <th className="sad-pick">
                               <input
                                 type="checkbox"
@@ -2848,7 +2857,7 @@ export default function App() {
                             const itAllergens = allergens.filter((a) => it.allergens.includes(a.id));
                             return (
                             <tr key={it.id} className="clickable" onClick={() => setSelectedItemId(it.id)}>
-                              {canManage(me) && (
+                              {can(me, "rec.edit") && (
                                 <td className="sad-pick" onClick={(e) => e.stopPropagation()}>
                                   {!it.archived && (
                                     <input
@@ -2880,7 +2889,7 @@ export default function App() {
                                     Archived
                                   </span>
                                 )}
-                                {canManage(me) && it.allergen_needs_review && (
+                                {can(me, "allergens.review") && it.allergen_needs_review && (
                                   <span className="allergen-review-badge" title="Allergens not confirmed yet">
                                     Check allergens
                                   </span>
@@ -2927,10 +2936,10 @@ export default function App() {
                         <tr>
                           <th>Recipe</th>
                           <th className="num">Yield</th>
-                          <th className="num">Batch cost</th>
-                          <th className="num">Cost / unit</th>
+                          {can(me, "rec.costs") && <th className="num">Batch cost</th>}
+                          {can(me, "rec.costs") && <th className="num">Cost / unit</th>}
                           <th className="num">Menu price</th>
-                          <th className="num">Food cost</th>
+                          {can(me, "rec.costs") && <th className="num">Food cost</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -2972,12 +2981,14 @@ export default function App() {
                                 <td className="num">
                                   {r.yield_qty} {r.yield_unit}
                                 </td>
-                                <td className="num">{formatMoney(Number(r.batch_cost), orgCurrency)}</td>
-                                <td className="num">{formatMoney(Number(r.per_portion_cost), orgCurrency)}</td>
+                                {can(me, "rec.costs") && <td className="num">{formatMoney(Number(r.batch_cost), orgCurrency)}</td>}
+                                {can(me, "rec.costs") && <td className="num">{formatMoney(Number(r.per_portion_cost), orgCurrency)}</td>}
                                 <td className="num">{r.menu_price ? formatMoney(Number(r.menu_price), orgCurrency) : "—"}</td>
-                                <td className="num">
-                                  {r.plate_food_cost_pct !== null ? `${r.plate_food_cost_pct.toFixed(1)}%` : "—"}
-                                </td>
+                                {can(me, "rec.costs") && (
+                                  <td className="num">
+                                    {r.plate_food_cost_pct !== null ? `${r.plate_food_cost_pct.toFixed(1)}%` : "—"}
+                                  </td>
+                                )}
                               </tr>
                             );
                           })}
@@ -2988,7 +2999,7 @@ export default function App() {
               </>
             )}
 
-            {activePage === "Procurement" && (procTab === "orders" || !canManage(me)) && (
+            {activePage === "Procurement" && (procTab === "orders" || !can(me, "sup.edit", "po.edit")) && (
               <>
                 {poError && <p className="error">{poError}</p>}
                 {!poError && !purchaseOrders && <p className="muted">Loading purchase orders…</p>}
@@ -3102,6 +3113,7 @@ export default function App() {
                 wasteEvents={wasteEvents}
                 wasteError={wasteError}
                 stockMovements={stockMovements}
+                showValue={can(me, "waste.value")}
                 onChanged={() => loadWasteEvents(accessToken)}
               />
             )}
@@ -3157,7 +3169,7 @@ export default function App() {
               />
             )}
 
-            {activePage === "Settings" && accessToken && me.memberships.some((m) => m.role === "admin") && (
+            {activePage === "Settings" && accessToken && canOpenSettings(me) && (
               <Settings
                 accessToken={accessToken}
                 items={items ?? []}
@@ -3166,6 +3178,7 @@ export default function App() {
                 locations={locations}
                 org={me.org}
                 entitlements={me.entitlements}
+                permissions={me.permissions}
                 onFreshDaysChanged={(days) => {
                   setMe((m) => (m ? { ...m, org: { ...m.org, supplier_price_fresh_days: days } } : m));
                   // Which suppliers are "resting" depends on the setting, so reload what carries that.
@@ -3182,11 +3195,11 @@ export default function App() {
               />
             )}
 
-            {activePage === "Reports" && accessToken && canManage(me) && (
+            {activePage === "Reports" && accessToken && can(me, "rep.view") && (
               <Reports
                 accessToken={accessToken}
                 locations={locations}
-                isAdmin={me.memberships.some((m) => m.role === "admin")}
+                isAdmin={can(me, "rep.export")}
                 canSeeAll={canSeeAllLocations(me, locations)}
                 initialTab={reportsTab}
                 onOpenRecipe={(id) => {
@@ -3876,7 +3889,7 @@ export default function App() {
                 )}
                 {scanResult.vendor_name &&
                   me &&
-                  canManage(me) &&
+                  can(me, "sup.edit") &&
                   !isOwnName(scanResult.vendor_name, ownNamesAll) &&
                   (() => {
                     const picked = suppliers.find((x) => x.id === scanSupplierId);

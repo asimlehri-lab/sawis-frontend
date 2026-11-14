@@ -152,7 +152,10 @@ export interface Membership {
   user: string;
   name: string;
   email: string;
-  role: "admin" | "manager" | "finance" | "staff";
+  // The built-in role's key, or "custom" when the person has a role the Admin made.
+  role: "admin" | "manager" | "finance" | "staff" | "custom";
+  role_id: string;
+  role_name: string | null;
   location: string | null;
   location_name: string | null;
   department: string | null;
@@ -160,6 +163,8 @@ export interface Membership {
   // Most recent real sign-in — null means never signed in since login
   // tracking was turned on, not necessarily "never used the account."
   last_login: string | null;
+  // Only on the signed-in person's own memberships (/me): what this role allows.
+  permissions?: string[];
 }
 
 export interface Me {
@@ -170,6 +175,8 @@ export interface Me {
   memberships: Membership[];
   // Feature keys the business has (e.g. "ai_help_chat"); see apps/billing on the backend.
   entitlements?: string[];
+  // Every permission key the person holds (see permissions.ts); decides which screens and buttons they see.
+  permissions?: string[];
 }
 
 interface TokenPair {
@@ -1146,7 +1153,9 @@ export interface NewMemberInput {
   email: string;
   name: string;
   password?: string;
-  role: "admin" | "manager" | "finance" | "staff";
+  // Send role_id (any role of the business) or, for a built-in role, just its key.
+  role?: "admin" | "manager" | "finance" | "staff";
+  role_id?: string;
   location: string | null;
   department: "kitchen" | "bar" | "foh" | null;
   job_title: string;
@@ -1176,6 +1185,7 @@ export async function createMember(accessToken: string, input: NewMemberInput): 
 
 export interface MembershipPatch {
   role?: "admin" | "manager" | "finance" | "staff";
+  role_id?: string;
   department?: "kitchen" | "bar" | "foh" | null;
   location?: string | null;
   job_title?: string;
@@ -3909,5 +3919,106 @@ export async function askHelpAssistant(accessToken: string, question: string): P
     }
     throw new Error(detail || "The help assistant could not answer. Try again in a minute.");
   }
+  return res.json();
+}
+
+// ---- Roles and permissions (Settings > Roles; Admin only) ----
+
+export interface PermissionRow {
+  key: string;
+  title: string;
+  hint: string;
+  // "money" shows costs or prices, "danger" removes records, "lock" is Admin only, "always" every role keeps.
+  flags: string[];
+  requires: string | null;
+  locked: boolean;
+  always: boolean;
+}
+
+export interface PermissionArea {
+  id: string;
+  name: string;
+  sub: string;
+  keys: PermissionRow[];
+}
+
+export interface PermissionCatalog {
+  areas: PermissionArea[];
+  always: string[];
+  locked: string[];
+}
+
+export interface RolePerson {
+  membership: string;
+  user: string;
+  name: string;
+  location: string | null;
+}
+
+export interface RoleRow {
+  id: string;
+  name: string;
+  description: string;
+  // admin / manager / finance / staff for the built-in roles, empty for roles the Admin made.
+  key: string;
+  is_builtin: boolean;
+  permissions: string[];
+  permission_count: number;
+  people: RolePerson[];
+  // What "Reset to default" puts back (built-in roles only).
+  default_permissions: string[] | null;
+}
+
+async function roleFailure(res: Response, fallback: string): Promise<Error> {
+  const body = await res.json().catch(() => null);
+  if (body && typeof body === "object") {
+    const first = Object.values(body)[0];
+    const detail = Array.isArray(first) ? first[0] : first;
+    if (typeof detail === "string" && detail) return new Error(detail);
+  }
+  return new Error(fallback);
+}
+
+function roleHeaders(accessToken: string) {
+  return { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` };
+}
+
+export async function fetchRoles(accessToken: string): Promise<RoleRow[]> {
+  return authedFetchAllPages<RoleRow>("/api/tenancy/roles/", accessToken);
+}
+
+export async function fetchPermissionCatalog(accessToken: string): Promise<PermissionCatalog> {
+  return authedFetch("/api/tenancy/permission-catalog/", accessToken);
+}
+
+export async function createRole(
+  accessToken: string,
+  input: { name: string; description?: string; start_from?: string | null; permissions?: string[] }
+): Promise<RoleRow> {
+  const res = await fetch(`${API_URL}/api/tenancy/roles/`, { method: "POST", headers: roleHeaders(accessToken), body: JSON.stringify(input) });
+  if (!res.ok) throw await roleFailure(res, "Could not create the role.");
+  return res.json();
+}
+
+export async function updateRole(
+  accessToken: string,
+  id: string,
+  patch: { name?: string; description?: string; permissions?: string[] }
+): Promise<RoleRow> {
+  const res = await fetch(`${API_URL}/api/tenancy/roles/${id}/`, { method: "PATCH", headers: roleHeaders(accessToken), body: JSON.stringify(patch) });
+  if (!res.ok) throw await roleFailure(res, "Could not save the role.");
+  return res.json();
+}
+
+// People who still have the role are moved to `moveTo` first, so nobody is left without a role.
+export async function deleteRole(accessToken: string, id: string, moveTo?: string): Promise<void> {
+  const q = moveTo ? `?move_to=${encodeURIComponent(moveTo)}` : "";
+  const res = await fetch(`${API_URL}/api/tenancy/roles/${id}/${q}`, { method: "DELETE", headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!res.ok) throw await roleFailure(res, "Could not delete the role.");
+}
+
+export async function resetRole(accessToken: string, id: string): Promise<RoleRow> {
+  const res = await fetch(`${API_URL}/api/tenancy/roles/${id}/reset/`, { method: "POST", headers: roleHeaders(accessToken) });
+  if (!res.ok) throw await roleFailure(res, "Could not reset the role.");
   return res.json();
 }
