@@ -652,6 +652,10 @@ export const HELP_TOPICS: HelpTopic[] = [
         a: "Roles, not per-person switches, decide access. On Team, click Edit on the person and press Make a role for them. SAWIS creates a role named after them, starting with the switches of the role they have now, and gives it to them. Then open Settings, Roles, and switch things on or off for that role.",
       },
       {
+        q: "How do I let someone use Count sheets but not see Live stock?",
+        a: "Open Settings, Roles and choose their role (or make a new one). In the Inventory group keep Open Inventory and Do stock counts on, and switch See live stock off. Leave Add and edit sections off as well. They then see Inventory with Count sheets only: no Live stock tab, no quantities on hand or stock value there, and no Manage sections tab. The Count sheet still shows the system's expected quantity beside each item while they count. Roles are chosen for people on the Team screen.",
+      },
+      {
         q: "How do I delete a role?",
         a: "Open Settings, Roles and press Delete on a role you made. If people have it, choose another role to move them to first, so nobody is left without access. Deleting a role never deletes people or their history. The built-in roles cannot be deleted. Adding, removing and editing people, the Roles screen, billing and account, and switching on Connect your AI can only ever be done by an Admin.",
       },

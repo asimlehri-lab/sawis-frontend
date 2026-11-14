@@ -273,7 +273,7 @@ export default function Inventory({
   onItemsChanged,
   onOpenItem,
 }: Props) {
-  const [tab, setTab] = useState<"live" | "count" | "sections">("live");
+  const [chosenTab, setTab] = useState<"live" | "count" | "sections">("live");
   const [activeLocation, setActiveLocation] = useState(locations[0]?.id ?? "");
   const [onHand, setOnHand] = useState<Record<string, number>>({});
   const [refreshTick, setRefreshTick] = useState(0);
@@ -358,6 +358,10 @@ export default function Inventory({
   // Managing sections (create/rename/delete, which items live in each) is a
   // manager job; staff just count. The backend enforces the same split.
   const canManage = can(me, "sections.manage");
+  // People whose role has "See live stock" off (for example staff who only count) get Count sheets only.
+  const canLive = can(me, "stock.live");
+  const tabs: ("live" | "count" | "sections")[] = [...(canLive ? (["live"] as const) : []), "count", ...(canManage ? (["sections"] as const) : [])];
+  const tab = tabs.includes(chosenTab) ? chosenTab : tabs[0];
 
   function refreshOnHand() {
     setRefreshTick((t) => t + 1);
@@ -367,7 +371,7 @@ export default function Inventory({
     <>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
         <div className="rtabs">
-          {(canManage ? (["live", "count", "sections"] as const) : (["live", "count"] as const)).map((t) => (
+          {tabs.map((t) => (
             <button key={t} className={`rtab ${tab === t ? "on" : ""}`} onClick={() => setTab(t)}>
               {t === "live" ? "Live stock" : t === "count" ? "Count sheets" : "Manage sections"}
             </button>

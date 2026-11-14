@@ -467,6 +467,8 @@ export default function RolesPanel({ accessToken }: Props) {
                 const sub =
                   m.label === "End of day"
                     ? `Actions: own tasks${perms.has("actions.overview") ? " and overview" : ""}${perms.has("sales.view") ? ", Sales" : ""}${perms.has("reorder.use") ? ", Reorder" : ""}`
+                    : m.label === "Inventory" && on && !perms.has("stock.live")
+                    ? "Count sheets only"
                     : m.label === "Procurement" && on
                     ? perms.has("po.edit") ? "Can order and receive" : "View and receive only"
                     : (m.label === "Items" && on && !perms.has("items.costs")) || (m.label === "Recipes" && on && !perms.has("rec.costs"))
