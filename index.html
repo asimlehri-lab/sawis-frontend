@@ -4,6 +4,15 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Installable as a phone/desktop app (Add to Home Screen). The manifest
+         and icons live in /public; the install button is src/InstallApp.tsx.
+         App.tsx keeps theme-color in step with the light/dark theme. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#FFFFFF" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="SAWIS" />
     <title>SAWIS</title>
     <!-- Applies a saved dark-theme choice before the app renders, so a
          returning user who picked dark doesn't see a flash of the light

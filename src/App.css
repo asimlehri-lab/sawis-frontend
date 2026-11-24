@@ -4115,3 +4115,30 @@ label.cn-consent input { width: auto; margin: 3px 0 0; padding: 0; flex: none; }
   .pp-rate h2 { margin: 0 0 4px; }
   .pp-break { break-before: page; page-break-before: always; }
 }
+
+/* ---- Install SAWIS as an app (src/InstallApp.tsx) ---- */
+.install-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+.install-banner-icon {
+  flex: none;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+.install-banner-text { flex: 1 1 160px; min-width: 0; text-align: left; }
+.install-banner-text b { display: block; font-size: 14px; color: var(--ink); }
+.install-banner-text span { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.install-banner-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.install-banner-actions .btn-ghost { margin-top: 0; padding: 8px 12px; }
+
+.install-steps { text-align: left; }
+.install-steps ol { margin: 0 0 14px; padding-left: 20px; display: grid; gap: 10px; font-size: 14px; line-height: 1.45; color: var(--ink); }
+.install-steps .install-note { margin: 0 0 14px; font-size: 12.5px; color: var(--muted); }

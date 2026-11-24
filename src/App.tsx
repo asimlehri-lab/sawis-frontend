@@ -118,6 +118,7 @@ import HelpChat from "./HelpChat";
 import { OPEN_HELP_EVENT } from "./helpBus";
 import HelpLink from "./HelpLink";
 import { can, canOpenSettings } from "./permissions";
+import { InstallBanner, InstallMenuItem } from "./InstallApp";
 import "./App.css";
 
 // "Allergen status" filter, shared by Items and Recipes. Four buckets that
@@ -1274,6 +1275,10 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem(THEME_KEY, theme);
+    // Colours the phone's status bar / installed app's title bar to match.
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", theme === "dark" ? "#1B1917" : "#FFFFFF");
   }, [theme]);
 
   // Restore a session from localStorage on load — runs once. Tries the
@@ -2390,6 +2395,7 @@ export default function App() {
         >
           {theme === "dark" ? "☀ Light theme" : "🌙 Dark theme"}
         </button>
+        <InstallMenuItem />
         {canOpenSettings(me) && (
           <button
             className={`nav-btn ${activePage === "Settings" ? "active" : ""}`}
@@ -2405,6 +2411,7 @@ export default function App() {
       </aside>
 
       <main className="content">
+        <InstallBanner />
         <div className="content-header">
           {accessToken && (
             <>

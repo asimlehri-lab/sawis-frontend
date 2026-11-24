@@ -1,10 +1,9 @@
-// SAWIS service worker — Phase 6 (browser push) only. This file does NOT do
-// offline caching or a PWA install prompt; it exists purely so the browser
-// has a registered service worker to attach a PushManager subscription to,
-// and to handle the two push-related events below. Kept deliberately
-// minimal on purpose — a real offline/PWA story is a separate, later
-// project (see the project handoff: "a real installable mobile app is a
-// separate, later project").
+// SAWIS service worker -- browser push only. It does NOT do offline caching.
+// It exists so the browser has a registered service worker to attach a
+// PushManager subscription to, and to handle the two push-related events
+// below. "Install as an app" (manifest + icons, see src/InstallApp.tsx) does
+// not depend on this file. Kept deliberately minimal; real offline support
+// is a separate, later project.
 
 self.addEventListener("push", (event) => {
   let data = { title: "SAWIS", body: "You have a new notification." };
@@ -17,7 +16,7 @@ self.addEventListener("push", (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body: data.body,
-      icon: "/favicon.svg",
+      icon: "/icon-192.png",
       tag: data.tag || "sawis-notification",
     })
   );

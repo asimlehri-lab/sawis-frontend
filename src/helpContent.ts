@@ -803,6 +803,12 @@ export const HELP_TOPICS: HelpTopic[] = [
         q: "Where do I find things that were renamed?",
         a: "End of day → Overview is now Sales and Tasks is now Actions. The Recipes button 🖨 Allergen sheet is now 🖨 Print sheet. Items → Import items no longer exists: bulk imports for items and recipes are one workbook, in Settings → Import recipes & items.",
       },
+      {
+        id: "install-app",
+        q: "How do I put SAWIS on my phone's home screen like an app?",
+        a: "Open SAWIS in your phone's browser and sign in. On an Android phone, tap ⬇ Install SAWIS on this phone in the side menu (open the menu with the ☰ button at the top), or tap Install on the banner at the top of the screen, then confirm. On an iPhone or iPad, open SAWIS in Safari, tap the Share button (the square with an arrow), choose Add to Home Screen, then tap Add. The SAWIS icon then sits on your home screen and opens full screen, with no browser bars. It is the same SAWIS with the same sign-in, so everyone on your team can do this, whatever their role. The banner only appears on phones, and tapping Not now hides it for 30 days. Once SAWIS is installed the install button and banner disappear. On a computer, Chrome and Edge show the same ⬇ Install button in the menu, and it also appears there if you want SAWIS in its own window.",
+        fact: "💡 On an iPhone, installing SAWIS to the home screen is also what lets it send you notifications from the bell.",
+      },
     ],
   },
 ];
