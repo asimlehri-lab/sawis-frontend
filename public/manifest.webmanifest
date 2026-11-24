@@ -2,6 +2,7 @@
   "name": "SAWIS",
   "short_name": "SAWIS",
   "description": "Restaurant back office: stock, recipes, costs and orders.",
+  "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -8,6 +8,9 @@
 //    and call .prompt() from our own button.
 //  * iPhone / iPad Safari has no install API at all, so there we show the three
 //    taps the person has to do themselves.
+//  * Other phone browsers (the ones built into many Android phones, UC, Quark,
+//    Via and so on) never send that event, so after a short wait we fall back
+//    to telling the person how to use their browser's own "Add to home screen".
 //  * Once installed (running standalone, or the `appinstalled` event) nothing
 //    here shows any more.
 //
@@ -49,8 +52,12 @@ function onApple(): boolean {
 }
 
 // ---- tiny module-level store, so every component sees the same state -------
-type Snap = { prompt: DeferredPrompt | null; installed: boolean };
-let snap: Snap = { prompt: null, installed: typeof window !== "undefined" && runningInstalled() };
+type Snap = { prompt: DeferredPrompt | null; installed: boolean; waited: boolean };
+let snap: Snap = {
+  prompt: null,
+  installed: typeof window !== "undefined" && runningInstalled(),
+  waited: false,
+};
 const listeners = new Set<() => void>();
 function setSnap(next: Partial<Snap>) {
   snap = { ...snap, ...next };
@@ -65,6 +72,9 @@ if (typeof window !== "undefined") {
   window.addEventListener("appinstalled", () => {
     setSnap({ prompt: null, installed: true });
   });
+  // Chrome sends its event within a second or two of loading; if nothing has
+  // arrived by then, this browser is not going to send one.
+  window.setTimeout(() => setSnap({ waited: true }), 3000);
 }
 
 function subscribe(cb: () => void) {
@@ -87,8 +97,9 @@ function usePhone(): boolean {
   );
 }
 
-// "none" = nothing to offer (already installed, or this browser can't install).
-type Mode = "none" | "prompt" | "apple";
+// "none" = nothing to offer (already installed, or not a phone and no prompt).
+// "manual" = a phone browser that can't install by itself: show its own steps.
+type Mode = "none" | "prompt" | "apple" | "manual";
 
 function useInstall() {
   const s = useSyncExternalStore(subscribe, getSnap, getSnap);
@@ -97,6 +108,7 @@ function useInstall() {
   if (!s.installed) {
     if (s.prompt) mode = "prompt";
     else if (onApple()) mode = "apple";
+    else if (phone && s.waited) mode = "manual";
   }
   async function install(): Promise<boolean> {
     const p = snap.prompt;
@@ -124,7 +136,7 @@ function snoozed(): boolean {
   }
 }
 
-function IosSteps({ onClose }: { onClose: () => void }) {
+function Steps({ kind, onClose }: { kind: "apple" | "manual"; onClose: () => void }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
@@ -135,21 +147,44 @@ function IosSteps({ onClose }: { onClose: () => void }) {
         onClick={(e) => e.stopPropagation()}
       >
         <h2 id="install-steps-title">Add SAWIS to your home screen</h2>
-        <ol>
-          <li>
-            Tap the <b>Share</b> button in Safari (the square with an arrow, at the bottom of the
-            screen).
-          </li>
-          <li>
-            Scroll down and tap <b>Add to Home Screen</b>.
-          </li>
-          <li>
-            Tap <b>Add</b>. The SAWIS icon now sits on your home screen.
-          </li>
-        </ol>
-        <p className="install-note">
-          Not seeing it? Open this page in Safari first. Other iPhone browsers hide the option.
-        </p>
+        {kind === "apple" ? (
+          <>
+            <ol>
+              <li>
+                Tap the <b>Share</b> button in Safari (the square with an arrow, at the bottom of
+                the screen).
+              </li>
+              <li>
+                Scroll down and tap <b>Add to Home Screen</b>.
+              </li>
+              <li>
+                Tap <b>Add</b>. The SAWIS icon now sits on your home screen.
+              </li>
+            </ol>
+            <p className="install-note">
+              Not seeing it? Open this page in Safari first. Other iPhone browsers hide the option.
+            </p>
+          </>
+        ) : (
+          <>
+            <ol>
+              <li>
+                Open your browser's menu (the <b>☰</b> or <b>⋮</b> button, at the bottom or the top
+                right of the screen).
+              </li>
+              <li>
+                Tap <b>Add to home screen</b>. Some browsers word it <b>Add to desktop</b>,{" "}
+                <b>Add shortcut</b> or <b>Install app</b>.
+              </li>
+              <li>
+                Confirm. The SAWIS icon now sits on your home screen.
+              </li>
+            </ol>
+            <p className="install-note">
+              For the full app, with no browser bars, open this address in Chrome and tap Install.
+            </p>
+          </>
+        )}
         <div className="modal-actions">
           <button type="button" className="btn-primary" onClick={onClose}>
             Got it
@@ -176,9 +211,13 @@ export function InstallMenuItem() {
           else setSteps(true);
         }}
       >
-        ⬇ Install SAWIS on {phone ? "this phone" : "this computer"}
+        {mode === "manual"
+          ? "⬇ Add SAWIS to home screen"
+          : `⬇ Install SAWIS on ${phone ? "this phone" : "this computer"}`}
       </button>
-      {steps && <IosSteps onClose={() => setSteps(false)} />}
+      {steps && mode !== "prompt" && (
+        <Steps kind={mode} onClose={() => setSteps(false)} />
+      )}
     </>
   );
 }
@@ -224,7 +263,9 @@ export function InstallBanner() {
           </button>
         </div>
       </div>
-      {steps && <IosSteps onClose={() => setSteps(false)} />}
+      {steps && mode !== "prompt" && (
+        <Steps kind={mode} onClose={() => setSteps(false)} />
+      )}
     </>
   );
 }
