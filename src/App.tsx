@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { LogoMark, LogoWord } from "./Logo";
 import {
   login,
   refreshAccessToken,
@@ -2298,8 +2299,10 @@ export default function App() {
           </div>
         )}
         <div className="card">
-          <div className="brandmark login">S</div>
-          <h1 className="wordmark">sawis</h1>
+          <h1 className="login-logo">
+            <LogoMark height={64} />
+            <LogoWord height={25} />
+          </h1>
           <p className="muted">Sign in to your back office</p>
           <form onSubmit={handleSubmit}>
             <label>
@@ -2344,8 +2347,8 @@ export default function App() {
           <span />
         </button>
         <div className="mobile-topbar-brand">
-          <div className="brandmark small">S</div>
-          <b>sawis</b>
+          <LogoMark height={22} />
+          <LogoWord height={10} />
         </div>
       </div>
       <div
@@ -2354,9 +2357,9 @@ export default function App() {
       />
       <aside className={`sidebar ${mobileNavOpen ? "open" : ""}`}>
         <div className="sidebar-brand">
-          <div className="brandmark small">S</div>
-          <div>
-            <b>sawis</b>
+          <LogoMark height={30} />
+          <div className="sidebar-brand-text">
+            <LogoWord height={13} />
             <span>back office</span>
           </div>
         </div>

@@ -4,7 +4,7 @@
    both for consistency (one true "warning amber" instead of five
    near-identical ones scattered across files) and so dark mode actually
    reaches every screen instead of just the ones someone remembered to
-   update. Decorative multi-stop gradients (.brandmark, .champ-hero,
+   update. Decorative multi-stop gradients (.champ-hero,
    .tone-*, .section-icon.ic-*) are the deliberate exception -- treated
    like a logo/brand-identity accent that stays the same in both themes,
    not a text/background pair that needs contrast-checked adaptation.
@@ -55,6 +55,9 @@
   /* Barely-there highlight for a "done" row in a count sheet -- a shade
      warmer than --surface, not a real status color. */
   --row-done: #FCFBF7;
+  /* Logo wordmark (Logo.tsx): navy text and a blue dot on light. */
+  --sw-word: #011141;
+  --sw-dot: #2537FD;
 }
 
 :root[data-theme="dark"] {
@@ -81,6 +84,8 @@
   --violet-soft-hover: #3C2E68;
   --info: #6EB3EA;
   --row-done: #2A2620;
+  --sw-word: #F3F5FF;
+  --sw-dot: #6F7DFF;
 }
 
 * { box-sizing: border-box; }
@@ -121,43 +126,19 @@ body {
   text-align: left;
 }
 
-.brandmark {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: linear-gradient(155deg, #2B7FFF, #1E3AD0 50%, #6A2FE0);
-  color: #fff;
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  font-size: 20px;
-  margin: 0 auto 16px;
-}
-
-/* The sign-in card's logo lockup — bigger and with more presence than the
-   plain .brandmark used elsewhere (sidebar), since this is the one place
-   the brand is meant to actually introduce itself. */
-.brandmark.login {
-  width: 64px;
-  height: 64px;
-  border-radius: 16px;
-  font-size: 28px;
-  margin: 0 auto 18px;
-  box-shadow: 0 10px 24px rgba(46, 84, 232, 0.28);
+/* The sign-in card's logo: the S above the word, both drawn in Logo.tsx. */
+.login-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin: 0 auto 14px;
 }
 
 h1 {
   font-size: 20px;
   margin: 0 0 4px;
   letter-spacing: -0.3px;
-  color: var(--ink);
-}
-
-.wordmark {
-  font-size: 30px;
-  font-weight: 700;
-  margin: 0 0 6px;
-  letter-spacing: -0.5px;
   color: var(--ink);
 }
 
@@ -1030,13 +1011,7 @@ textarea:focus {
 .sidebar-brand b { display: block; font-size: 15px; }
 .sidebar-brand span { display: block; font-size: 11px; color: var(--muted); }
 
-.brandmark.small {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  font-size: 15px;
-  margin: 0;
-}
+.sidebar-brand-text { display: flex; flex-direction: column; gap: 3px; }
 
 nav {
   display: flex;
@@ -1112,7 +1087,6 @@ nav {
 .hamburger-btn span { display: block; width: 16px; height: 2px; margin: 0 auto; background: var(--ink); border-radius: 2px; }
 
 .mobile-topbar-brand { display: flex; align-items: center; gap: 8px; }
-.mobile-topbar-brand b { font-size: 14.5px; }
 
 @media (max-width: 700px), (max-height: 500px) and (orientation: landscape) {
   .app { display: block; min-height: 100vh; }
@@ -3443,7 +3417,6 @@ button.rp-gcard:hover { border-color: var(--muted); }
   .rp-print * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .rp-print-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
   .rp-print-brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; }
-  .rp-print-logo { width: 18px; height: 18px; border-radius: 5px; background: #2E54E8; display: inline-block; }
   .rp-print-meta { font-size: 12px; color: var(--muted); }
   .rp-print h1 { font-size: 24px; margin: 0 0 14px; }
   .rp-print .rp-tiles { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }

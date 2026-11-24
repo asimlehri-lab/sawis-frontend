@@ -1,4 +1,5 @@
 import { createPortal } from "react-dom";
+import { LogoMark, LogoWord } from "./Logo";
 import type { ReportsSummary } from "./api";
 import { FoodCostBars } from "./ReportCharts";
 import MenuEngineering from "./MenuEngineering";
@@ -36,7 +37,8 @@ export default function ReportPrintSheet({
     <div className="print-only rp-print">
       <div className="rp-print-head">
         <div className="rp-print-brand">
-          <span className="rp-print-logo" /> SAWIS
+          <LogoMark height={20} />
+          <LogoWord height={11} fixed />
         </div>
         <div className="rp-print-meta">
           {venue} · {report.range.start} to {report.range.end}
